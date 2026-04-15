@@ -119,6 +119,62 @@ class SkillCatalogServiceTest {
     }
 
     @Test
+    void importFromCsv_skillsBaseCategoryNameHeader_updatesExistingSkill() throws IOException {
+        UUID id = UUID.randomUUID();
+        try (var catalogMock = mockStatic(SkillCatalog.class);
+             var skillMock = mockStatic(SkillDefinition.class)) {
+
+            SkillCatalog catalog = new SkillCatalog();
+            catalog.name = "test";
+            catalogMock.when(() -> SkillCatalog.findByIdOptional(id)).thenReturn(Optional.of(catalog));
+
+            SkillDefinition existing = new SkillDefinition();
+            existing.name = "Java";
+            existing.category = "OldCategory";
+            skillMock.when(() -> SkillDefinition.findByCatalogAndName(id, "Java"))
+                    .thenReturn(Optional.of(existing));
+
+            String csv = """
+                    "Category name",Name,"LXP Recommendation\t"
+                    "Agile Project Management","Java",
+                    """;
+            int count = service.importFromCsv(id, csvStream(csv));
+
+            assertEquals(0, count);
+            assertEquals("Agile Project Management", existing.category);
+            assertNull(existing.lxpRecommendation);
+        }
+    }
+
+    @Test
+    void importFromCsv_skillsBaseCategoryNameHeaderWithBom_updatesExistingSkill() throws IOException {
+        UUID id = UUID.randomUUID();
+        try (var catalogMock = mockStatic(SkillCatalog.class);
+             var skillMock = mockStatic(SkillDefinition.class)) {
+
+            SkillCatalog catalog = new SkillCatalog();
+            catalog.name = "test";
+            catalogMock.when(() -> SkillCatalog.findByIdOptional(id)).thenReturn(Optional.of(catalog));
+
+            SkillDefinition existing = new SkillDefinition();
+            existing.name = "Java";
+            existing.category = "OldCategory";
+            skillMock.when(() -> SkillDefinition.findByCatalogAndName(id, "Java"))
+                    .thenReturn(Optional.of(existing));
+
+            String csv = """
+                    \uFEFF"Category name",Name,"LXP Recommendation\t"
+                    "Agile Project Management","Java",
+                    """;
+            int count = service.importFromCsv(id, csvStream(csv));
+
+            assertEquals(0, count);
+            assertEquals("Agile Project Management", existing.category);
+            assertNull(existing.lxpRecommendation);
+        }
+    }
+
+    @Test
     void importFromCsv_unsupportedHeader_throws() {
         UUID id = UUID.randomUUID();
         try (var mocked = mockStatic(SkillCatalog.class)) {

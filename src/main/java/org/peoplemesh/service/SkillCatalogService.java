@@ -46,6 +46,21 @@ public class SkillCatalogService {
     }
 
     @Transactional
+    @CacheInvalidateAll(cacheName = "skill-catalogs")
+    public SkillCatalog updateCatalog(UUID catalogId, String name, String description,
+                                      Map<String, Object> levelScale, String source) {
+        SkillCatalog catalog = SkillCatalog.findByIdOptional(catalogId)
+                .orElseThrow(() -> new NotFoundException("Catalog not found"));
+        catalog.name = name;
+        catalog.description = description;
+        catalog.source = source;
+        if (levelScale != null && !levelScale.isEmpty()) {
+            catalog.levelScale = levelScale;
+        }
+        return catalog;
+    }
+
+    @Transactional
     @CacheInvalidateAll(cacheName = "skill-definitions")
     public int importFromCsv(UUID catalogId, InputStream csvStream) throws IOException {
         SkillCatalog catalog = SkillCatalog.findByIdOptional(catalogId)
@@ -193,6 +208,7 @@ public class SkillCatalogService {
         return header == null
                 ? ""
                 : header.trim().toLowerCase(Locale.ROOT)
+                .replace("\uFEFF", "")
                 .replace(' ', '_')
                 .replace('-', '_');
     }
@@ -216,17 +232,27 @@ public class SkillCatalogService {
             int lxpRecommendationIndex,
             int aliasesIndex
     ) {
+        private static int firstPresentIndex(Map<String, Integer> indexes, String... candidates) {
+            for (String candidate : candidates) {
+                Integer idx = indexes.get(candidate);
+                if (idx != null) return idx;
+            }
+            return -1;
+        }
+
         static CsvColumnMapping fromHeader(String[] headerParts) {
             Map<String, Integer> indexes = new HashMap<>();
             for (int i = 0; i < headerParts.length; i++) {
                 indexes.put(normalizeHeader(headerParts[i]), i);
             }
 
-            // Skills Base export format: category,name,[lxp_recommendation|lxp],[aliases]
-            if (indexes.containsKey("category") && indexes.containsKey("name")) {
+            // Skills Base export format: [category|category_name],name,[lxp_recommendation|lxp],[aliases]
+            int category = firstPresentIndex(indexes, "category", "category_name");
+            int skillName = firstPresentIndex(indexes, "name");
+            if (category >= 0 && skillName >= 0) {
                 int lxp = indexes.getOrDefault("lxp_recommendation", indexes.getOrDefault("lxp", -1));
                 int aliases = indexes.getOrDefault("aliases", -1);
-                return new CsvColumnMapping(indexes.get("category"), indexes.get("name"), lxp, aliases);
+                return new CsvColumnMapping(category, skillName, lxp, aliases);
             }
 
             // ESCO export format: uri,title,preferred_label_en,skill_type,reuse_level
@@ -240,7 +266,7 @@ public class SkillCatalogService {
 
             throw new IllegalArgumentException(
                     "Unsupported skills CSV format. Supported headers: " +
-                            "Skills Base export ('category,name,...') or ESCO ('uri,title,preferred_label_en,skill_type,reuse_level').");
+                            "Skills Base export ('category,name,...' or 'category_name,name,...') or ESCO ('uri,title,preferred_label_en,skill_type,reuse_level').");
         }
 
         String readCategory(String[] parts) {

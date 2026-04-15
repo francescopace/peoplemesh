@@ -16,7 +16,7 @@ Using a standard import path keeps skill definitions consistent and traceable ac
 
 PeopleMesh auto-detects the format from the first row (header):
 
-- Skills Base export: `category,name,...`
+- Skills Base export: `category,name,...` (also accepted: `category_name,name,...`)
   - Optional columns: `lxp_recommendation` (or `lxp`), `aliases`
 - ESCO export: `uri,title,preferred_label_en,skill_type,reuse_level`
 

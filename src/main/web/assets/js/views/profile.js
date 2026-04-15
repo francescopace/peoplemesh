@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { el, spinner, toast, emptyState } from "../ui.js";
+import { el, spinner, toast, toastForPromise, emptyState } from "../ui.js";
 import { Auth } from "../auth.js";
 import { COUNTRIES as COUNTRY_OPTIONS } from "../utils/countries.js";
 
@@ -84,14 +84,26 @@ export async function renderProfile(container) {
     fd.append("file", file);
     cvUploadInProgress = true;
     setCvButtonsBusy(true);
-    toast("Parsing CV... this may take up to 40 seconds.", "info", 45000);
     try {
-      const result = await api.post("/api/v1/me/cv-import", fd);
-      toast("CV parsed. Review the imported fields below.", "success");
+      const result = await toastForPromise(
+        () => api.post("/api/v1/me/cv-import", fd),
+        {
+          loadingMessage: "Parsing CV... this may take up to 40 seconds.",
+          successMessage: "CV parsed. Review the imported fields below.",
+          errorMessage: (err) => err.message,
+          minVisibleMs: 1000,
+        }
+      );
       const current = await api.get("/api/v1/me").catch(() => null);
       showImportPreviewModal(result.imported, current, result.source, container);
-    } catch (err) { toast(err.message, "error"); }
-    finally { cvUploadInProgress = false; setCvButtonsBusy(false); fileInput.value = ""; }
+    } catch {
+      // Errors are surfaced by toastForPromise.
+    }
+    finally {
+      cvUploadInProgress = false;
+      setCvButtonsBusy(false);
+      fileInput.value = "";
+    }
   };
   container.appendChild(fileInput);
 

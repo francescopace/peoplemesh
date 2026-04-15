@@ -1,26 +1,38 @@
 import { api } from "../api.js";
 import { Auth } from "../auth.js";
-import { el, spinner, emptyState, toast, modal, pageHeader, table } from "../ui.js";
+import { el, spinner, emptyState, toast, toastForPromise, modal, pageHeader, table } from "../ui.js";
 
-export async function renderSkillsCatalog(container) {
+export async function renderSkillsCatalog(container, options = {}) {
+  const {
+    showHeader = true,
+    showCreateAction = true,
+    onCreateActionReady = null,
+    clearContainer = true,
+    onDataChanged = null,
+  } = options;
   container.dataset.page = "skills";
-  container.innerHTML = "";
+  if (clearContainer) {
+    container.innerHTML = "";
+  }
 
   const user = Auth.getUser() || {};
   const canManage = user.entitlements?.can_manage_skills === true;
+  let openCreateCatalogModal = () => {};
 
   const actions = [];
-  if (canManage) {
+  if (canManage && showCreateAction) {
     actions.push(el("button", {
       className: "btn btn-primary",
-      onClick: () => showCreateCatalogModal(),
+      onClick: () => openCreateCatalogModal(),
     },
       el("span", { className: "material-symbols-outlined", style: "font-size:18px" }, "add"),
       el("span", {}, "Create Catalog")
     ));
   }
 
-  container.appendChild(pageHeader("Skill Catalogs", "Browse and manage skill catalogs", actions));
+  if (showHeader) {
+    container.appendChild(pageHeader("Skill Catalogs", "Browse and manage skill catalogs", actions));
+  }
   container.appendChild(spinner());
 
   let catalogs;
@@ -44,10 +56,14 @@ export async function renderSkillsCatalog(container) {
     return;
   }
 
-  const catalogsArea = el("div", { className: "stack-6" });
+  const catalogsArea = el("div", { className: "stack-6 skills-catalogs-content" });
   container.appendChild(catalogsArea);
 
-  renderCatalogList(catalogsArea, catalogs, canManage, container);
+  renderCatalogList(catalogsArea, catalogs, canManage, onDataChanged);
+  openCreateCatalogModal = showCreateCatalogModal;
+  if (canManage && typeof onCreateActionReady === "function") {
+    onCreateActionReady(openCreateCatalogModal);
+  }
 
   async function showCreateCatalogModal() {
     const form = el("div", { className: "stack-4" });
@@ -69,8 +85,15 @@ export async function renderSkillsCatalog(container) {
               source: form.querySelector("#catalog-source").value.trim() || undefined,
             });
             toast("Catalog created", "success");
-            container.innerHTML = "";
-            await renderSkillsCatalog(container);
+            if (typeof onDataChanged === "function") {
+              await onDataChanged();
+            }
+            if (clearContainer) {
+              container.innerHTML = "";
+            } else {
+              container.querySelector(".skills-catalogs-content")?.remove();
+            }
+            await renderSkillsCatalog(container, options);
           } catch (err) { toast(err.message, "error"); }
         },
       }],
@@ -78,29 +101,35 @@ export async function renderSkillsCatalog(container) {
   }
 }
 
-function renderCatalogList(container, catalogs, canManage, rootContainer) {
+function renderCatalogList(container, catalogs, canManage, onDataChanged) {
   const grid = el("div", { className: "explore-grid" });
 
   for (const cat of catalogs) {
     const card = el("div", { className: "profile-card", style: "cursor:pointer" });
 
     const header = el("div", { className: "profile-card-header" });
+    const titleText = el("span", {}, cat.name);
     header.appendChild(el("h3", { className: "profile-card-title", style: "font-size:1rem" },
       el("span", { className: "material-symbols-outlined profile-icon profile-icon--purple", style: "font-size:20px" }, "psychology"),
-      cat.name
+      titleText
     ));
+    let sourceBadge = null;
     if (cat.source) {
-      header.appendChild(el("span", { className: "profile-prov-badge" }, cat.source));
+      sourceBadge = el("span", { className: "profile-prov-badge" }, cat.source);
+      header.appendChild(sourceBadge);
     }
     card.appendChild(header);
 
     const body = el("div", { className: "profile-card-body" });
+    let descEl = null;
     if (cat.description) {
-      body.appendChild(el("p", { className: "text-secondary", style: "margin:0 0 var(--space-3) 0" }, cat.description));
+      descEl = el("p", { className: "text-secondary", style: "margin:0 0 var(--space-3) 0" }, cat.description);
+      body.appendChild(descEl);
     }
     const stats = el("div", { className: "flex gap-4", style: "font-size:0.85rem" });
+    const countValue = el("strong", {}, String(cat.skill_count || 0));
     stats.appendChild(el("span", {},
-      el("strong", {}, String(cat.skill_count || 0)), " skills"
+      countValue, " skills"
     ));
     if (cat.created_at) {
       stats.appendChild(el("span", { className: "text-secondary" },
@@ -109,56 +138,38 @@ function renderCatalogList(container, catalogs, canManage, rootContainer) {
     }
     body.appendChild(stats);
 
-    if (canManage) {
-      const actions = el("div", { className: "flex gap-2", style: "margin-top:var(--space-3)" });
-
-      const fileInput = el("input", { type: "file", accept: ".csv", style: "display:none" });
-      fileInput.onchange = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        try {
-          toast("Importing CSV...", "info", 15000);
-          const buf = await file.arrayBuffer();
-          await api.post(`/api/v1/skills/${cat.id}/import`, buf);
-          toast("CSV imported successfully", "success");
-          location.hash = "#/skills";
-          location.reload();
-        } catch (err) { toast(err.message, "error"); }
-      };
-      actions.appendChild(fileInput);
-
-      actions.appendChild(el("button", {
-        className: "btn btn-secondary btn-sm",
-        onClick: (e) => { e.stopPropagation(); fileInput.click(); },
-      },
-        el("span", { className: "material-symbols-outlined", style: "font-size:16px" }, "upload"),
-        " Import CSV"
-      ));
-
-      actions.appendChild(el("button", {
-        className: "btn btn-secondary btn-sm",
-        style: "color:var(--color-red-600)",
-        onClick: async (e) => {
-          e.stopPropagation();
-          if (!confirm(`Delete catalog "${cat.name}"? This cannot be undone.`)) return;
-          try {
-            await api.delete(`/api/v1/skills/${cat.id}`);
-            toast("Catalog deleted", "success");
-            card.remove();
-          } catch (err) { toast(err.message, "error"); }
-        },
-      },
-        el("span", { className: "material-symbols-outlined", style: "font-size:16px" }, "delete"),
-        " Delete"
-      ));
-
-      body.appendChild(actions);
-    }
-
     card.appendChild(body);
 
     card.addEventListener("click", () => {
-      expandCatalogDetail(container, cat, catalogs, canManage, rootContainer);
+      openCatalogDetailModal(cat, canManage, () => card.remove(), (updated) => {
+        Object.assign(cat, updated);
+        titleText.textContent = cat.name || "";
+        countValue.textContent = String(cat.skill_count || 0);
+
+        if (cat.description) {
+          if (!descEl) {
+            descEl = el("p", { className: "text-secondary", style: "margin:0 0 var(--space-3) 0" }, cat.description);
+            body.insertBefore(descEl, stats);
+          } else {
+            descEl.textContent = cat.description;
+          }
+        } else if (descEl) {
+          descEl.remove();
+          descEl = null;
+        }
+
+        if (cat.source) {
+          if (!sourceBadge) {
+            sourceBadge = el("span", { className: "profile-prov-badge" }, cat.source);
+            header.appendChild(sourceBadge);
+          } else {
+            sourceBadge.textContent = cat.source;
+          }
+        } else if (sourceBadge) {
+          sourceBadge.remove();
+          sourceBadge = null;
+        }
+      }, onDataChanged);
     });
 
     grid.appendChild(card);
@@ -167,53 +178,134 @@ function renderCatalogList(container, catalogs, canManage, rootContainer) {
   container.appendChild(grid);
 }
 
-async function expandCatalogDetail(parentContainer, cat, catalogs, canManage, rootContainer) {
-  parentContainer.innerHTML = "";
+async function openCatalogDetailModal(cat, canManage, onDeleted, onUpdated, onDataChanged) {
+  const content = el("div", { className: "stack-4" });
+  let modalHandle = null;
+  const headerActions = [];
+  let catSelect = null;
+  let currentCategory = "";
+  let skillsArea = null;
 
-  const backBtn = el("button", {
-    className: "btn btn-ghost btn-sm",
-    style: "margin-bottom:var(--space-4);display:inline-flex;align-items:center;gap:0.3rem",
-    onClick: () => {
-      parentContainer.innerHTML = "";
-      renderCatalogList(parentContainer, catalogs, canManage, rootContainer);
+  if (canManage) {
+    headerActions.push(el("button", {
+      className: "btn btn-secondary btn-sm",
+      onClick: () => openEditCatalogModal(),
     },
-  }, "\u2190 Back to Catalogs");
-  parentContainer.appendChild(backBtn);
+      el("span", { className: "material-symbols-outlined", style: "font-size:16px" }, "edit"),
+      " Edit"
+    ));
 
-  const header = el("div", { style: "margin-bottom:var(--space-6)" });
-  header.appendChild(el("h2", { className: "page-title" }, cat.name));
-  if (cat.description) header.appendChild(el("p", { className: "text-secondary" }, cat.description));
-  parentContainer.appendChild(header);
+    const fileInput = el("input", { type: "file", accept: ".csv", style: "display:none" });
+    content.appendChild(fileInput);
+    fileInput.onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        await toastForPromise(async () => {
+          const buf = await file.arrayBuffer();
+          await api.post(`/api/v1/skills/${cat.id}/import`, buf);
+          const refreshed = await api.get(`/api/v1/skills/${cat.id}`).catch(() => null);
+          if (refreshed) {
+            Object.assign(cat, refreshed);
+            if (typeof onUpdated === "function") onUpdated(refreshed);
+          }
+          if (typeof onDataChanged === "function") {
+            await onDataChanged();
+          }
+          if (!closed && catSelect && skillsArea) {
+            const categoriesFresh = await api.get(`/api/v1/skills/${cat.id}/categories`).catch(() => null);
+            if (Array.isArray(categoriesFresh)) {
+              const preferred = catSelect.value || currentCategory || "";
+              repopulateCategorySelect(catSelect, categoriesFresh, preferred);
+              currentCategory = catSelect.value || "";
+            }
+            await loadSkills(currentCategory, 0);
+          }
+        }, {
+          loadingMessage: "Importing CSV...",
+          successMessage: "CSV imported successfully",
+          errorMessage: (err) => err.message,
+          minVisibleMs: 900,
+        });
+      } catch {
+        // Errors are surfaced by toastForPromise.
+      }
+    };
 
-  parentContainer.appendChild(spinner());
+    headerActions.push(el("button", {
+      className: "btn btn-secondary btn-sm",
+      onClick: () => fileInput.click(),
+    },
+      el("span", { className: "material-symbols-outlined", style: "font-size:16px" }, "upload"),
+      " Import CSV"
+    ));
+    headerActions.push(el("button", {
+      className: "btn btn-secondary btn-sm",
+      style: "color:var(--color-red-600)",
+      onClick: async () => {
+        if (!confirm(`Delete catalog "${cat.name}"? This cannot be undone.`)) return;
+        try {
+          await api.delete(`/api/v1/skills/${cat.id}`);
+          toast("Catalog deleted", "success");
+          if (typeof onDataChanged === "function") {
+            await onDataChanged();
+          }
+          if (typeof onDeleted === "function") onDeleted();
+          if (modalHandle) modalHandle.close();
+        } catch (err) {
+          toast(err.message, "error");
+        }
+      },
+    },
+      el("span", { className: "material-symbols-outlined", style: "font-size:16px" }, "delete"),
+      " Delete"
+    ));
+  }
+
+  if (cat.description) {
+    content.appendChild(el("p", { className: "text-secondary", style: "margin:0" }, cat.description));
+  }
+  content.appendChild(spinner());
+
+  let closed = false;
+  modalHandle = modal(`Catalog: ${cat.name}`, content, {
+    dialogClassName: "catalog-detail-dialog",
+    headerActions,
+    onClose: () => {
+      closed = true;
+    },
+  });
 
   let categories;
   try {
     categories = await api.get(`/api/v1/skills/${cat.id}/categories`);
   } catch (err) {
-    parentContainer.querySelector(".spinner")?.remove();
-    parentContainer.appendChild(emptyState("Could not load catalog details."));
+    if (closed) return;
+    content.querySelector(".spinner")?.remove();
+    content.appendChild(emptyState("Could not load catalog details."));
     return;
   }
 
-  parentContainer.querySelector(".spinner")?.remove();
+  if (closed) return;
+  content.querySelector(".spinner")?.remove();
 
   if (!categories?.length) {
-    parentContainer.appendChild(emptyState("No skills in this catalog yet."));
+    content.appendChild(emptyState("No skills in this catalog yet."));
     return;
   }
 
   const filterRow = el("div", { className: "flex gap-3", style: "margin-bottom:var(--space-4);align-items:center" });
-  const catSelect = el("select", { className: "form-select", style: "max-width:300px" });
-  catSelect.appendChild(el("option", { value: "" }, "All Categories"));
-  categories.forEach((c) => catSelect.appendChild(el("option", { value: c }, c)));
+  catSelect = el("select", { className: "form-select", style: "max-width:300px" });
+  repopulateCategorySelect(catSelect, categories, "");
   filterRow.appendChild(catSelect);
-  parentContainer.appendChild(filterRow);
+  content.appendChild(filterRow);
 
-  const skillsArea = el("div", {});
-  parentContainer.appendChild(skillsArea);
+  skillsArea = el("div", {});
+  content.appendChild(skillsArea);
 
   async function loadSkills(category, page = 0) {
+    if (closed) return;
+    currentCategory = category || "";
     if (page === 0) {
       skillsArea.innerHTML = "";
       skillsArea.appendChild(spinner());
@@ -225,6 +317,7 @@ async function expandCatalogDetail(parentContainer, cat, catalogs, canManage, ro
       const query = { page, size: 50 };
       if (category) query.category = category;
       const skills = await api.get(`/api/v1/skills/${cat.id}/definitions`, query);
+      if (closed) return;
       skillsArea.querySelector(".spinner")?.remove();
 
       if (!skills?.length) {
@@ -269,6 +362,7 @@ async function expandCatalogDetail(parentContainer, cat, catalogs, canManage, ro
         skillsArea.appendChild(moreBtn);
       }
     } catch (err) {
+      if (closed) return;
       skillsArea.querySelector(".spinner")?.remove();
       skillsArea.appendChild(emptyState("Error loading skills."));
       toast(err.message, "error");
@@ -277,6 +371,90 @@ async function expandCatalogDetail(parentContainer, cat, catalogs, canManage, ro
 
   catSelect.addEventListener("change", () => loadSkills(catSelect.value));
   loadSkills("");
+
+  function openEditCatalogModal() {
+    const form = el("div", { className: "stack-4" });
+    const nameInput = el("input", {
+      className: "form-input",
+      id: "catalog-edit-name",
+      name: "catalog-edit-name",
+      type: "text",
+      placeholder: "e.g. Company Skills Base",
+      value: cat.name || "",
+    });
+    const descInput = el("input", {
+      className: "form-input",
+      id: "catalog-edit-desc",
+      name: "catalog-edit-desc",
+      type: "text",
+      placeholder: "Optional description",
+      value: cat.description || "",
+    });
+    const sourceInput = el("input", {
+      className: "form-input",
+      id: "catalog-edit-source",
+      name: "catalog-edit-source",
+      type: "text",
+      placeholder: "e.g. skills-base-2026",
+      value: cat.source || "",
+    });
+
+    form.appendChild(el("div", { className: "form-group" },
+      el("label", { className: "form-label", for: "catalog-edit-name" }, "Name"),
+      nameInput
+    ));
+    form.appendChild(el("div", { className: "form-group" },
+      el("label", { className: "form-label", for: "catalog-edit-desc" }, "Description"),
+      descInput
+    ));
+    form.appendChild(el("div", { className: "form-group" },
+      el("label", { className: "form-label", for: "catalog-edit-source" }, "Source"),
+      sourceInput
+    ));
+
+    modal("Edit Skill Catalog", form, {
+      actions: [{
+        label: "Save",
+        className: "btn-primary",
+        onClick: async () => {
+          const name = nameInput.value.trim();
+          if (!name) {
+            toast("Name is required", "error");
+            return;
+          }
+          try {
+            const updated = await api.put(`/api/v1/skills/${cat.id}`, {
+              name,
+              description: descInput.value.trim() || undefined,
+              source: sourceInput.value.trim() || undefined,
+              level_scale: cat.level_scale || undefined,
+            });
+            if (updated) {
+              Object.assign(cat, updated);
+              if (typeof onUpdated === "function") onUpdated(updated);
+            }
+            if (typeof onDataChanged === "function") {
+              await onDataChanged();
+            }
+            toast("Catalog updated", "success");
+          } catch (err) {
+            toast(err.message, "error");
+          }
+        },
+      }],
+    });
+  }
+}
+
+function repopulateCategorySelect(selectEl, categories, preferredValue) {
+  selectEl.innerHTML = "";
+  selectEl.appendChild(el("option", { value: "" }, "All Categories"));
+  (categories || []).forEach((c) => selectEl.appendChild(el("option", { value: c }, c)));
+  if (preferredValue && (categories || []).includes(preferredValue)) {
+    selectEl.value = preferredValue;
+  } else {
+    selectEl.value = "";
+  }
 }
 
 function formGroup(label, id, type, placeholder) {

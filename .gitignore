@@ -30,7 +30,7 @@ Thumbs.db
 *.key
 *.crt
 .certs
-.tmp
+ignored/
 
 # Node
 node_modules/

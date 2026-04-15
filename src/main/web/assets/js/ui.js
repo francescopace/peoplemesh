@@ -79,15 +79,22 @@ export function emptyState(message, actionLabel, actionFn) {
   return wrapper;
 }
 
-export function modal(title, contentEl, { onClose, actions = [] } = {}) {
+export function modal(title, contentEl, { onClose, actions = [], dialogClassName = "", headerActions = [] } = {}) {
   const overlay = el("div", { className: "modal-overlay", onClick: (e) => { if (e.target === overlay) close(); } });
-  const dialog = el("div", { className: "modal-dialog", role: "dialog", "aria-modal": "true", "aria-label": title });
-  const header = el(
-    "div",
-    { className: "modal-header" },
-    el("h3", {}, title),
-    el("button", { className: "modal-close btn btn-ghost", "aria-label": "Close", onClick: () => close() }, "\u00d7")
-  );
+  const dialogClass = dialogClassName ? `modal-dialog ${dialogClassName}` : "modal-dialog";
+  const dialog = el("div", { className: dialogClass, role: "dialog", "aria-modal": "true", "aria-label": title });
+  const header = el("div", { className: "modal-header" });
+  header.appendChild(el("h3", {}, title));
+  const headerRight = el("div", { className: "modal-header-actions" });
+  if (headerActions instanceof HTMLElement) {
+    headerRight.appendChild(headerActions);
+  } else if (Array.isArray(headerActions)) {
+    headerActions.forEach((actionEl) => {
+      if (actionEl instanceof HTMLElement) headerRight.appendChild(actionEl);
+    });
+  }
+  headerRight.appendChild(el("button", { className: "modal-close btn btn-ghost", "aria-label": "Close", onClick: () => close() }, "\u00d7"));
+  header.appendChild(headerRight);
   const body = el("div", { className: "modal-body" });
   if (contentEl instanceof HTMLElement) body.appendChild(contentEl);
   else body.appendChild(document.createTextNode(String(contentEl)));
@@ -126,10 +133,55 @@ export function toast(message, variant = "info", duration = 4000) {
   const t = el("div", { className: `toast toast-${variant}` }, message);
   _toastContainer.appendChild(t);
   requestAnimationFrame(() => t.classList.add("toast-visible"));
-  setTimeout(() => {
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
     t.classList.remove("toast-visible");
-    t.addEventListener("transitionend", () => t.remove());
-  }, duration);
+    t.addEventListener("transitionend", () => t.remove(), { once: true });
+    setTimeout(() => t.remove(), 300);
+  };
+  if (typeof duration === "number" && duration > 0) {
+    setTimeout(() => {
+      close();
+    }, duration);
+  }
+  return { close };
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function toastForPromise(promiseOrFactory, {
+  loadingMessage = "Working...",
+  successMessage = null,
+  errorMessage = (err) => err?.message || "Request failed",
+  minVisibleMs = 800,
+  successDuration = 3000,
+  errorDuration = 5000,
+} = {}) {
+  const startedAt = Date.now();
+  const loadingToast = toast(loadingMessage, "info", 0);
+  try {
+    const promise = typeof promiseOrFactory === "function" ? promiseOrFactory() : promiseOrFactory;
+    const result = await promise;
+    const elapsedMs = Date.now() - startedAt;
+    if (elapsedMs < minVisibleMs) await sleep(minVisibleMs - elapsedMs);
+    loadingToast.close();
+    if (successMessage) {
+      const msg = typeof successMessage === "function" ? successMessage(result) : successMessage;
+      if (msg) toast(msg, "success", successDuration);
+    }
+    return result;
+  } catch (err) {
+    const elapsedMs = Date.now() - startedAt;
+    if (elapsedMs < minVisibleMs) await sleep(minVisibleMs - elapsedMs);
+    loadingToast.close();
+    const msg = typeof errorMessage === "function" ? errorMessage(err) : errorMessage;
+    if (msg) toast(msg, "error", errorDuration);
+    throw err;
+  }
 }
 
 export function pageHeader(title, subtitle, actions) {

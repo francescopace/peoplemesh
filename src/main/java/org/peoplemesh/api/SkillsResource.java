@@ -56,6 +56,16 @@ public class SkillsResource {
         return Response.status(Response.Status.CREATED).entity(catalogToMap(catalog)).build();
     }
 
+    @PUT
+    @Path("/{catalogId}")
+    @Consumes(MediaType.APPLICATION_JSON)
+    public Response updateCatalog(@PathParam("catalogId") UUID catalogId, @Valid CatalogCreateRequest body) {
+        assertCanManageSkills();
+        SkillCatalog updated = catalogService.updateCatalog(
+                catalogId, body.name(), body.description(), body.levelScale(), body.source());
+        return Response.ok(catalogToMap(updated)).build();
+    }
+
     @GET
     @Path("/{catalogId}")
     public Response getCatalog(@PathParam("catalogId") UUID catalogId) {
