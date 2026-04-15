@@ -105,6 +105,9 @@ public class SkillReconciliationService {
     }
 
     List<SkillDefinition> loadCatalogSkills(UUID catalogId) {
+        if (catalogId == null) {
+            return SkillDefinition.listAll();
+        }
         return SkillDefinition.findByCatalog(catalogId);
     }
 

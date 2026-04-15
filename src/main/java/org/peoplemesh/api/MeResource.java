@@ -227,10 +227,8 @@ public class MeResource {
         List<SkillAssessmentDto> result = new ArrayList<>(
                 SkillAssessmentHelper.listAssessments(node.id, catalogId));
 
-        if (catalogId != null) {
-            List<SkillAssessmentDto> suggestions = reconciliationService.reconcile(node.id, catalogId);
-            result.addAll(suggestions);
-        }
+        List<SkillAssessmentDto> suggestions = reconciliationService.reconcile(node.id, catalogId);
+        result.addAll(suggestions);
 
         return Response.ok(result).build();
     }

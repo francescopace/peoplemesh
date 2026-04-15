@@ -708,40 +708,27 @@ async function renderSkillsSection(container, canEdit, getRoot) {
   container.innerHTML = "";
   container.appendChild(spinner());
 
-  let catalogs;
-  try {
-    catalogs = await api.get("/api/v1/skills");
-  } catch {
-    container.querySelector(".spinner")?.remove();
-    container.appendChild(el("p", { className: "text-secondary" }, "Could not load skill catalogs."));
-    return;
-  }
-
   container.querySelector(".spinner")?.remove();
 
-  if (!catalogs?.length) {
-    container.appendChild(el("p", { className: "text-secondary" },
-      "No skill catalogs available. "
-    ));
-    container.appendChild(el("a", { href: "#/skills", style: "font-size:0.85rem" }, "Manage Catalogs \u2192"));
-    return;
-  }
-
   const controlRow = el("div", { className: "flex gap-3", style: "align-items:center;margin-bottom:var(--space-4)" });
-  const catSelect = el("select", { className: "form-select", style: "max-width:280px" });
-  catalogs.forEach((c) => {
-    catSelect.appendChild(el("option", { value: c.id }, c.name));
-  });
-  controlRow.appendChild(catSelect);
   container.appendChild(controlRow);
 
   const skillsArea = el("div", {});
   container.appendChild(skillsArea);
 
   let editing = false;
+  let hasLoadedAssessments = false;
   let currentAssessments = [];
-  let currentCatalog = catalogs[0];
-  let levelScale = currentCatalog.level_scale || { "0": "None", "1": "Aware", "2": "Beginner", "3": "Practitioner", "4": "Advanced", "5": "Expert" };
+  const levelScale = { "0": "None", "1": "Aware", "2": "Beginner", "3": "Practitioner", "4": "Advanced", "5": "Expert" };
+
+  function renderAssessments() {
+    skillsArea.innerHTML = "";
+    if (editing) {
+      renderSkillsEdit(skillsArea, currentAssessments, levelScale, getRoot);
+    } else {
+      renderSkillsView(skillsArea, currentAssessments);
+    }
+  }
 
   if (canEdit) {
     const editBtn = el("button", { className: "profile-edit-link", style: "margin-left:auto" }, "Edit Skills");
@@ -749,36 +736,30 @@ async function renderSkillsSection(container, canEdit, getRoot) {
     editBtn.addEventListener("click", () => {
       editing = !editing;
       editBtn.textContent = editing ? "Cancel" : "Edit Skills";
-      loadAssessments();
+      renderAssessments();
     });
   }
 
-  catSelect.addEventListener("change", () => {
-    currentCatalog = catalogs.find((c) => c.id === catSelect.value) || catalogs[0];
-    levelScale = currentCatalog.level_scale || levelScale;
-    loadAssessments();
-  });
+  async function loadAssessments(forceReload = false) {
+    if (hasLoadedAssessments && !forceReload) {
+      renderAssessments();
+      return;
+    }
 
-  async function loadAssessments() {
     skillsArea.innerHTML = "";
     skillsArea.appendChild(spinner());
 
     try {
-      const data = await api.get("/api/v1/me/skills", { catalog_id: currentCatalog.id });
+      const data = await api.get("/api/v1/me/skills");
       currentAssessments = data || [];
+      hasLoadedAssessments = true;
     } catch {
       skillsArea.querySelector(".spinner")?.remove();
       skillsArea.appendChild(el("p", { className: "text-secondary" }, "Could not load skills."));
       return;
     }
 
-    skillsArea.querySelector(".spinner")?.remove();
-
-    if (editing) {
-      renderSkillsEdit(skillsArea, currentAssessments, levelScale, currentCatalog, getRoot);
-    } else {
-      renderSkillsView(skillsArea, currentAssessments);
-    }
+    renderAssessments();
   }
 
   loadAssessments();
@@ -840,7 +821,7 @@ function renderSkillsView(container, assessments) {
   }
 }
 
-function renderSkillsEdit(container, assessments, levelScale, catalog, getRoot) {
+function renderSkillsEdit(container, assessments, levelScale, getRoot) {
   const confirmed = assessments.filter((a) => a.match_type == null && a.source !== "suggestion");
   const suggestions = assessments.filter((a) => a.match_type != null);
 
@@ -851,7 +832,7 @@ function renderSkillsEdit(container, assessments, levelScale, catalog, getRoot) 
   function renderEditRows() {
     listArea.innerHTML = "";
     if (!editList.length) {
-      listArea.appendChild(el("p", { className: "text-secondary" }, "No skills. Use reconciliation or add from the catalog."));
+      listArea.appendChild(el("p", { className: "text-secondary" }, "No skills yet."));
     }
     for (let i = 0; i < editList.length; i++) {
       const a = editList[i];
@@ -1183,4 +1164,8 @@ function slackField(handle) {
 }
 
 export function arr(v) { return Array.isArray(v) ? v.join(", ") : (v || ""); }
+function val(root, field) {
+  const input = root.querySelector(`[data-field="${field}"]`);
+  return (input?.value || "").trim();
+}
 function csvList(s) { return s ? s.split(",").map((x) => x.trim()).filter(Boolean) : []; }
