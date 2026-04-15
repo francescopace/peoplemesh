@@ -90,28 +90,68 @@ public final class MatchingUtils {
         if (a == null || b == null || a.isEmpty() || b.isEmpty()) {
             return Collections.emptyList();
         }
-        Set<String> bLower = b.stream()
+        Set<String> bNormalized = b.stream()
                 .filter(Objects::nonNull)
-                .map(s -> s.toLowerCase(Locale.ROOT))
+                .map(MatchingUtils::normalizeTerm)
+                .filter(s -> !s.isEmpty())
                 .collect(Collectors.toSet());
         List<String> intersection = new ArrayList<>();
         Set<String> seen = new HashSet<>();
         for (String s : a) {
             if (s == null) continue;
-            String sLow = s.toLowerCase(Locale.ROOT);
-            if (fuzzyContains(bLower, sLow) && seen.add(sLow)) {
+            String sNormalized = normalizeTerm(s);
+            if (sNormalized.isEmpty()) continue;
+            if (fuzzyContains(bNormalized, sNormalized) && seen.add(sNormalized)) {
                 intersection.add(s);
             }
         }
         return intersection;
     }
 
+    static boolean termsMatch(String left, String right) {
+        if (left == null || right == null) return false;
+        String leftNormalized = normalizeTerm(left);
+        String rightNormalized = normalizeTerm(right);
+        if (leftNormalized.isEmpty() || rightNormalized.isEmpty()) return false;
+        if (leftNormalized.equals(rightNormalized)) return true;
+
+        Set<String> leftTokens = tokenSet(leftNormalized);
+        Set<String> rightTokens = tokenSet(rightNormalized);
+        if (leftTokens.isEmpty() || rightTokens.isEmpty()) return false;
+
+        Set<String> smaller = leftTokens.size() <= rightTokens.size() ? leftTokens : rightTokens;
+        Set<String> bigger = leftTokens.size() <= rightTokens.size() ? rightTokens : leftTokens;
+        return bigger.containsAll(smaller);
+    }
+
     private static boolean fuzzyContains(Set<String> pool, String term) {
         if (pool.contains(term)) return true;
         for (String p : pool) {
-            if (p.contains(term) || term.contains(p)) return true;
+            if (termsMatch(p, term)) return true;
         }
         return false;
+    }
+
+    private static Set<String> tokenSet(String normalized) {
+        String[] tokens = normalized.split("\\s+");
+        Set<String> set = new HashSet<>();
+        for (String token : tokens) {
+            if (!token.isBlank()) set.add(token);
+        }
+        return set;
+    }
+
+    private static String normalizeTerm(String raw) {
+        if (raw == null) return "";
+        String normalized = raw.toLowerCase(Locale.ROOT).trim();
+        normalized = normalized
+                .replace("c++", "cpp")
+                .replace("c#", "csharp")
+                .replace("f#", "fsharp")
+                .replace(".net", "dotnet")
+                .replace("node.js", "nodejs");
+        normalized = normalized.replaceAll("[^\\p{Alnum}]+", " ").trim();
+        return normalized.replaceAll("\\s+", " ");
     }
 
     static List<String> splitCommaSeparated(String plain) {

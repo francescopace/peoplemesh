@@ -19,25 +19,15 @@ public class LlmSearchQueryParser implements SearchQueryParser {
     private static final Logger LOG = Logger.getLogger(LlmSearchQueryParser.class);
 
     private static final String SYSTEM_PROMPT = """
-            You are an AI system that transforms a natural language search query into a structured professional profile for semantic matching.
+            Convert ONE user search query into ONE JSON object for candidate matching.
 
-            Your task:
-            Extract structured information and build a JSON profile optimized for matching people.
+            Return ONLY JSON. No markdown, no explanations, no code fences.
 
-            Rules:
-            - Be precise and conservative (do NOT hallucinate missing info)
-            - Normalize skills and technologies (e.g. k8s -> Kubernetes, openshift -> OpenShift)
-            - Infer seniority if possible
-            - Separate "must-have" vs "nice-to-have"
-            - Detect language and location constraints
-            - Detect negative filters (things the user does NOT want)
-            - Keep output compact
-            - Output ONLY valid JSON, no explanations
-
-            Output JSON schema:
+            Use this exact schema and keep all keys:
             {
               "must_have": {
                 "skills": [],
+                "skills_with_level": [],
                 "roles": [],
                 "languages": [],
                 "location": [],
@@ -45,23 +35,30 @@ public class LlmSearchQueryParser implements SearchQueryParser {
               },
               "nice_to_have": {
                 "skills": [],
+                "skills_with_level": [],
                 "industries": [],
                 "experience": []
               },
-              "seniority": "junior | mid | senior | lead | unknown",
+              "seniority": "junior|mid|senior|lead|unknown",
               "negative_filters": {
                 "seniority": null,
                 "skills": [],
-                "location": null
+                "location": []
               },
               "keywords": [],
               "embedding_text": ""
             }
 
-            Important:
-            - "embedding_text" must be a clean natural sentence representing the ideal candidate
-            - Always generate "embedding_text" in English, regardless of the input language
-            - Output ONLY JSON""";
+            Rules:
+            - Be conservative: do not invent facts.
+            - Put strict requirements in must_have, optional preferences in nice_to_have.
+            - Normalize known aliases (k8s->Kubernetes, js->JavaScript, ts->TypeScript).
+            - Infer seniority only if clearly implied; otherwise "unknown".
+            - If a field is missing, return empty array (or null only for negative_filters.seniority).
+            - skills_with_level items format: {"name":"<skill>","level":1-5}. Use only if explicit level signal exists.
+            - keywords: short deduplicated terms from query intent.
+            - embedding_text: one short English sentence describing the ideal candidate profile.
+            - Keep output compact and valid JSON only.""";
 
     @Inject
     ChatModel chatModel;

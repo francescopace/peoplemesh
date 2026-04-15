@@ -26,20 +26,6 @@ export async function renderExplore(container) {
   /* === Filter bar === */
   const filterBar = el("div", { className: "explore-filter-bar" });
 
-  const searchWrap = el("div", { className: "explore-search-wrap" });
-  const searchForm = el("form", { className: "search-input-wrap explore-search-form" });
-  const searchInput = el("input", {
-    className: "search-input explore-search-input",
-    type: "text",
-    placeholder: "Search in your mesh...",
-  });
-  const searchBtn = el("button", { type: "submit", className: "search-btn" },
-    el("span", { className: "material-symbols-outlined" }, "search"));
-  searchForm.appendChild(searchInput);
-  searchForm.appendChild(searchBtn);
-  searchWrap.appendChild(searchForm);
-  filterBar.appendChild(searchWrap);
-
   /* Node type tabs */
   const hashParams = new URLSearchParams(window.location.hash.split("?")[1] || "");
   let activeType = hashParams.get("type") || "";
@@ -81,16 +67,6 @@ export async function renderExplore(container) {
     loadResults();
   });
 
-  let searchTimer;
-  searchInput.addEventListener("input", () => {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => loadResults(), 250);
-  });
-  searchForm.addEventListener("submit", (e) => {
-    e.preventDefault();
-    loadResults();
-  });
-
   const resultsArea = el("div", { className: "explore-results" });
   container.appendChild(resultsArea);
 
@@ -124,17 +100,12 @@ export async function renderExplore(container) {
   async function loadAllResults() {
     const query = {};
     const country = countrySelect.value; if (country) query.country = country;
-    const freeText = searchInput.value.trim();
-    const freeTextLower = freeText.toLowerCase();
 
     try {
       const matches = await api.get("/api/v1/matches/me", query);
       resultsArea.innerHTML = "";
 
       let filtered = matches || [];
-      if (freeText) {
-        filtered = filtered.filter((m) => matchesText(m, freeTextLower));
-      }
       updateTypeTabCounts(filtered);
       if (activeType) {
         filtered = filtered.filter((m) => (m.nodeType || "").toUpperCase() === activeType);
@@ -285,30 +256,5 @@ export async function renderExplore(container) {
 
   updateActions();
   loadResults();
-}
-
-/* === Client-side text matching (unified) === */
-
-function matchesText(m, q) {
-  const fields = [
-    m.title || "",
-    m.description || "",
-    ...(m.tags || []),
-    m.country || "",
-    m.nodeType || "",
-  ];
-  if (m.person) {
-    fields.push(
-      ...(m.person.roles || []),
-      ...(m.person.skillsTechnical || []),
-      ...(m.person.skillsSoft || []),
-      ...(m.person.toolsAndTech || []),
-      ...(m.person.hobbies || []),
-      ...(m.person.sports || []),
-      ...(m.person.causes || []),
-      m.person.city || "",
-    );
-  }
-  return fields.join(" ").toLowerCase().includes(q);
 }
 

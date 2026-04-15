@@ -173,7 +173,13 @@ class MatchingUtilsTest {
     @Test
     void jaccardSimilarity_fuzzySubstring() {
         double sim = MatchingUtils.jaccardSimilarity(List.of("java"), List.of("javascript"));
-        assertTrue(sim > 0.0, "fuzzy substring match should contribute");
+        assertEquals(0.0, sim, 1e-9, "substring-only matches should not contribute");
+    }
+
+    @Test
+    void jaccardSimilarity_tokenSubsetMatches() {
+        double sim = MatchingUtils.jaccardSimilarity(List.of("java"), List.of("java se"));
+        assertTrue(sim > 0.0, "token subset matches should contribute");
     }
 
     // === intersectCaseInsensitive ===
@@ -202,6 +208,18 @@ class MatchingUtilsTest {
         List<String> b = List.of("a");
         List<String> result = MatchingUtils.intersectCaseInsensitive(a, b);
         assertTrue(result.contains("a"));
+    }
+
+    @Test
+    void intersectCaseInsensitive_doesNotMatchSubstringOnly() {
+        List<String> result = MatchingUtils.intersectCaseInsensitive(List.of("Java"), List.of("JavaScript"));
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void intersectCaseInsensitive_matchesTokenSubset() {
+        List<String> result = MatchingUtils.intersectCaseInsensitive(List.of("Java"), List.of("Java SE"));
+        assertEquals(List.of("Java"), result);
     }
 
     // === splitCommaSeparated ===

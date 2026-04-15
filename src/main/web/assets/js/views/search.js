@@ -260,8 +260,7 @@ function renderProfileCard(result) {
     const tagsArea = el("div", { className: "dc-tags-area" });
     const row = el("div", { className: "dc-tags" });
     allSkills.slice(0, 10).forEach((s) => {
-      const sLow = s.toLowerCase();
-      const isMatch = matched.some((m) => { const mLow = m.toLowerCase(); return mLow === sLow || sLow.includes(mLow) || mLow.includes(sLow); });
+      const isMatch = matched.some((m) => termsMatch(m, s));
       const tag = el("span", { className: "dc-tag", style: isMatch ? matchStyle : undefined }, s);
       const lvl = findSkillLevel(skillLevels, s);
       if (lvl > 0) {
@@ -336,8 +335,7 @@ function renderNodeCard(result) {
     const tagsArea = el("div", { className: "dc-tags-area" });
     const row = el("div", { className: "dc-tags" });
     result.tags.slice(0, 8).forEach((t) => {
-      const tLow = t.toLowerCase();
-      const isMatch = matchedTerms.some((m) => { const mLow = m.toLowerCase(); return mLow === tLow || tLow.includes(mLow) || mLow.includes(tLow); });
+      const isMatch = matchedTerms.some((m) => termsMatch(m, t));
       row.appendChild(el("span", { className: "dc-tag", style: isMatch ? matchStyle : undefined }, t));
     });
     tagsArea.appendChild(row);
@@ -345,6 +343,40 @@ function renderNodeCard(result) {
   }
 
   return card;
+}
+
+function termsMatch(a, b) {
+  const aNorm = normalizeTerm(a);
+  const bNorm = normalizeTerm(b);
+  if (!aNorm || !bNorm) return false;
+  if (aNorm === bNorm) return true;
+
+  const aTokens = new Set(aNorm.split(" ").filter(Boolean));
+  const bTokens = new Set(bNorm.split(" ").filter(Boolean));
+  if (!aTokens.size || !bTokens.size) return false;
+
+  const [smaller, bigger] = aTokens.size <= bTokens.size
+    ? [aTokens, bTokens]
+    : [bTokens, aTokens];
+  for (const token of smaller) {
+    if (!bigger.has(token)) return false;
+  }
+  return true;
+}
+
+function normalizeTerm(value) {
+  if (!value) return "";
+  return value
+    .toLowerCase()
+    .trim()
+    .replaceAll("c++", "cpp")
+    .replaceAll("c#", "csharp")
+    .replaceAll("f#", "fsharp")
+    .replaceAll(".net", "dotnet")
+    .replaceAll("node.js", "nodejs")
+    .replaceAll(/[^\p{L}\p{N}]+/gu, " ")
+    .trim()
+    .replaceAll(/\s+/g, " ");
 }
 
 function findSkillLevel(skillLevels, skillName) {

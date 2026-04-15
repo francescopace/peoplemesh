@@ -19,8 +19,6 @@ import org.peoplemesh.domain.enums.Seniority;
 import org.peoplemesh.domain.enums.WorkMode;
 import org.peoplemesh.domain.model.SkillAssessment;
 import org.peoplemesh.domain.model.SkillDefinition;
-import java.util.Locale;
-
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -189,9 +187,7 @@ public class SearchService {
         List<String> matchedMust = MatchingUtils.intersectCaseInsensitive(mustHaveSkills, candidateSkills);
         List<String> missingMust = mustHaveSkills.stream()
                 .filter(s -> matchedMust.stream().noneMatch(m ->
-                        m.equalsIgnoreCase(s)
-                        || m.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT))
-                        || s.toLowerCase(Locale.ROOT).contains(m.toLowerCase(Locale.ROOT))))
+                        MatchingUtils.termsMatch(m, s)))
                 .toList();
         double mustHaveCoverage = mustHaveSkills.isEmpty() ? 1.0
                 : (double) matchedMust.size() / mustHaveSkills.size();
