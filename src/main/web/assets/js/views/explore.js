@@ -20,20 +20,24 @@ export async function renderExplore(container) {
 
   const header = el("header", { className: "explore-header" });
   header.appendChild(el("h1", { className: "page-title" }, "My Mesh"));
-  header.appendChild(el("p", { className: "page-subtitle text-secondary" }, "Discover, connect, and manage your mesh."));
+  header.appendChild(el("p", { className: "page-subtitle text-secondary" }, "Explore people, jobs, and communities in your mesh."));
   container.appendChild(header);
 
   /* === Filter bar === */
   const filterBar = el("div", { className: "explore-filter-bar" });
 
   const searchWrap = el("div", { className: "explore-search-wrap" });
-  searchWrap.appendChild(el("span", { className: "material-symbols-outlined explore-search-icon" }, "search"));
+  const searchForm = el("form", { className: "search-input-wrap explore-search-form" });
   const searchInput = el("input", {
-    className: "explore-search-input",
+    className: "search-input explore-search-input",
     type: "text",
-    placeholder: "Search the mesh...",
+    placeholder: "Search in your mesh...",
   });
-  searchWrap.appendChild(searchInput);
+  const searchBtn = el("button", { type: "submit", className: "search-btn" },
+    el("span", { className: "material-symbols-outlined" }, "search"));
+  searchForm.appendChild(searchInput);
+  searchForm.appendChild(searchBtn);
+  searchWrap.appendChild(searchForm);
   filterBar.appendChild(searchWrap);
 
   /* Node type tabs */
@@ -82,8 +86,9 @@ export async function renderExplore(container) {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => loadResults(), 250);
   });
-  searchInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") { e.preventDefault(); loadResults(); }
+  searchForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    loadResults();
   });
 
   const resultsArea = el("div", { className: "explore-results" });
@@ -135,7 +140,13 @@ export async function renderExplore(container) {
         filtered = filtered.filter((m) => (m.nodeType || "").toUpperCase() === activeType);
       }
       if (!filtered.length) {
-        resultsArea.appendChild(emptyState("No results found. Try different filters or create a profile first."));
+        resultsArea.appendChild(emptyState(
+          el("span", {},
+            "Your Mesh is empty. Update your ",
+            el("a", { href: "#/profile" }, "profile"),
+            " by adding skills or importing your CV."
+          )
+        ));
         return;
       }
       const grid = el("div", { className: "explore-grid" });
@@ -145,7 +156,13 @@ export async function renderExplore(container) {
       resultsArea.innerHTML = "";
       toast(err.message, "error");
       if (err.status === 204 || err.status === 404) {
-        resultsArea.appendChild(emptyState("Create a profile first to find matches.", "Go to Profile", () => { window.location.hash = "#/profile"; }));
+        resultsArea.appendChild(emptyState(
+          el("span", {},
+            "To find better matches, update your ",
+            el("a", { href: "#/profile" }, "profile"),
+            " by adding skills or importing your CV."
+          )
+        ));
       }
     }
   }

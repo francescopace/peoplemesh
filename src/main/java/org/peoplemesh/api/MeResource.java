@@ -237,7 +237,7 @@ public class MeResource {
     @Authenticated
     @Path("/skills")
     @Consumes(MediaType.APPLICATION_JSON)
-    public Response updateSkillAssessments(@Valid List<SkillAssessmentDto> assessments) {
+    public Response updateSkillAssessments(List<@Valid SkillAssessmentDto> assessments) {
         UUID userId = userResolver.resolveUserId();
         MeshNode node = MeshNode.findPublishedUserNode(userId).orElse(null);
         if (node == null) {

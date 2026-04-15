@@ -41,9 +41,7 @@
 
 .header-nav-link {
   font-family: var(--font-display);
-  font-size: 0.8rem;
   font-weight: var(--font-medium);
-  letter-spacing: 0.04em;
   color: var(--color-gray-500);
   text-decoration: none;
   cursor: pointer;
@@ -1692,41 +1690,24 @@ select.profile-inline-input[multiple] {
 }
 
 .explore-search-wrap {
-  position: relative;
-  flex: 1;
-  min-width: 180px;
+  flex: 1 1 100%;
+  min-width: 0;
+  width: 100%;
 }
 
-.explore-search-icon {
-  position: absolute;
-  left: 1rem;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 22px;
-  color: var(--color-gray-400);
-  pointer-events: none;
+.explore-search-form {
+  max-width: none;
+  box-shadow: none;
 }
 
 .explore-search-input {
-  width: 100%;
-  padding: 0.75rem 1rem 0.75rem 3rem;
-  border: 1px solid var(--glass-card-border);
-  border-radius: var(--radius-2xl);
   font-size: var(--text-sm);
-  background: var(--glass-card-bg);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  color: var(--text-primary);
-  transition: all var(--duration-fast) var(--ease-default);
 }
 
 .explore-search-input::placeholder { color: var(--color-gray-400); }
 
-.explore-search-input:focus {
-  outline: none;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
-  background: rgba(255, 255, 255, 0.6);
-  border-color: transparent;
+.explore-search-form .search-btn {
+  padding: 0.6rem 1rem;
 }
 
 /* Type tabs (segmented pill bar) */
@@ -2947,7 +2928,6 @@ select.profile-inline-input[multiple] {
 .search-input-wrap {
   display: flex;
   width: 100%;
-  max-width: 640px;
   background: var(--glass-card-bg);
   border: 1px solid var(--glass-card-border);
   border-radius: var(--radius-full);
