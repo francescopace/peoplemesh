@@ -17,6 +17,7 @@ This is the canonical index for technical documentation under `docs/`.
 - Import skills CSV (Skills Base/ESCO): [`how-to/import-skill-catalog-csv.md`](how-to/import-skill-catalog-csv.md)
 - Run ATS ingest safely: [`how-to/run-ats-ingest.md`](how-to/run-ats-ingest.md)
 - Regenerate node embeddings: [`how-to/regenerate-node-embeddings.md`](how-to/regenerate-node-embeddings.md)
+- Export Micrometer metrics to Grafana/Prometheus: [`how-to/export-metrics-grafana.md`](how-to/export-metrics-grafana.md)
 - Purge consent tokens: [`how-to/purge-consent-tokens.md`](how-to/purge-consent-tokens.md)
 - Enforce data retention: [`how-to/enforce-retention.md`](how-to/enforce-retention.md)
 - Configure community auto-clustering: [`how-to/configure-community-auto-clustering.md`](how-to/configure-community-auto-clustering.md)

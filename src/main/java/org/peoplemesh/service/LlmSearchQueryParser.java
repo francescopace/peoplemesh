@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.ChatModel;
+import io.micrometer.core.annotation.Timed;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
@@ -69,6 +70,12 @@ public class LlmSearchQueryParser implements SearchQueryParser {
     ObjectMapper objectMapper;
 
     @Override
+    @Timed(
+            value = "peoplemesh.llm.inference",
+            description = "LLM inference latency",
+            percentiles = {0.95},
+            histogram = true
+    )
     public Optional<ParsedSearchQuery> parse(String userQuery) {
         if (userQuery == null || userQuery.isBlank()) {
             return Optional.empty();

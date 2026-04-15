@@ -75,8 +75,25 @@ async function renderAdminOverview(container) {
     { label: "Groups", value: overview?.groups ?? 0, icon: "groups" },
     { label: "Skills", value: overview?.skills ?? 0, icon: "psychology" },
   ];
+  const timingMetrics = [
+    {
+      label: "LLM inference",
+      icon: "smart_toy",
+      stats: overview?.timings?.llmInference,
+    },
+    {
+      label: "Embedding",
+      icon: "neurology",
+      stats: overview?.timings?.embeddingInference,
+    },
+    {
+      label: "HNSW search",
+      icon: "travel_explore",
+      stats: overview?.timings?.hnswSearch,
+    },
+  ];
 
-  const grid = el("div", { className: "admin-stats-grid" });
+  const dataGrid = el("div", { className: "admin-stats-grid" });
   for (const metric of metrics) {
     const card = el("div", { className: "profile-card admin-stat-card" });
     const header = el("div", { className: "profile-card-header" });
@@ -89,8 +106,35 @@ async function renderAdminOverview(container) {
     const body = el("div", { className: "profile-card-body" });
     body.appendChild(el("p", { style: "font-size:1.5rem;font-weight:700;margin:0" }, Number(metric.value || 0).toLocaleString()));
     card.appendChild(body);
-    grid.appendChild(card);
+    dataGrid.appendChild(card);
+  }
+  container.appendChild(dataGrid);
+
+  container.appendChild(el("h2", { className: "page-title", style: "font-size:1.1rem;margin-top:var(--space-8)" }, "Inference Statistics"));
+
+  const timingGrid = el("div", { className: "admin-stats-grid" });
+  for (const metric of timingMetrics) {
+    const card = el("div", { className: "profile-card admin-stat-card" });
+    const header = el("div", { className: "profile-card-header" });
+    header.appendChild(el("h3", { className: "profile-card-title", style: "font-size:1rem" },
+      el("span", { className: "material-symbols-outlined profile-icon profile-icon--purple", style: "font-size:20px" }, metric.icon),
+      metric.label
+    ));
+    card.appendChild(header);
+
+    const body = el("div", { className: "profile-card-body" });
+    body.appendChild(el("p", { style: "font-size:1.35rem;font-weight:700;margin:0" }, formatLatency(metric.stats?.avgMs)));
+    body.appendChild(el("p", { style: "margin-top:6px;margin-bottom:0;color:var(--muted-foreground);font-size:0.86rem" },
+      `p95 ${formatLatency(metric.stats?.p95Ms)} · max ${formatLatency(metric.stats?.maxMs)} · n ${(metric.stats?.sampleCount ?? 0).toLocaleString()}`
+    ));
+    card.appendChild(body);
+    timingGrid.appendChild(card);
   }
 
-  container.appendChild(grid);
+  container.appendChild(timingGrid);
+}
+
+function formatLatency(value) {
+  const ms = Number(value || 0);
+  return `${ms.toLocaleString()} ms`;
 }

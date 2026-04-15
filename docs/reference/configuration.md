@@ -140,6 +140,27 @@ Dev model defaults are configured in `application-dev.properties`:
 | `peoplemesh.notification.dry-run` | `true` | Do not deliver externally; log/send internal flow only |
 | `peoplemesh.notification.subject-prefix` | `[PeopleMesh]` | Prefix used for notification subject lines |
 
+## Observability and Metrics (Micrometer)
+
+PeopleMesh instruments AI and vector-search latency via Micrometer timers.
+These are surfaced in admin overview (`/api/v1/system/statistics`) and can be exported through `/q/metrics`.
+
+### Instrumented metric names
+
+- `peoplemesh.llm.inference`
+- `peoplemesh.embedding.inference`
+- `peoplemesh.hnsw.search`
+
+### Common Quarkus Micrometer keys
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `quarkus.micrometer.enabled` | `true` | Enable Micrometer integration |
+| `quarkus.micrometer.export.prometheus.enabled` | `false` unless Prometheus registry extension is present and enabled | Expose Prometheus-formatted metrics at `/q/metrics` |
+| `quarkus.micrometer.export.otlp.enabled` | `false` unless OTLP registry extension is present and enabled | Push metrics to OTLP collectors |
+
+For registry-specific setup (Prometheus + Grafana, OTLP, etc.), see [`../how-to/export-metrics-grafana.md`](../how-to/export-metrics-grafana.md).
+
 ## Entitlements
 
 Entitlements are granted at login based on OAuth subject values.

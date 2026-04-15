@@ -4,5 +4,6 @@ public record SystemStatisticsDto(
         long users,
         long jobs,
         long groups,
-        long skills
+        long skills,
+        TimingStatisticsDto timings
 ) {}

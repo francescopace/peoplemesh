@@ -37,6 +37,8 @@ This reference follows PeopleMesh's security- and GDPR-first posture by design (
 | GET | `/api/v1/me/consents` | List consents |
 | POST/DELETE | `/api/v1/me/consents/{scope}` | Grant/revoke consent |
 | GET | `/api/v1/me/activity` | Activity feed |
+| | | **System** (`can_manage_skills`) |
+| GET | `/api/v1/system/statistics` | Admin overview counters and runtime timing stats (LLM, embedding, HNSW) |
 | | | **Matches** |
 | POST | `/api/v1/matches/prompt` | Natural-language search |
 | POST | `/api/v1/matches` | Structured match |
@@ -65,6 +67,7 @@ This reference follows PeopleMesh's security- and GDPR-first posture by design (
 | POST | `/mcp` | Streamable HTTP (also `/mcp/sse` for legacy SSE) |
 | | | **Ops** |
 | GET | `/q/health` | Liveness/readiness probes |
+| GET | `/q/metrics` | Micrometer export endpoint (format depends on enabled registry, e.g. Prometheus) |
 | GET | `/q/dev-ui` | Quarkus dev dashboard (dev mode only) |
 
 ## Notes
@@ -72,3 +75,8 @@ This reference follows PeopleMesh's security- and GDPR-first posture by design (
 - Endpoint authorization depends on OIDC/session state and configured entitlements.
 - Maintenance endpoints require `X-Maintenance-Key` and may also enforce IP/CIDR restrictions.
 - MCP integration is read-only by design.
+- `GET /api/v1/system/statistics` includes timing summaries for:
+  - `timings.llmInference`
+  - `timings.embeddingInference`
+  - `timings.hnswSearch`
+  Each block provides `sampleCount`, `avgMs`, `p95Ms`, and `maxMs`.

@@ -1,6 +1,7 @@
 package org.peoplemesh.repository;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.annotation.Timed;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -39,6 +40,12 @@ public class MeshNodeSearchRepository {
     ObjectMapper objectMapper;
 
     @SuppressWarnings("unchecked")
+    @Timed(
+            value = "peoplemesh.hnsw.search",
+            description = "HNSW vector search latency",
+            percentiles = {0.95},
+            histogram = true
+    )
     public List<Object[]> findUserCandidatesByEmbedding(float[] embedding, UUID excludeUserId, int poolSize) {
         String vectorLiteral = MatchingUtils.vectorToString(embedding);
         return em.createNativeQuery(
@@ -53,6 +60,12 @@ public class MeshNodeSearchRepository {
     }
 
     @SuppressWarnings("unchecked")
+    @Timed(
+            value = "peoplemesh.hnsw.search",
+            description = "HNSW vector search latency",
+            percentiles = {0.95},
+            histogram = true
+    )
     public List<Object[]> findNodeCandidatesByEmbedding(float[] embedding, UUID excludeUserId,
                                                          NodeType targetType, int poolSize) {
         String vectorLiteral = MatchingUtils.vectorToString(embedding);
@@ -78,6 +91,12 @@ public class MeshNodeSearchRepository {
     }
 
     @SuppressWarnings("unchecked")
+    @Timed(
+            value = "peoplemesh.hnsw.search",
+            description = "HNSW vector search latency",
+            percentiles = {0.95},
+            histogram = true
+    )
     public List<Object[]> unifiedVectorSearch(float[] embedding, UUID excludeUserId,
                                                String countryFilter, List<String> languages,
                                                int poolSize) {

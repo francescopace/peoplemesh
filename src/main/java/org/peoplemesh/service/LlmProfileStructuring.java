@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.ChatModel;
+import io.micrometer.core.annotation.Timed;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
@@ -65,6 +66,12 @@ public class LlmProfileStructuring implements ProfileStructuringLlm {
     ObjectMapper objectMapper;
 
     @Override
+    @Timed(
+            value = "peoplemesh.llm.inference",
+            description = "LLM inference latency",
+            percentiles = {0.95},
+            histogram = true
+    )
     public Optional<ProfileSchema> extractProfile(String cvContent) {
         int cvChars = cvContent != null ? cvContent.length() : 0;
         int cvWords = (cvContent == null || cvContent.isBlank()) ? 0 : cvContent.trim().split("\\s+").length;
