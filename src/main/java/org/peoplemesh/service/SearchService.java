@@ -65,7 +65,7 @@ public class SearchService {
 
     public SearchResponse search(UUID userId, String queryText, String countryFilter) {
         if (!consentService.hasActiveConsent(userId, "professional_matching")) {
-            return new SearchResponse(null, Collections.emptyList(), Collections.emptyList());
+            return new SearchResponse(null, Collections.emptyList());
         }
 
         if (isRateLimited(userId)) {
@@ -86,8 +86,7 @@ public class SearchService {
         }
         float[] queryEmbedding = embeddingService.generateEmbedding(embeddingText);
         if (queryEmbedding == null) {
-            return new SearchResponse(parsedQuery, Collections.emptyList(),
-                    List.of("Could not generate embedding for your query."));
+            return new SearchResponse(parsedQuery, Collections.emptyList());
         }
 
         List<RawNodeCandidate> rawCandidates = unifiedVectorSearch(queryEmbedding, userId,
@@ -101,9 +100,7 @@ public class SearchService {
 
         List<SearchResultItem> results = toResultItems(allScored);
 
-        List<String> suggestions = generateSuggestions(parsedQuery);
-
-        return new SearchResponse(parsedQuery, results, suggestions);
+        return new SearchResponse(parsedQuery, results);
     }
 
     // === Unified vector search on mesh_node (USER + JOB + COMMUNITY + ...) ===
@@ -370,25 +367,6 @@ public class SearchService {
     }
 
     // === Helpers ===
-
-    private List<String> generateSuggestions(ParsedSearchQuery parsed) {
-        if (parsed.keywords() == null || parsed.keywords().isEmpty()) {
-            return Collections.emptyList();
-        }
-        List<String> suggestions = new ArrayList<>();
-        if (parsed.mustHave() != null && parsed.mustHave().skills() != null) {
-            for (String skill : parsed.mustHave().skills()) {
-                String lower = skill.toLowerCase();
-                if (lower.contains("openshift") || lower.contains("kubernetes")) {
-                    suggestions.add("Try also: container orchestration specialists");
-                }
-                if (lower.contains("redis") || lower.contains("kafka")) {
-                    suggestions.add("Try also: distributed systems engineers");
-                }
-            }
-        }
-        return suggestions.stream().distinct().limit(3).toList();
-    }
 
     private boolean isRateLimited(UUID userId) {
         int maxPerMinute = config.search().maxPerMinute();

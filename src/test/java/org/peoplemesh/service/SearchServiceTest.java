@@ -70,15 +70,14 @@ class SearchServiceTest {
     }
 
     @Test
-    void search_nullEmbedding_returnsEmptyWithSuggestion() {
+    void search_nullEmbedding_returnsEmptyResponse() {
         when(consentService.hasActiveConsent(userId, "professional_matching")).thenReturn(true);
         when(embeddingService.generateEmbedding(anyString())).thenReturn(null);
 
         SearchResponse response = searchService.search(userId, "some query", null);
 
+        assertNotNull(response.parsedQuery());
         assertTrue(response.results().isEmpty());
-        assertFalse(response.suggestions().isEmpty());
-        assertEquals("Could not generate embedding for your query.", response.suggestions().get(0));
     }
 
     @Test
@@ -295,55 +294,6 @@ class SearchServiceTest {
             SearchResponse response = searchService.search(userId, "test", null);
             assertNotNull(response);
         }
-    }
-
-    @Test
-    void search_generatesSuggestions_forKubernetesSkill() throws Exception {
-        SearchQueryParser parser = mock(SearchQueryParser.class);
-        Field parsersField = SearchService.class.getDeclaredField("queryParsers");
-        parsersField.setAccessible(true);
-        parsersField.set(searchService, List.of(parser));
-
-        ParsedSearchQuery parsed = new ParsedSearchQuery(
-                new ParsedSearchQuery.MustHaveFilters(List.of("kubernetes"),
-                        List.of(), List.of(), List.of(), List.of()),
-                null, "unknown", null, List.of("kubernetes"), "kubernetes engineer");
-        when(parser.parse("kubernetes engineer")).thenReturn(Optional.of(parsed));
-
-        when(consentService.hasActiveConsent(userId, "professional_matching")).thenReturn(true);
-        when(embeddingService.generateEmbedding(anyString())).thenReturn(new float[]{0.5f});
-        when(searchRepository.unifiedVectorSearch(any(float[].class), eq(userId),
-                any(), any(), anyInt())).thenReturn(Collections.emptyList());
-
-        SearchResponse response = searchService.search(userId, "kubernetes engineer", null);
-
-        assertNotNull(response.suggestions());
-        assertTrue(response.suggestions().stream()
-                .anyMatch(s -> s.contains("container orchestration")));
-    }
-
-    @Test
-    void search_generatesSuggestions_forKafkaSkill() throws Exception {
-        SearchQueryParser parser = mock(SearchQueryParser.class);
-        Field parsersField = SearchService.class.getDeclaredField("queryParsers");
-        parsersField.setAccessible(true);
-        parsersField.set(searchService, List.of(parser));
-
-        ParsedSearchQuery parsed = new ParsedSearchQuery(
-                new ParsedSearchQuery.MustHaveFilters(List.of("kafka"),
-                        List.of(), List.of(), List.of(), List.of()),
-                null, "unknown", null, List.of("kafka"), "kafka specialist");
-        when(parser.parse("kafka specialist")).thenReturn(Optional.of(parsed));
-
-        when(consentService.hasActiveConsent(userId, "professional_matching")).thenReturn(true);
-        when(embeddingService.generateEmbedding(anyString())).thenReturn(new float[]{0.5f});
-        when(searchRepository.unifiedVectorSearch(any(float[].class), eq(userId),
-                any(), any(), anyInt())).thenReturn(Collections.emptyList());
-
-        SearchResponse response = searchService.search(userId, "kafka specialist", null);
-
-        assertTrue(response.suggestions().stream()
-                .anyMatch(s -> s.contains("distributed systems")));
     }
 
     @Test

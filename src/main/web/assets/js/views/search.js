@@ -157,7 +157,6 @@ function renderResults(container, data, typeFilter, countryFilter, elapsed) {
 
   if (!data.results || data.results.length === 0) {
     container.appendChild(emptyState("No results found. Try a different query."));
-    renderSuggestions(container, data.suggestions);
     return;
   }
 
@@ -173,7 +172,6 @@ function renderResults(container, data, typeFilter, countryFilter, elapsed) {
 
   if (!filtered.length) {
     container.appendChild(emptyState("No results match the selected filters."));
-    renderSuggestions(container, data.suggestions);
     return;
   }
 
@@ -190,8 +188,6 @@ function renderResults(container, data, typeFilter, countryFilter, elapsed) {
     }
   });
   container.appendChild(grid);
-
-  renderSuggestions(container, data.suggestions);
 }
 
 function renderProfileCard(result) {
@@ -362,12 +358,3 @@ function findSkillLevel(skillLevels, skillName) {
   return 0;
 }
 
-function renderSuggestions(container, suggestions) {
-  if (!suggestions?.length) return;
-  const wrap = el("div", { className: "search-suggestions" });
-  wrap.appendChild(el("p", { className: "text-secondary" }, "Suggestions:"));
-  suggestions.forEach((s) => {
-    wrap.appendChild(el("span", { className: "search-suggestion-chip" }, s));
-  });
-  container.appendChild(wrap);
-}

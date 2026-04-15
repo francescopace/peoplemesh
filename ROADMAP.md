@@ -59,7 +59,7 @@ Goal: Prove real usage in staffing / expert discovery.
 
 - [ ] Multi-view embedding (core + skills) — single embedding per node today
 - [ ] Basic reranking logic — no reranker; hybrid scoring only
-- [ ] Query suggestions
+- [ ] Name and surname search via LLM query parsing — detect person-name intent in free-text prompts and enrich structured query fields (for example `firstName`/`lastName`) before retrieval/ranking.
 - [ ] Reranker (Granite or custom)
 
 ### EXCLUDE
