@@ -26,11 +26,20 @@ Thumbs.db
 .quarkus/
 
 # Environment
-.env
 *.pem
 *.key
 *.crt
+.certs
+.tmp
+
+# Node
+node_modules/
 
 # Logs
 *.log
 logs/
+
+# Python
+__pycache__/
+*.pyc
+

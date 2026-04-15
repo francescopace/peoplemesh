@@ -1,54 +1,37 @@
 package org.peoplemesh.service;
 
-import io.quarkus.redis.datasource.RedisDataSource;
-import io.quarkus.redis.datasource.value.ValueCommands;
 import org.peoplemesh.config.AppConfig;
-import org.peoplemesh.domain.model.ProfileConsent;
+import org.peoplemesh.util.HashUtils;
+import org.peoplemesh.util.HmacSigner;
+import org.peoplemesh.domain.model.MeshNodeConsent;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
+import org.jboss.logging.Logger;
 
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
-import java.util.HexFormat;
 import java.util.UUID;
 
 /**
- * Generates and validates HMAC-SHA256 signed consent tokens.
- * Tokens are single-use (tracked in Redis) with a configurable TTL.
+ * Validates HMAC-SHA256 signed consent tokens and manages consent records.
+ * Tokens are single-use (tracked via {@link ConsentTokenStore}) with a configurable TTL.
  */
 @ApplicationScoped
 public class ConsentService {
 
-    private static final String REDIS_PREFIX = "consent:";
-    private static final String HMAC_ALGO = "HmacSHA256";
+    private static final Logger LOG = Logger.getLogger(ConsentService.class);
     private static final String CURRENT_POLICY_VERSION = "1.0";
 
     @Inject
     AppConfig config;
 
     @Inject
-    RedisDataSource redisDataSource;
+    ConsentTokenStore tokenStore;
 
     /**
-     * Generates a consent token: base64(userId|timestamp|scope) + "." + hmac_signature
-     */
-    public String generateToken(UUID userId, String scope) {
-        long now = Instant.now().getEpochSecond();
-        String payload = userId.toString() + "|" + now + "|" + scope;
-        String encodedPayload = Base64.getUrlEncoder().withoutPadding()
-                .encodeToString(payload.getBytes(StandardCharsets.UTF_8));
-        String signature = hmacSign(encodedPayload);
-        return encodedPayload + "." + signature;
-    }
-
-    /**
-     * Validates signature, TTL, scope, and single-use via Redis.
+     * Validates signature, TTL, scope, and single-use via {@link ConsentTokenStore}.
      * Returns the userId if valid, throws otherwise.
      *
      * @param requiredScope the scope this token must authorize (e.g. "profile_storage")
@@ -62,10 +45,8 @@ public class ConsentService {
         String encodedPayload = parts[0];
         String signature = parts[1];
 
-        String expectedSig = hmacSign(encodedPayload);
-        if (!MessageDigest.isEqual(
-                expectedSig.getBytes(StandardCharsets.UTF_8),
-                signature.getBytes(StandardCharsets.UTF_8))) {
+        if (!HmacSigner.verify(encodedPayload, signature, config.consentToken().secret())) {
+            LOG.warnf("Consent token signature verification failed for scope=%s", requiredScope);
             throw new SecurityException("Consent token signature verification failed");
         }
 
@@ -90,14 +71,12 @@ public class ConsentService {
                     requiredScope + " but token has " + tokenScope);
         }
 
-        String redisKey = REDIS_PREFIX + token;
-        ValueCommands<String, String> commands = redisDataSource.value(String.class, String.class);
-        Boolean wasSet = commands.setnx(redisKey, "used");
-        if (!Boolean.TRUE.equals(wasSet)) {
+        String tokenHash = HashUtils.sha256(token);
+        Instant expiresAt = Instant.now()
+                .plusSeconds(config.consentToken().ttlSeconds() * 2L);
+        if (!tokenStore.tryConsume(tokenHash, expiresAt)) {
             throw new SecurityException("Consent token already used");
         }
-        commands.getex(redisKey, new io.quarkus.redis.datasource.value.GetExArgs()
-                .ex(Duration.ofSeconds(config.consentToken().ttlSeconds() * 2L)));
 
         return userId;
     }
@@ -108,15 +87,13 @@ public class ConsentService {
      */
     public void releaseToken(String token) {
         if (token == null) return;
-        String redisKey = REDIS_PREFIX + token;
-        ValueCommands<String, String> commands = redisDataSource.value(String.class, String.class);
-        commands.getdel(redisKey);
+        tokenStore.release(HashUtils.sha256(token));
     }
 
     @Transactional
-    public void recordConsent(UUID userId, String scope, String ipHash) {
-        ProfileConsent consent = new ProfileConsent();
-        consent.userId = userId;
+    public void recordConsent(UUID nodeId, String scope, String ipHash) {
+        MeshNodeConsent consent = new MeshNodeConsent();
+        consent.nodeId = nodeId;
         consent.scope = scope;
         consent.grantedAt = Instant.now();
         consent.ipHash = ipHash;
@@ -125,20 +102,17 @@ public class ConsentService {
     }
 
     @Transactional
-    public void revokeAllConsents(UUID userId) {
-        ProfileConsent.revokeAllForUser(userId);
+    public void revokeConsent(UUID nodeId, String scope) {
+        MeshNodeConsent.revokeByNodeAndScope(nodeId, scope);
     }
 
-    private String hmacSign(String data) {
-        try {
-            Mac mac = Mac.getInstance(HMAC_ALGO);
-            SecretKeySpec key = new SecretKeySpec(
-                    config.consentToken().secret().getBytes(StandardCharsets.UTF_8), HMAC_ALGO);
-            mac.init(key);
-            byte[] rawHmac = mac.doFinal(data.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(rawHmac);
-        } catch (Exception e) {
-            throw new RuntimeException("HMAC signing failed", e);
-        }
+    public boolean hasActiveConsent(UUID nodeId, String scope) {
+        return MeshNodeConsent.findActiveByNodeId(nodeId).stream()
+                .anyMatch(c -> scope.equals(c.scope));
     }
+
+    public java.util.List<String> getActiveScopes(UUID nodeId) {
+        return MeshNodeConsent.findActiveScopesByNodeId(nodeId);
+    }
+
 }

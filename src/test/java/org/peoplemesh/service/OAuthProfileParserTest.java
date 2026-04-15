@@ -1,0 +1,343 @@
+package org.peoplemesh.service;
+
+import org.peoplemesh.domain.dto.ProfileSchema;
+import org.peoplemesh.domain.enums.Seniority;
+import org.peoplemesh.service.OAuthTokenExchangeService.GitHubEnrichedResult;
+import org.peoplemesh.service.OAuthTokenExchangeService.OidcSubject;
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+class OAuthProfileParserTest {
+
+    @Test
+    void inferSeniority_executiveKeywords() {
+        assertEquals(Seniority.EXECUTIVE, OAuthProfileParser.inferSeniority("Founder & CEO at Acme"));
+        assertEquals(Seniority.EXECUTIVE, OAuthProfileParser.inferSeniority("CTO at Startup"));
+        assertEquals(Seniority.EXECUTIVE, OAuthProfileParser.inferSeniority("VP Engineering"));
+        assertEquals(Seniority.EXECUTIVE, OAuthProfileParser.inferSeniority("Head of Product"));
+        assertEquals(Seniority.EXECUTIVE, OAuthProfileParser.inferSeniority("Chief Architect"));
+    }
+
+    @Test
+    void inferSeniority_leadKeywords() {
+        assertEquals(Seniority.LEAD, OAuthProfileParser.inferSeniority("Lead Engineer at Google"));
+        assertEquals(Seniority.LEAD, OAuthProfileParser.inferSeniority("Principal Developer"));
+        assertEquals(Seniority.LEAD, OAuthProfileParser.inferSeniority("Staff Software Engineer"));
+    }
+
+    @Test
+    void inferSeniority_seniorKeywords() {
+        assertEquals(Seniority.SENIOR, OAuthProfileParser.inferSeniority("Senior Backend Engineer"));
+        assertEquals(Seniority.SENIOR, OAuthProfileParser.inferSeniority("Sr Engineer at Meta"));
+    }
+
+    @Test
+    void inferSeniority_juniorKeywords() {
+        assertEquals(Seniority.JUNIOR, OAuthProfileParser.inferSeniority("Junior Developer"));
+        assertEquals(Seniority.JUNIOR, OAuthProfileParser.inferSeniority("Intern at StartupXYZ"));
+        assertEquals(Seniority.JUNIOR, OAuthProfileParser.inferSeniority("Entry level analyst"));
+    }
+
+    @Test
+    void inferSeniority_defaultMid() {
+        assertEquals(Seniority.MID, OAuthProfileParser.inferSeniority("Software Engineer at Acme"));
+    }
+
+    @Test
+    void inferSeniority_null_returnsNull() {
+        assertNull(OAuthProfileParser.inferSeniority(null));
+        assertNull(OAuthProfileParser.inferSeniority(""));
+        assertNull(OAuthProfileParser.inferSeniority("  "));
+    }
+
+    @Test
+    void normalizeRoleFromHeadline_extractsBeforeSeparator() {
+        assertEquals("Software Engineer", OAuthProfileParser.normalizeRoleFromHeadline("Software Engineer at Google"));
+        assertEquals("Backend Dev", OAuthProfileParser.normalizeRoleFromHeadline("Backend Dev | Google"));
+        assertEquals("DevOps Engineer", OAuthProfileParser.normalizeRoleFromHeadline("DevOps Engineer - Amazon"));
+    }
+
+    @Test
+    void normalizeRoleFromHeadline_nullOrBlank_returnsNull() {
+        assertNull(OAuthProfileParser.normalizeRoleFromHeadline(null));
+        assertNull(OAuthProfileParser.normalizeRoleFromHeadline(""));
+        assertNull(OAuthProfileParser.normalizeRoleFromHeadline("   "));
+    }
+
+    @Test
+    void extractKnownSkills_findsKnownSkills() {
+        List<String> skills = OAuthProfileParser.extractKnownSkills("Java and Python developer using Docker");
+        assertTrue(skills.contains("Java"));
+        assertTrue(skills.contains("Python"));
+        assertTrue(skills.contains("Docker"));
+    }
+
+    @Test
+    void extractKnownSkills_caseInsensitive() {
+        List<String> skills = OAuthProfileParser.extractKnownSkills("JAVA spring kubernetes");
+        assertTrue(skills.contains("Java"));
+        assertTrue(skills.contains("Spring"));
+        assertTrue(skills.contains("Kubernetes"));
+    }
+
+    @Test
+    void extractKnownSkills_nullOrBlank_returnsEmpty() {
+        assertTrue(OAuthProfileParser.extractKnownSkills(null).isEmpty());
+        assertTrue(OAuthProfileParser.extractKnownSkills("").isEmpty());
+    }
+
+    @Test
+    void extractKnownSkills_noDuplicates() {
+        List<String> skills = OAuthProfileParser.extractKnownSkills("java Java JAVA developer");
+        assertEquals(1, skills.stream().filter(s -> s.equalsIgnoreCase("Java")).count());
+    }
+
+    @Test
+    void extractKnownSkills_reactAwsSqlAndMore() {
+        List<String> skills = OAuthProfileParser.extractKnownSkills(
+                "React engineer on AWS; SQL via PostgreSQL, TypeScript, Terraform");
+        assertTrue(skills.contains("React"));
+        assertTrue(skills.contains("AWS"));
+        assertTrue(skills.contains("PostgreSQL"));
+        assertTrue(skills.contains("TypeScript"));
+        assertTrue(skills.contains("Terraform"));
+    }
+
+    @Test
+    void fullNameOrNull_fullNameProvided_returnsIt() {
+        OAuthTokenExchangeService.OidcSubject subject = new OAuthTokenExchangeService.OidcSubject(
+                "sub", "Pat Example", null, null, null, null, null, null, null, null);
+        assertEquals("Pat Example", OAuthProfileParser.fullNameOrNull(subject));
+    }
+
+    @Test
+    void fullNameOrNull_firstAndLastProvided_returnsCombined() {
+        OAuthTokenExchangeService.OidcSubject subject = new OAuthTokenExchangeService.OidcSubject(
+                "sub", null, "Pat", "Example", null, null, null, null, null, null);
+        assertEquals("Pat Example", OAuthProfileParser.fullNameOrNull(subject));
+    }
+
+    @Test
+    void fullNameOrNull_onlyFirst_returnsFirst() {
+        OAuthTokenExchangeService.OidcSubject subject = new OAuthTokenExchangeService.OidcSubject(
+                "sub", null, "Pat", null, null, null, null, null, null, null);
+        assertEquals("Pat", OAuthProfileParser.fullNameOrNull(subject));
+    }
+
+    @Test
+    void fullNameOrNull_onlyLast_returnsLast() {
+        OAuthTokenExchangeService.OidcSubject subject = new OAuthTokenExchangeService.OidcSubject(
+                "sub", null, null, "Example", null, null, null, null, null, null);
+        assertEquals("Example", OAuthProfileParser.fullNameOrNull(subject));
+    }
+
+    @Test
+    void fullNameOrNull_allNull_returnsNull() {
+        OAuthTokenExchangeService.OidcSubject subject = new OAuthTokenExchangeService.OidcSubject(
+                "sub", null, null, null, null, null, null, null, null, null);
+        assertNull(OAuthProfileParser.fullNameOrNull(subject));
+    }
+
+    @Test
+    void countryFromLocale_extractsCountryCode() {
+        assertEquals("IT", OAuthProfileParser.countryFromLocale("it_IT"));
+        assertEquals("US", OAuthProfileParser.countryFromLocale("en-US"));
+        assertEquals("DE", OAuthProfileParser.countryFromLocale("de_DE"));
+    }
+
+    @Test
+    void countryFromLocale_nullOrBlank_returnsNull() {
+        assertNull(OAuthProfileParser.countryFromLocale(null));
+        assertNull(OAuthProfileParser.countryFromLocale(""));
+    }
+
+    @Test
+    void countryFromLocale_noSeparator_returnsNull() {
+        assertNull(OAuthProfileParser.countryFromLocale("en"));
+    }
+
+    @Test
+    void languageFromLocale_extractsLanguage() {
+        assertEquals("it", OAuthProfileParser.languageFromLocale("it_IT"));
+        assertEquals("en", OAuthProfileParser.languageFromLocale("en-US"));
+    }
+
+    @Test
+    void languageFromLocale_nullOrBlank_returnsNull() {
+        assertNull(OAuthProfileParser.languageFromLocale(null));
+        assertNull(OAuthProfileParser.languageFromLocale(""));
+    }
+
+    @Test
+    void languageFromLocale_plainLanguage_returnsIt() {
+        assertEquals("en", OAuthProfileParser.languageFromLocale("en"));
+    }
+
+    @Test
+    void buildImportSchema_populatesAllFields() {
+        OidcSubject subject = new OidcSubject(
+                "sub123", "Alice Smith", "Alice", "Smith",
+                "alice@example.com", "Senior Java Developer at Acme",
+                null, "en-US", null, null);
+
+        ProfileSchema schema = OAuthProfileParser.buildImportSchema("github", subject);
+
+        assertNotNull(schema);
+        assertEquals("1.0", schema.profileVersion());
+        assertNotNull(schema.professional());
+        assertNotNull(schema.professional().roles());
+        assertFalse(schema.professional().roles().isEmpty());
+        assertEquals(Seniority.SENIOR, schema.professional().seniority());
+        assertNotNull(schema.professional().skillsTechnical());
+        assertTrue(schema.professional().skillsTechnical().contains("Java"));
+        assertNotNull(schema.geography());
+        assertEquals("US", schema.geography().country());
+        assertNotNull(schema.fieldProvenance());
+    }
+
+    @Test
+    void buildImportSchema_nullHeadline_setsNullRolesAndSkills() {
+        OidcSubject subject = new OidcSubject(
+                "sub123", "Bob", null, null,
+                null, null, null, null, null, null);
+        // headline=null, email=null, industry=null, locale=null
+
+        ProfileSchema schema = OAuthProfileParser.buildImportSchema("google", subject);
+
+        assertNotNull(schema);
+        assertNull(schema.professional().roles());
+        assertNull(schema.professional().skillsTechnical());
+        assertNull(schema.professional().seniority());
+    }
+
+    @Test
+    void buildImportSchema_withIndustry() {
+        OidcSubject subject = new OidcSubject(
+                "sub123", "Charlie", null, null,
+                null, "DevOps Engineer", "Technology", "de_DE", null, null);
+
+        ProfileSchema schema = OAuthProfileParser.buildImportSchema("linkedin", subject);
+
+        assertNotNull(schema.professional().industries());
+        assertTrue(schema.professional().industries().contains("Technology"));
+        assertEquals("DE", schema.geography().country());
+    }
+
+    @Test
+    void buildEnrichedGitHubSchema_mergesLanguagesAndTopics() {
+        OidcSubject subject = new OidcSubject(
+                "sub123", "Dev User", null, null,
+                null, "Python developer using Docker", null, "en-US", null, null);
+
+        GitHubEnrichedResult enriched = new GitHubEnrichedResult(
+                subject,
+                List.of("Java", "TypeScript"),
+                List.of("machine-learning", "devops"));
+
+        ProfileSchema schema = OAuthProfileParser.buildEnrichedGitHubSchema(enriched);
+
+        assertNotNull(schema);
+        assertNotNull(schema.professional().skillsTechnical());
+        assertTrue(schema.professional().skillsTechnical().contains("Python"));
+        assertTrue(schema.professional().skillsTechnical().contains("Docker"));
+        assertTrue(schema.professional().skillsTechnical().contains("Java"));
+        assertTrue(schema.professional().skillsTechnical().contains("TypeScript"));
+        assertNotNull(schema.interestsProfessional());
+        assertNotNull(schema.interestsProfessional().topicsFrequent());
+        assertTrue(schema.interestsProfessional().topicsFrequent().contains("machine-learning"));
+    }
+
+    @Test
+    void buildEnrichedGitHubSchema_noTopics_fallsBackToHeadline() {
+        OidcSubject subject = new OidcSubject(
+                "sub123", "Dev", null, null,
+                null, "Kotlin specialist", null, null, null, null);
+
+        GitHubEnrichedResult enriched = new GitHubEnrichedResult(
+                subject, null, null);
+
+        ProfileSchema schema = OAuthProfileParser.buildEnrichedGitHubSchema(enriched);
+
+        assertNotNull(schema.interestsProfessional().topicsFrequent());
+        assertTrue(schema.interestsProfessional().topicsFrequent().get(0).contains("Kotlin"));
+    }
+
+    @Test
+    void buildEnrichedGitHubSchema_nullLanguages_usesOnlyHeadlineSkills() {
+        OidcSubject subject = new OidcSubject(
+                "sub123", "Dev", null, null,
+                null, "React engineer", null, null, null, null);
+
+        GitHubEnrichedResult enriched = new GitHubEnrichedResult(
+                subject, null, List.of("frontend"));
+
+        ProfileSchema schema = OAuthProfileParser.buildEnrichedGitHubSchema(enriched);
+
+        assertNotNull(schema.professional().skillsTechnical());
+        assertTrue(schema.professional().skillsTechnical().contains("React"));
+    }
+
+    @Test
+    void normalizeRoleFromHeadline_bulletSeparator() {
+        assertEquals("Data Scientist", OAuthProfileParser.normalizeRoleFromHeadline("Data Scientist • Company"));
+    }
+
+    @Test
+    void normalizeRoleFromHeadline_atSymbol() {
+        assertEquals("ML Engineer", OAuthProfileParser.normalizeRoleFromHeadline("ML Engineer @ StartupXYZ"));
+    }
+
+    @Test
+    void extractKnownSkills_golang() {
+        List<String> skills = OAuthProfileParser.extractKnownSkills("I write golang services");
+        assertTrue(skills.contains("Go"));
+    }
+
+    @Test
+    void extractKnownSkills_dotnet() {
+        List<String> skills = OAuthProfileParser.extractKnownSkills(".NET developer using C# and Azure");
+        assertTrue(skills.contains(".NET"));
+        assertTrue(skills.contains("C#"));
+        assertTrue(skills.contains("Azure"));
+    }
+
+    @Test
+    void extractKnownSkills_cppAndRust() {
+        List<String> skills = OAuthProfileParser.extractKnownSkills("c++ and rust systems programmer");
+        assertTrue(skills.contains("C++"));
+        assertTrue(skills.contains("Rust"));
+    }
+
+    @Test
+    void extractKnownSkills_mongodbRedisKafka() {
+        List<String> skills = OAuthProfileParser.extractKnownSkills("mongodb, redis, kafka specialist");
+        assertTrue(skills.contains("MongoDB"));
+        assertTrue(skills.contains("Redis"));
+        assertTrue(skills.contains("Kafka"));
+    }
+
+    @Test
+    void extractKnownSkills_mysqlGcp() {
+        List<String> skills = OAuthProfileParser.extractKnownSkills("mysql and gcp cloud architect");
+        assertTrue(skills.contains("MySQL"));
+        assertTrue(skills.contains("GCP"));
+    }
+
+    @Test
+    void countryFromLocale_underscoreFormat_extracts() {
+        assertEquals("FR", OAuthProfileParser.countryFromLocale("fr_FR"));
+    }
+
+    @Test
+    void countryFromLocale_longCode_returnsNull() {
+        assertNull(OAuthProfileParser.countryFromLocale("en-USA"));
+    }
+
+    @Test
+    void languageFromLocale_singleChar_returnsNull() {
+        assertNull(OAuthProfileParser.languageFromLocale("e"));
+    }
+}

@@ -19,6 +19,7 @@ class MatchingServiceTest {
     private final MatchingService service = new MatchingService();
 
     @BeforeEach
+    @SuppressWarnings("null")
     void setUp() throws Exception {
         AppConfig config = mock(AppConfig.class);
         AppConfig.MatchingConfig matchingConfig = mock(AppConfig.MatchingConfig.class);
@@ -35,35 +36,35 @@ class MatchingServiceTest {
     @Test
     void jaccardSimilarity_identicalSets_returnsOne() {
         List<String> skills = List.of("Java", "Python", "SQL");
-        assertEquals(1.0, service.jaccardSimilarity(skills, skills), 0.001);
+        assertEquals(1.0, MatchingUtils.jaccardSimilarity(skills, skills), 0.001);
     }
 
     @Test
     void jaccardSimilarity_disjointSets_returnsZero() {
         List<String> a = List.of("Java", "Python");
         List<String> b = List.of("Go", "Rust");
-        assertEquals(0.0, service.jaccardSimilarity(a, b), 0.001);
+        assertEquals(0.0, MatchingUtils.jaccardSimilarity(a, b), 0.001);
     }
 
     @Test
     void jaccardSimilarity_partialOverlap() {
         List<String> a = List.of("Java", "Python", "SQL");
         List<String> b = List.of("Python", "SQL", "Go");
-        assertEquals(0.5, service.jaccardSimilarity(a, b), 0.001);
+        assertEquals(0.5, MatchingUtils.jaccardSimilarity(a, b), 0.001);
     }
 
     @Test
     void jaccardSimilarity_caseInsensitive() {
         List<String> a = List.of("Java", "PYTHON");
         List<String> b = List.of("java", "python");
-        assertEquals(1.0, service.jaccardSimilarity(a, b), 0.001);
+        assertEquals(1.0, MatchingUtils.jaccardSimilarity(a, b), 0.001);
     }
 
     @Test
     void jaccardSimilarity_nullOrEmpty_returnsZero() {
-        assertEquals(0.0, service.jaccardSimilarity(null, List.of("a")), 0.001);
-        assertEquals(0.0, service.jaccardSimilarity(List.of("a"), null), 0.001);
-        assertEquals(0.0, service.jaccardSimilarity(Collections.emptyList(), List.of("a")), 0.001);
+        assertEquals(0.0, MatchingUtils.jaccardSimilarity(null, List.of("a")), 0.001);
+        assertEquals(0.0, MatchingUtils.jaccardSimilarity(List.of("a"), null), 0.001);
+        assertEquals(0.0, MatchingUtils.jaccardSimilarity(Collections.emptyList(), List.of("a")), 0.001);
     }
 
     @Test

@@ -1,8 +1,10 @@
 package org.peoplemesh.service;
 
-import org.peoplemesh.config.HashUtils;
+import org.jboss.logging.Logger;
+import org.peoplemesh.util.HashUtils;
 import org.peoplemesh.domain.model.AuditLogEntry;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 
 import java.time.Instant;
@@ -15,6 +17,11 @@ import java.util.UUID;
 @ApplicationScoped
 public class AuditService {
 
+    private static final Logger LOG = Logger.getLogger(AuditService.class);
+
+    @Inject
+    NotificationService notificationService;
+
     @Transactional(Transactional.TxType.REQUIRES_NEW)
     public void log(UUID userId, String action, String toolName, String ipAddress, String metadataJson) {
         AuditLogEntry entry = new AuditLogEntry();
@@ -25,6 +32,11 @@ public class AuditService {
         entry.ipHash = ipAddress != null ? HashUtils.sha256(ipAddress) : null;
         entry.metadataJson = metadataJson;
         entry.persist();
+        try {
+            notificationService.notifyAuditEvent(userId, action, toolName, metadataJson);
+        } catch (Exception e) {
+            LOG.warnf("Notification delivery failed for action=%s: %s", action, e.getMessage());
+        }
     }
 
     @Transactional(Transactional.TxType.REQUIRES_NEW)

@@ -1,11 +1,11 @@
 package org.peoplemesh.domain.dto;
 
 import java.time.Instant;
+import java.util.List;
 
 public record PrivacyDashboard(
-        int profileViewsAnonymized,
-        int connectionRequestsReceived,
         Instant lastProfileUpdate,
         boolean searchable,
-        int activeConsents
+        int activeConsents,
+        List<String> consentScopes
 ) {}

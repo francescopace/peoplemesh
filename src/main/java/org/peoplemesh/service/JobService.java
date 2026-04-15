@@ -1,22 +1,28 @@
 package org.peoplemesh.service;
 
 import org.peoplemesh.domain.dto.JobPostingDto;
-import org.peoplemesh.domain.dto.JobPostingPayload;
-import org.peoplemesh.domain.enums.JobStatus;
-import org.peoplemesh.domain.model.JobPosting;
+import org.peoplemesh.domain.enums.NodeType;
+
+import org.peoplemesh.domain.model.MeshNode;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
+import org.jboss.logging.Logger;
 
-import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 @ApplicationScoped
 public class JobService {
+
+    private static final Logger LOG = Logger.getLogger(JobService.class);
+
+    @Inject
+    NodeService nodeService;
 
     @Inject
     EmbeddingService embeddingService;
@@ -24,139 +30,112 @@ public class JobService {
     @Inject
     AuditService auditService;
 
+    @Inject
+    EntityManager entityManager;
+
+    /**
+     * Upsert a job from an ATS feed. If a JOB node with the given externalId
+     * already exists for the owner, it is updated; otherwise a new one is created.
+     * Jobs are published immediately.
+     */
     @Transactional
-    public JobPostingDto createJob(UUID ownerUserId, JobPostingPayload payload) {
-        validatePayload(payload);
-        JobPosting job = new JobPosting();
-        job.ownerUserId = ownerUserId;
-        applyPayload(job, payload);
-        job.status = JobStatus.DRAFT;
-        job.embedding = embeddingService.generateEmbedding(jobToText(job));
-        job.persist();
-        auditService.log(ownerUserId, "JOB_CREATED", "job_create");
-        return toDto(job);
-    }
+    public JobPostingDto upsertFromAts(UUID ownerUserId, String externalId, AtsJobPayload payload) {
+        LOG.infof("action=upsertJob userId=%s externalId=%s", ownerUserId, externalId);
+        MeshNode node = loadByExternalId(ownerUserId, externalId).orElseGet(() -> {
+            MeshNode n = new MeshNode();
+            n.createdBy = ownerUserId;
+            n.nodeType = NodeType.JOB;
 
-    @Transactional
-    public Optional<JobPostingDto> updateJob(UUID ownerUserId, UUID jobId, JobPostingPayload payload) {
-        validatePayload(payload);
-        return JobPosting.findByIdAndOwner(jobId, ownerUserId)
-                .map(job -> {
-                    applyPayload(job, payload);
-                    job.embedding = embeddingService.generateEmbedding(jobToText(job));
-                    job.persist();
-                    auditService.log(ownerUserId, "JOB_UPDATED", "job_update");
-                    return toDto(job);
-                });
-    }
+            return n;
+        });
+        boolean isNew = node.id == null;
 
-    public Optional<JobPostingDto> getJob(UUID ownerUserId, UUID jobId) {
-        return JobPosting.findByIdAndOwner(jobId, ownerUserId).map(this::toDto);
-    }
+        node.title = payload.title() != null ? payload.title().trim() : null;
+        node.description = payload.description() != null ? payload.description().trim() : null;
+        node.country = payload.country();
 
-    public List<JobPostingDto> listJobs(UUID ownerUserId) {
-        return JobPosting.findByOwner(ownerUserId).stream().map(this::toDto).toList();
-    }
-
-    @Transactional
-    public Optional<JobPostingDto> transitionStatus(UUID ownerUserId, UUID jobId, JobStatus targetStatus) {
-        if (targetStatus == null) {
-            throw new IllegalArgumentException("target status is required");
+        Map<String, Object> sd = new LinkedHashMap<>();
+        if (node.structuredData != null) {
+            sd.putAll(node.structuredData);
         }
-        return JobPosting.findByIdAndOwner(jobId, ownerUserId)
-                .map(job -> {
-                    validateTransition(job.status, targetStatus);
-                    job.status = targetStatus;
-                    Instant now = Instant.now();
-                    if (targetStatus == JobStatus.PUBLISHED && job.publishedAt == null) {
-                        job.publishedAt = now;
-                    }
-                    if (targetStatus == JobStatus.CLOSED || targetStatus == JobStatus.FILLED) {
-                        job.closedAt = now;
-                    } else {
-                        job.closedAt = null;
-                    }
-                    job.persist();
-                    auditService.log(ownerUserId, "JOB_STATUS_CHANGED", "job_transition_status");
-                    return toDto(job);
-                });
+        sd.put("external_id", externalId);
+        sd.put("requirements_text", payload.requirementsText());
+        sd.put("skills_required", payload.skillsRequired() != null ? payload.skillsRequired() : List.of());
+        if (payload.workMode() != null) {
+            sd.put("work_mode", payload.workMode());
+        }
+        if (payload.employmentType() != null) {
+            sd.put("employment_type", payload.employmentType());
+        }
+        if (payload.externalUrl() != null) {
+            sd.put("external_url", payload.externalUrl());
+        }
+        node.structuredData = sd;
+        node.tags = payload.skillsRequired() != null ? List.copyOf(payload.skillsRequired()) : null;
+
+        if (isClosedStatus(payload.status())) {
+            if (!isNew) {
+                deleteNode(node);
+                auditService.log(ownerUserId, "JOB_ATS_CLOSED", "ats_ingest");
+            }
+            return JobPostingDto.fromMeshNode(node);
+        }
+
+        node.embedding = generateEmbedding(jobNodeToText(node));
+        persistNode(node);
+
+        auditService.log(ownerUserId, isNew ? "JOB_ATS_CREATED" : "JOB_ATS_UPDATED", "ats_ingest");
+        return JobPostingDto.fromMeshNode(node);
     }
 
-    private void validateTransition(JobStatus current, JobStatus target) {
-        if (current == target) {
-            return;
-        }
-        boolean valid = switch (current) {
-            case DRAFT -> target == JobStatus.PUBLISHED || target == JobStatus.CLOSED;
-            case PUBLISHED -> target == JobStatus.PAUSED || target == JobStatus.FILLED || target == JobStatus.CLOSED;
-            case PAUSED -> target == JobStatus.PUBLISHED || target == JobStatus.CLOSED;
-            case FILLED, CLOSED -> false;
+    Optional<MeshNode> loadByExternalId(UUID ownerUserId, String externalId) {
+        return entityManager.createQuery(
+                        "FROM MeshNode n WHERE n.createdBy = :uid AND n.nodeType = :nt " +
+                                "AND n.structuredData IS NOT NULL " +
+                                "AND CAST(function('jsonb_extract_path_text', n.structuredData, 'external_id') AS string) = :eid",
+                        MeshNode.class)
+                .setParameter("uid", ownerUserId)
+                .setParameter("nt", NodeType.JOB)
+                .setParameter("eid", externalId)
+                .getResultStream()
+                .findFirst();
+    }
+
+    float[] generateEmbedding(String text) {
+        return embeddingService.generateEmbedding(text);
+    }
+
+    void persistNode(MeshNode node) {
+        node.persist();
+        entityManager.flush();
+    }
+
+    void deleteNode(MeshNode node) {
+        node.delete();
+        entityManager.flush();
+    }
+
+    private static boolean isClosedStatus(String atsStatus) {
+        if (atsStatus == null) return false;
+        return switch (atsStatus.toLowerCase()) {
+            case "filled", "hired", "closed", "archived", "cancelled", "deleted" -> true;
+            default -> false;
         };
-        if (!valid) {
-            throw new IllegalStateException("Invalid status transition from " + current + " to " + target);
-        }
     }
 
-    private void validatePayload(JobPostingPayload payload) {
-        if (payload == null) {
-            throw new IllegalArgumentException("payload is required");
-        }
-        if (payload.title() == null || payload.title().isBlank()) {
-            throw new IllegalArgumentException("title is required");
-        }
-        if (payload.description() == null || payload.description().isBlank()) {
-            throw new IllegalArgumentException("description is required");
-        }
+    private String jobNodeToText(MeshNode node) {
+        return EmbeddingTextBuilder.buildText(node);
     }
 
-    private void applyPayload(JobPosting job, JobPostingPayload payload) {
-        job.title = payload.title().trim();
-        job.description = payload.description().trim();
-        job.requirementsText = payload.requirementsText();
-        job.skillsRequired = payload.skillsRequired();
-        job.workMode = payload.workMode();
-        job.employmentType = payload.employmentType();
-        job.country = payload.country();
-    }
-
-    private JobPostingDto toDto(JobPosting job) {
-        return new JobPostingDto(
-                job.id,
-                job.title,
-                job.description,
-                job.requirementsText,
-                job.skillsRequired,
-                job.workMode,
-                job.employmentType,
-                job.country,
-                job.status,
-                job.createdAt,
-                job.updatedAt,
-                job.publishedAt,
-                job.closedAt
-        );
-    }
-
-    private String jobToText(JobPosting job) {
-        return Stream.of(
-                        "Title: " + job.title,
-                        "Description: " + job.description,
-                        optionalField("Requirements", job.requirementsText),
-                        job.skillsRequired == null || job.skillsRequired.isEmpty()
-                                ? null
-                                : "Required Skills: " + String.join(", ", job.skillsRequired),
-                        job.workMode != null ? "Work Mode: " + job.workMode : null,
-                        job.employmentType != null ? "Employment: " + job.employmentType : null,
-                        optionalField("Country", job.country)
-                )
-                .filter(s -> s != null && !s.isBlank())
-                .collect(Collectors.joining(". "));
-    }
-
-    private String optionalField(String label, String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        return label + ": " + value;
-    }
+    public record AtsJobPayload(
+            String title,
+            String description,
+            String requirementsText,
+            List<String> skillsRequired,
+            String workMode,
+            String employmentType,
+            String country,
+            String status,
+            String externalUrl
+    ) {}
 }

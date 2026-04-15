@@ -6,11 +6,43 @@ import io.smallrye.config.WithDefault;
 @ConfigMapping(prefix = "peoplemesh")
 public interface AppConfig {
 
+    ProblemsConfig problems();
     ConsentTokenConfig consentToken();
-    RateLimitConfig rateLimit();
+    SessionConfig session();
+    OAuthConfig oauth();
+    OidcProviders oidc();
     MatchingConfig matching();
+    SearchConfig search();
     RetentionConfig retention();
-    EmbeddingConfig embedding();
+    CvImportConfig cvImport();
+    NotificationConfig notification();
+    ClusteringConfig clustering();
+    MaintenanceConfig maintenance();
+    EntitlementsConfig entitlements();
+    SkillsConfig skills();
+    LdapConfig ldap();
+
+    interface ProblemsConfig {
+        @WithDefault("about:blank")
+        String baseUri();
+    }
+
+    interface MaintenanceConfig {
+        java.util.Optional<String> apiKey();
+
+        java.util.Optional<String> allowedCidrs();
+    }
+
+    interface EntitlementsConfig {
+        java.util.Optional<java.util.List<String>> canCreateJob();
+
+        java.util.Optional<java.util.List<String>> canManageSkills();
+    }
+
+    interface CvImportConfig {
+        @WithDefault("5242880")
+        long maxFileSize();
+    }
 
     interface ConsentTokenConfig {
         String secret();
@@ -19,31 +51,26 @@ public interface AppConfig {
         int ttlSeconds();
     }
 
-    interface RateLimitConfig {
-        IpRateLimit ip();
-        UserRateLimit user();
-        ConnectionRateLimit connections();
+    interface SessionConfig {
+        String secret();
+    }
 
-        interface IpRateLimit {
-            @WithDefault("100")
-            int maxRequests();
+    interface OAuthConfig {
+        String stateSecret();
+    }
 
-            @WithDefault("60")
-            int windowSeconds();
-        }
+    interface OidcProviders {
+        OidcProviderCreds google();
+        OidcProviderCreds microsoft();
+        OidcProviderCreds github();
+    }
 
-        interface UserRateLimit {
-            @WithDefault("30")
-            int maxRequests();
+    interface OidcProviderCreds {
+        @WithDefault("none")
+        String clientId();
 
-            @WithDefault("60")
-            int windowSeconds();
-        }
-
-        interface ConnectionRateLimit {
-            @WithDefault("10")
-            int maxPerDay();
-        }
+        @WithDefault("none")
+        String clientSecret();
     }
 
     interface MatchingConfig {
@@ -60,33 +87,64 @@ public interface AppConfig {
     interface RetentionConfig {
         @WithDefault("12")
         int inactiveMonths();
+    }
+
+    interface NotificationConfig {
+        @WithDefault("true")
+        boolean enabled();
+
+        @WithDefault("true")
+        boolean dryRun();
+
+        @WithDefault("[PeopleMesh]")
+        String subjectPrefix();
+    }
+
+    interface ClusteringConfig {
+        @WithDefault("false")
+        boolean enabled();
+
+        @WithDefault("20")
+        int k();
+
+        @WithDefault("5")
+        int minClusterSize();
+
+        @WithDefault("0.4")
+        double maxCentroidDistance();
+    }
+
+    interface SkillsConfig {
+        @WithDefault("0.75")
+        double reconciliationThreshold();
+    }
+
+    interface LdapConfig {
+        java.util.Optional<String> url();
+
+        java.util.Optional<String> bindDn();
+
+        java.util.Optional<String> bindPassword();
+
+        @WithDefault("cn=users,cn=accounts,dc=ipa,dc=redhat,dc=com")
+        String userBase();
+
+        @WithDefault("(objectClass=person)")
+        String userFilter();
+
+        @WithDefault("100")
+        int pageSize();
 
         @WithDefault("30")
-        int purgeDays();
+        int connectTimeoutSeconds();
     }
 
-    interface EmbeddingConfig {
-        @WithDefault("noop")
-        String provider();
+    interface SearchConfig {
+        @WithDefault("10")
+        int maxPerMinute();
 
-        @WithDefault("1536")
-        int dimension();
-
-        OpenAIConfig openai();
-        CohereConfig cohere();
-
-        interface OpenAIConfig {
-            java.util.Optional<String> apiKey();
-
-            @WithDefault("text-embedding-3-small")
-            String model();
-        }
-
-        interface CohereConfig {
-            java.util.Optional<String> apiKey();
-
-            @WithDefault("embed-english-v3.0")
-            String model();
-        }
+        @WithDefault("0.05")
+        double minScore();
     }
+
 }

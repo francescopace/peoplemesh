@@ -4,6 +4,7 @@ import org.peoplemesh.domain.dto.PrivacyDashboard;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -15,19 +16,20 @@ class PrivacyDashboardTest {
     @Test
     void constructsWithAllFields() {
         Instant now = Instant.now();
-        PrivacyDashboard dashboard = new PrivacyDashboard(0, 5, now, true, 2);
+        PrivacyDashboard dashboard = new PrivacyDashboard(now, true, 2,
+                List.of("professional_matching", "embedding_processing"));
 
-        assertEquals(0, dashboard.profileViewsAnonymized());
-        assertEquals(5, dashboard.connectionRequestsReceived());
         assertEquals(now, dashboard.lastProfileUpdate());
         assertTrue(dashboard.searchable());
         assertEquals(2, dashboard.activeConsents());
+        assertEquals(List.of("professional_matching", "embedding_processing"), dashboard.consentScopes());
     }
 
     @Test
     void handlesNullLastUpdate() {
-        PrivacyDashboard dashboard = new PrivacyDashboard(0, 0, null, false, 0);
+        PrivacyDashboard dashboard = new PrivacyDashboard(null, false, 0, List.of());
         assertNull(dashboard.lastProfileUpdate());
         assertFalse(dashboard.searchable());
+        assertTrue(dashboard.consentScopes().isEmpty());
     }
 }

@@ -1,31 +1,32 @@
 package org.peoplemesh.service;
 
+import static org.peoplemesh.util.StructuredDataUtils.sdListOrEmpty;
+
 import org.peoplemesh.config.AppConfig;
-import org.peoplemesh.domain.dto.JobMatchBreakdown;
-import org.peoplemesh.domain.dto.JobMatchResult;
-import org.peoplemesh.domain.dto.MatchFilters;
-import org.peoplemesh.domain.dto.MatchResult;
-import org.peoplemesh.domain.dto.MatchScoreBreakdown;
-import org.peoplemesh.domain.enums.*;
-import org.peoplemesh.domain.model.BlocklistEntry;
-import org.peoplemesh.domain.model.JobPosting;
-import org.peoplemesh.domain.model.UserProfile;
+import org.peoplemesh.domain.dto.*;
+import org.peoplemesh.domain.enums.EmploymentType;
+import org.peoplemesh.domain.enums.NodeType;
+import org.peoplemesh.domain.enums.Seniority;
+import org.peoplemesh.domain.enums.WorkMode;
+
+import org.peoplemesh.domain.model.MeshNode;
+import org.peoplemesh.repository.MeshNodeSearchRepository;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
+import org.jboss.logging.Logger;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @ApplicationScoped
 public class MatchingService {
 
-    private static final double WEIGHT_EMBEDDING = 0.50;
-    private static final double WEIGHT_SKILLS = 0.25;
-    private static final double WEIGHT_GOALS = 0.15;
-    private static final double WEIGHT_GEOGRAPHY = 0.10;
+    private static final Logger LOG = Logger.getLogger(MatchingService.class);
+
+    private static final double WEIGHT_EMBEDDING = 0.55;
+    private static final double WEIGHT_SKILLS = 0.30;
+    private static final double WEIGHT_GEOGRAPHY = 0.15;
 
     private static final Map<String, String> CONTINENT_MAP = Map.ofEntries(
             Map.entry("IT", "EU"), Map.entry("DE", "EU"), Map.entry("FR", "EU"),
@@ -41,132 +42,142 @@ public class MatchingService {
             Map.entry("AU", "OC"), Map.entry("NZ", "OC")
     );
 
+    record CandidateRow(
+            UUID nodeId, UUID userId, Seniority seniority,
+            List<String> skillsTechnical, List<String> skillsSoft, List<String> toolsAndTech,
+            WorkMode workMode, EmploymentType employmentType,
+            List<String> topicsFrequent, List<String> learningAreas,
+            String country, String timezone, Instant updatedAt,
+            String city,
+            double cosineSim,
+            String displayName, String roles,
+            List<String> hobbies, List<String> sports,
+            List<String> causes,
+            String avatarUrl,
+            String slackHandle, String email
+    ) {
+        static CandidateRow fromNativeRow(Object[] row) {
+            return new CandidateRow(
+                    (UUID) row[0], (UUID) row[1],
+                    MatchingUtils.parseEnum(Seniority.class, (String) row[2]),
+                    MatchingUtils.parseArray(row[3]), MatchingUtils.parseArray(row[4]), MatchingUtils.parseArray(row[5]),
+                    MatchingUtils.parseEnum(WorkMode.class, (String) row[6]),
+                    MatchingUtils.parseEnum(EmploymentType.class, (String) row[7]),
+                    MatchingUtils.parseArray(row[8]), MatchingUtils.parseArray(row[9]),
+                    (String) row[10], (String) row[11], MatchingUtils.toInstant(row[12]),
+                    (String) row[13],
+                    ((Number) row[14]).doubleValue(),
+                    (String) row[15], (String) row[16],
+                    MatchingUtils.parseArray(row[17]), MatchingUtils.parseArray(row[18]),
+                    MatchingUtils.parseArray(row[19]),
+                    (String) row[20],
+                    (String) row[21], (String) row[22]
+            );
+        }
+
+        List<String> combinedSkillsAndTools() {
+            return MatchingUtils.combineLists(skillsTechnical, toolsAndTech);
+        }
+    }
+
     @Inject
-    EntityManager em;
+    MeshNodeSearchRepository searchRepository;
 
     @Inject
     AppConfig config;
 
     @Inject
-    AuditService audit;
+    ConsentService consentService;
 
-    public List<MatchResult> findMatches(UUID userId, float[] queryEmbedding, MatchFilters filters) {
+    private static List<String> parseCommaSeparatedRoles(String plain) {
+        return MatchingUtils.splitCommaSeparated(plain);
+    }
+
+
+    private List<MatchResult> findMatches(
+            UUID excludeUserId,
+            float[] queryEmbedding,
+            MatchFilters filters,
+            List<String> referenceSkillPool,
+            String referenceCountry,
+            WorkMode referenceWorkMode,
+            EmploymentType referenceEmploymentType) {
         if (queryEmbedding == null) {
             return Collections.emptyList();
         }
 
-        UserProfile myProfile = UserProfile.findActiveByUserId(userId).orElse(null);
-        if (myProfile == null) {
-            return Collections.emptyList();
-        }
-
-        String vectorLiteral = vectorToString(queryEmbedding);
         int poolSize = config.matching().candidatePoolSize();
+        List<Object[]> candidates = searchRepository.findUserCandidatesByEmbedding(
+                queryEmbedding, excludeUserId, poolSize);
 
-        @SuppressWarnings("unchecked")
-        List<Object[]> candidates = em.createNativeQuery(
-                        "SELECT p.id, p.user_id, p.seniority, p.skills_technical, p.skills_soft, " +
-                        "p.tools_and_tech, p.work_mode, p.employment_type, p.collaboration_goals, " +
-                        "p.topics_frequent, p.learning_areas, p.country, p.timezone, p.updated_at, " +
-                        "p.show_country, " +
-                        "(1 - (p.embedding <=> cast(:vec as vector))) as cosine_sim " +
-                        "FROM profiles.user_profile p " +
-                        "WHERE p.deleted_at IS NULL " +
-                        "AND p.searchable = true " +
-                        "AND p.embedding IS NOT NULL " +
-                        "AND p.user_id != :userId " +
-                        "ORDER BY p.embedding <=> cast(:vec as vector) " +
-                        "LIMIT :poolSize")
-                .setParameter("vec", vectorLiteral)
-                .setParameter("userId", userId)
-                .setParameter("poolSize", poolSize)
-                .getResultList();
-
+        List<String> mySkillPool = referenceSkillPool != null ? referenceSkillPool : Collections.emptyList();
         List<MatchResult> results = new ArrayList<>();
 
-        for (Object[] row : candidates) {
-            UUID candidateUserId = (UUID) row[1];
+        for (Object[] raw : candidates) {
+            CandidateRow c = CandidateRow.fromNativeRow(raw);
 
-            if (BlocklistEntry.isBlocked(userId, candidateUserId)) {
+            double skillsOverlap = MatchingUtils.jaccardSimilarity(mySkillPool, c.combinedSkillsAndTools());
+
+            if (filters != null && filters.skillsWithLevel() != null && !filters.skillsWithLevel().isEmpty()) {
+                double levelScore = MatchingUtils.computeLevelAwareCoverage(
+                        c.nodeId(), filters.skillsWithLevel(), c.combinedSkillsAndTools());
+                skillsOverlap = Math.max(skillsOverlap, levelScore);
+            }
+
+            double geoScore = geographyScore(referenceCountry, c.country(), referenceWorkMode);
+
+            if (filters != null && !passesFilters(filters, c.skillsTechnical(),
+                    c.workMode(), c.employmentType(), c.country())) {
                 continue;
             }
 
-            double cosineSim = ((Number) row[15]).doubleValue();
+            double rawScore = c.cosineSim() * WEIGHT_EMBEDDING
+                    + skillsOverlap * WEIGHT_SKILLS
+                    + geoScore * WEIGHT_GEOGRAPHY;
 
-            List<String> candidateSkills = parseArray(row[3]);
-            List<String> candidateTools = parseArray(row[5]);
-            double skillsOverlap = jaccardSimilarity(
-                    combineLists(myProfile.skillsTechnical, myProfile.toolsAndTech),
-                    combineLists(candidateSkills, candidateTools)
-            );
+            double decayedScore = applyDecay(rawScore, c.updatedAt());
+            double decayMultiplier = rawScore == 0.0 ? 1.0 : decayedScore / rawScore;
 
-            List<String> candidateGoals = parseArray(row[8]);
-            List<CollaborationGoal> candidateGoalEnums = candidateGoals.stream()
-                    .map(s -> parseEnum(CollaborationGoal.class, s))
-                    .filter(Objects::nonNull)
-                    .toList();
-            double goalMatch = hasOverlap(myProfile.collaborationGoals, candidateGoalEnums) ? 1.0 : 0.0;
-
-            WorkMode candidateWorkMode = parseEnum(WorkMode.class, (String) row[6]);
-            EmploymentType candidateEmploymentType = parseEnum(EmploymentType.class, (String) row[7]);
-            String candidateCountry = (String) row[11];
-            double geoScore = geographyScore(myProfile.country, candidateCountry, myProfile.workMode);
-
-            if (filters != null) {
-                if (!passesFilters(filters, candidateSkills, candidateGoalEnums, candidateWorkMode,
-                        candidateEmploymentType, candidateCountry)) {
-                    continue;
+            List<String> matchedSkills = MatchingUtils.intersectCaseInsensitive(mySkillPool, c.combinedSkillsAndTools());
+            String geographyReason = geographyReason(referenceCountry, c.country(), referenceWorkMode);
+            List<String> reasonCodes = new ArrayList<>(buildReasonCodes(c.cosineSim(), matchedSkills, geoScore, decayMultiplier));
+            if (referenceEmploymentType != null) {
+                double employmentMatch = employmentCompatibility(c.employmentType(), referenceEmploymentType);
+                if (employmentMatch > 0.5) {
+                    reasonCodes.add("EMPLOYMENT_COMPATIBLE");
                 }
             }
 
-            double rawScore = cosineSim * WEIGHT_EMBEDDING
-                    + skillsOverlap * WEIGHT_SKILLS
-                    + goalMatch * WEIGHT_GOALS
-                    + geoScore * WEIGHT_GEOGRAPHY;
-
-            Instant updatedAt = ((java.sql.Timestamp) row[13]).toInstant();
-            double decayedScore = applyDecay(rawScore, updatedAt);
-            double decayMultiplier = rawScore == 0.0 ? 1.0 : decayedScore / rawScore;
-
-            UUID profileId = (UUID) row[0];
-            boolean showCountry = (Boolean) row[14];
-            List<String> matchedSkills = intersectCaseInsensitive(
-                    combineLists(myProfile.skillsTechnical, myProfile.toolsAndTech),
-                    combineLists(candidateSkills, candidateTools)
-            );
-            List<CollaborationGoal> matchedGoals = intersectEnums(myProfile.collaborationGoals, candidateGoalEnums);
-            String geographyReason = geographyReason(myProfile.country, candidateCountry, myProfile.workMode);
-            List<String> reasonCodes = new ArrayList<>();
-            if (cosineSim >= 0.65) reasonCodes.add("SEMANTIC_SIMILARITY");
-            if (!matchedSkills.isEmpty()) reasonCodes.add("SKILLS_OVERLAP");
-            if (!matchedGoals.isEmpty()) reasonCodes.add("GOALS_OVERLAP");
-            if (geoScore > 0) reasonCodes.add("LOCATION_COMPATIBLE");
-            if (decayMultiplier < 1.0) reasonCodes.add("RECENCY_DECAY_APPLIED");
-
             results.add(new MatchResult(
-                    profileId,
-                    Math.round(decayedScore * 1000.0) / 1000.0,
-                    parseEnum(Seniority.class, (String) row[2]),
-                    candidateSkills,
-                    candidateTools,
-                    parseArray(row[4]),
-                    candidateWorkMode,
-                    candidateEmploymentType,
-                    candidateGoalEnums,
-                    parseArray(row[9]),
-                    parseArray(row[10]),
-                    showCountry ? candidateCountry : null,
-                    (String) row[12],
+                    c.nodeId(),
+                    MatchingUtils.round3(decayedScore),
+                    c.displayName(),
+                    c.avatarUrl(),
+                    parseCommaSeparatedRoles(c.roles()),
+                    c.seniority(),
+                    c.skillsTechnical(),
+                    c.toolsAndTech(),
+                    c.skillsSoft(),
+                    c.workMode(),
+                    c.employmentType(),
+                    c.topicsFrequent(),
+                    c.learningAreas(),
+                    c.hobbies(),
+                    c.sports(),
+                    c.causes(),
+                    c.country(),
+                    c.city(),
+                    c.timezone(),
+                    c.slackHandle(),
+                    c.email(),
                     new MatchScoreBreakdown(
-                            round3(cosineSim),
-                            round3(skillsOverlap),
-                            round3(goalMatch),
-                            round3(geoScore),
-                            round3(rawScore),
-                            round3(decayMultiplier),
-                            round3(decayedScore),
+                            MatchingUtils.round3(c.cosineSim()),
+                            MatchingUtils.round3(skillsOverlap),
+                            MatchingUtils.round3(geoScore),
+                            MatchingUtils.round3(rawScore),
+                            MatchingUtils.round3(decayMultiplier),
+                            MatchingUtils.round3(decayedScore),
                             matchedSkills,
-                            matchedGoals,
                             geographyReason,
                             reasonCodes
                     )
@@ -175,223 +186,245 @@ public class MatchingService {
 
         results.sort(Comparator.comparingDouble(MatchResult::score).reversed());
 
-        audit.log(userId, "MATCHES_SEARCHED", "peoplemesh_find_matches");
-
         return results.stream()
                 .limit(config.matching().resultLimit())
                 .toList();
     }
 
-    public List<JobMatchResult> findJobMatches(UUID userId, MatchFilters filters) {
-        UserProfile myProfile = UserProfile.findActiveByUserId(userId).orElse(null);
-        if (myProfile == null || myProfile.embedding == null) {
+    /**
+     * Unified match method: returns people + nodes in a single list (uses the caller's published profile).
+     */
+    public List<MeshMatchResult> findAllMatches(UUID userId, String typeFilter, String country) {
+        if (!consentService.hasActiveConsent(userId, "professional_matching")) {
+            return Collections.emptyList();
+        }
+        MeshNode myNode = MeshNode.findPublishedUserNode(userId).orElse(null);
+        if (myNode == null || myNode.embedding == null) {
+            return Collections.emptyList();
+        }
+        List<String> referenceTags = MatchingUtils.combineLists(
+                myNode.tags != null ? myNode.tags : Collections.emptyList(),
+                sdListOrEmpty(myNode.structuredData, "tools_and_tech"));
+        List<String> nodeReferenceTags = MatchingUtils.combineLists(referenceTags, sdListOrEmpty(myNode.structuredData, "hobbies"));
+        nodeReferenceTags = MatchingUtils.combineLists(nodeReferenceTags, sdListOrEmpty(myNode.structuredData, "sports"));
+        MatchFilters peopleFilters = new MatchFilters(null, null, null, country);
+        return doFindAllMatches(
+                userId,
+                myNode.embedding,
+                referenceTags,
+                nodeReferenceTags,
+                myNode.country,
+                MatchingUtils.structuredWorkMode(myNode),
+                MatchingUtils.structuredEmploymentType(myNode),
+                peopleFilters,
+                typeFilter,
+                country);
+    }
+
+    /**
+     * Unified matches using a caller-supplied embedding (e.g. job vector search). Reference tags and
+     * geography fields default to empty / null when not profiling a specific {@link MeshNode}.
+     */
+    public List<MeshMatchResult> findAllMatches(
+            UUID excludeUserId, float[] embedding,
+            String typeFilter, String countryFilter) {
+        if (!consentService.hasActiveConsent(excludeUserId, "professional_matching")) {
+            return Collections.emptyList();
+        }
+        if (embedding == null) {
+            return Collections.emptyList();
+        }
+        MatchFilters peopleFilters = new MatchFilters(null, null, null, countryFilter);
+        return doFindAllMatches(
+                excludeUserId,
+                embedding,
+                Collections.emptyList(),
+                Collections.emptyList(),
+                null,
+                null,
+                null,
+                peopleFilters,
+                typeFilter,
+                countryFilter);
+    }
+
+    /**
+     * Core unified matching: people + non-user nodes. Consent must be checked by public entry points only.
+     * {@code referenceTags} is the overlap pool for people (skills/tools); {@code nodeReferenceTags} is the pool
+     * for non-USER nodes (tags + hobbies + sports when profiling a user — same as historical behavior).
+     */
+    private List<MeshMatchResult> doFindAllMatches(
+            UUID excludeUserId, float[] embedding,
+            List<String> referenceTags, List<String> nodeReferenceTags,
+            String referenceCountry, WorkMode referenceWorkMode,
+            EmploymentType referenceEmploymentType,
+            MatchFilters peopleFilters,
+            String typeFilter, String countryFilter) {
+        long start = System.currentTimeMillis();
+        List<MeshMatchResult> all = new ArrayList<>();
+
+        boolean wantPeople = typeFilter == null || typeFilter.isEmpty() || "PEOPLE".equalsIgnoreCase(typeFilter);
+        boolean wantNodes = typeFilter == null || typeFilter.isEmpty() || !"PEOPLE".equalsIgnoreCase(typeFilter);
+
+        if (wantPeople) {
+            List<MatchResult> people = findMatches(
+                    excludeUserId,
+                    embedding,
+                    peopleFilters,
+                    referenceTags,
+                    referenceCountry,
+                    referenceWorkMode,
+                    referenceEmploymentType);
+            for (MatchResult m : people) {
+                if (countryFilter != null && !countryFilter.isEmpty() && m.country() != null
+                        && !countryFilter.equalsIgnoreCase(m.country())) {
+                    continue;
+                }
+                List<String> tags = MatchingUtils.combineLists(
+                        MatchingUtils.combineLists(m.hobbies(), m.sports()),
+                        m.causes()
+                );
+                var bd = m.breakdown();
+                all.add(new MeshMatchResult(
+                        m.nodeId(), "PEOPLE", m.displayName(), null, m.avatarUrl(), tags,
+                        m.country(), m.score(),
+                        bd != null ? new MeshMatchResult.MeshMatchBreakdown(
+                                bd.embeddingScore(), bd.skillsScore(), bd.geographyScore(),
+                                bd.rawScore(), bd.decayMultiplier(), bd.finalScore(),
+                                bd.matchedSkills() != null ? bd.matchedSkills() : Collections.emptyList(),
+                                bd.geographyReason()
+                        ) : null,
+                        new MeshMatchResult.PersonDetails(
+                                m.roles(),
+                                m.seniority() != null ? m.seniority().name() : null,
+                                m.skillsTechnical(), m.toolsAndTech(), m.skillsSoft(),
+                                m.workMode() != null ? m.workMode().name() : null,
+                                m.employmentType() != null ? m.employmentType().name() : null,
+                                m.topicsFrequent(),
+                                m.learningAreas(),
+                                m.hobbies(), m.sports(), m.causes(),
+                                m.city(),
+                                m.timezone(),
+                                m.slackHandle(),
+                                m.email()
+                        )
+                ));
+            }
+        }
+
+        if (wantNodes) {
+            NodeType nodeType = null;
+            if (typeFilter != null && !typeFilter.isEmpty() && !"PEOPLE".equalsIgnoreCase(typeFilter)) {
+                try {
+                    nodeType = NodeType.valueOf(typeFilter.toUpperCase());
+                } catch (IllegalArgumentException e) {
+                    return Collections.emptyList();
+                }
+            }
+            List<NodeMatchResult> nodes = findNodeMatches(
+                    excludeUserId,
+                    embedding,
+                    nodeReferenceTags,
+                    referenceCountry,
+                    referenceWorkMode,
+                    nodeType,
+                    countryFilter);
+            for (NodeMatchResult n : nodes) {
+                var bd = n.breakdown();
+                all.add(new MeshMatchResult(
+                        n.nodeId(), n.nodeType() != null ? n.nodeType().name() : "UNKNOWN",
+                        n.title(), n.description(), null, n.tags(), n.country(), n.score(),
+                        bd != null ? new MeshMatchResult.MeshMatchBreakdown(
+                                bd.embeddingScore(), bd.tagsScore(), bd.geographyScore(),
+                                bd.rawScore(), bd.decayMultiplier(), bd.finalScore(),
+                                bd.matchedTags() != null ? bd.matchedTags() : Collections.emptyList(),
+                                bd.geographyReason()
+                        ) : null,
+                        null
+                ));
+            }
+        }
+
+        all.sort(Comparator.comparingDouble(MeshMatchResult::score).reversed());
+        int limit = config.matching().resultLimit();
+        List<MeshMatchResult> result = all.size() > limit ? all.subList(0, limit) : all;
+        LOG.infof("action=matchAll userId=%s type=%s candidates=%d results=%d elapsedMs=%d",
+                excludeUserId, typeFilter, all.size(), result.size(), System.currentTimeMillis() - start);
+        return result;
+    }
+
+    private List<NodeMatchResult> findNodeMatches(
+            UUID excludeUserId,
+            float[] embedding,
+            List<String> myTags,
+            String myCountry,
+            WorkMode myWorkMode,
+            NodeType targetType,
+            String country) {
+        if (embedding == null) {
             return Collections.emptyList();
         }
 
-        String vectorLiteral = vectorToString(myProfile.embedding);
         int poolSize = config.matching().candidatePoolSize();
+        List<Object[]> rows = searchRepository.findNodeCandidatesByEmbedding(
+                embedding, excludeUserId, targetType, poolSize);
 
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery(
-                        "SELECT j.id, j.title, j.skills_required, j.work_mode, j.employment_type, " +
-                        "j.country, j.updated_at, j.status, " +
-                        "(1 - (j.embedding <=> cast(:vec as vector))) as cosine_sim " +
-                        "FROM jobs.job_posting j " +
-                        "WHERE j.status = 'PUBLISHED' " +
-                        "AND j.embedding IS NOT NULL " +
-                        "ORDER BY j.embedding <=> cast(:vec as vector) " +
-                        "LIMIT :poolSize")
-                .setParameter("vec", vectorLiteral)
-                .setParameter("poolSize", poolSize)
-                .getResultList();
+        List<String> tagPool = myTags != null ? myTags : Collections.emptyList();
 
-        List<JobMatchResult> results = new ArrayList<>();
-        List<String> mySkills = combineLists(myProfile.skillsTechnical, myProfile.toolsAndTech);
+        List<NodeMatchResult> results = new ArrayList<>();
         for (Object[] row : rows) {
-            List<String> jobSkills = parseArray(row[2]);
-            WorkMode jobWorkMode = parseEnum(WorkMode.class, (String) row[3]);
-            EmploymentType jobEmploymentType = parseEnum(EmploymentType.class, (String) row[4]);
-            String jobCountry = (String) row[5];
-
-            if (filters != null && !passesFilters(filters, jobSkills, Collections.emptyList(),
-                    jobWorkMode, jobEmploymentType, jobCountry)) {
+            String nodeCountry = (String) row[5];
+            if (country != null && (nodeCountry == null || !country.equalsIgnoreCase(nodeCountry))) {
                 continue;
             }
 
-            double cosineSim = ((Number) row[8]).doubleValue();
-            double skillsOverlap = jaccardSimilarity(mySkills, jobSkills);
-            double employmentScore = employmentCompatibility(myProfile.employmentType, jobEmploymentType);
-            double geoScore = geographyScore(myProfile.country, jobCountry, myProfile.workMode);
-            double rawScore = cosineSim * WEIGHT_EMBEDDING
-                    + skillsOverlap * WEIGHT_SKILLS
-                    + employmentScore * WEIGHT_GOALS
-                    + geoScore * WEIGHT_GEOGRAPHY;
+            double cosineSim = ((Number) row[7]).doubleValue();
+            List<String> nodeTags = MatchingUtils.parseArray(row[4]);
+            double tagsOverlap = MatchingUtils.jaccardSimilarity(tagPool, nodeTags);
+            double geoScore = geographyScore(myCountry, nodeCountry, myWorkMode);
 
-            Instant updatedAt = ((java.sql.Timestamp) row[6]).toInstant();
+            double rawScore = cosineSim * WEIGHT_EMBEDDING + tagsOverlap * WEIGHT_SKILLS + geoScore * WEIGHT_GEOGRAPHY;
+
+            Instant updatedAt = MatchingUtils.toInstant(row[6]);
             double decayedScore = applyDecay(rawScore, updatedAt);
             double decayMultiplier = rawScore == 0.0 ? 1.0 : decayedScore / rawScore;
 
-            List<String> matchedSkills = intersectCaseInsensitive(mySkills, jobSkills);
+            List<String> matchedTags = MatchingUtils.intersectCaseInsensitive(tagPool, nodeTags);
+            String geoReason = geographyReason(myCountry, nodeCountry, myWorkMode);
             List<String> reasonCodes = new ArrayList<>();
             if (cosineSim >= 0.65) reasonCodes.add("SEMANTIC_SIMILARITY");
-            if (!matchedSkills.isEmpty()) reasonCodes.add("SKILLS_OVERLAP");
-            if (employmentScore > 0.5) reasonCodes.add("EMPLOYMENT_COMPATIBLE");
+            if (!matchedTags.isEmpty()) reasonCodes.add("TAGS_OVERLAP");
             if (geoScore > 0) reasonCodes.add("LOCATION_COMPATIBLE");
             if (decayMultiplier < 1.0) reasonCodes.add("RECENCY_DECAY_APPLIED");
 
-            results.add(new JobMatchResult(
+            results.add(new NodeMatchResult(
                     (UUID) row[0],
-                    (String) row[1],
-                    parseEnum(JobStatus.class, (String) row[7]),
-                    jobWorkMode,
-                    jobEmploymentType,
-                    jobCountry,
-                    jobSkills,
-                    round3(decayedScore),
-                    new JobMatchBreakdown(
-                            round3(cosineSim),
-                            round3(skillsOverlap),
-                            round3(employmentScore),
-                            round3(geoScore),
-                            round3(rawScore),
-                            round3(decayMultiplier),
-                            round3(decayedScore),
-                            matchedSkills,
-                            geographyReason(myProfile.country, jobCountry, myProfile.workMode),
+                    MatchingUtils.parseEnum(NodeType.class, (String) row[1]),
+                    (String) row[2],
+                    (String) row[3],
+                    nodeTags,
+                    nodeCountry,
+                    MatchingUtils.round3(decayedScore),
+                    new NodeMatchBreakdown(
+                            MatchingUtils.round3(cosineSim),
+                            MatchingUtils.round3(tagsOverlap),
+                            MatchingUtils.round3(geoScore),
+                            MatchingUtils.round3(rawScore),
+                            MatchingUtils.round3(decayMultiplier),
+                            MatchingUtils.round3(decayedScore),
+                            matchedTags,
+                            geoReason,
                             reasonCodes
                     )
             ));
         }
 
-        audit.log(userId, "JOBS_MATCHED", "peoplemesh_find_job_matches");
         return results.stream()
-                .sorted(Comparator.comparingDouble(JobMatchResult::score).reversed())
+                .sorted(Comparator.comparingDouble(NodeMatchResult::score).reversed())
                 .limit(config.matching().resultLimit())
                 .toList();
     }
 
-    public List<MatchResult> findCandidatesForJob(UUID ownerUserId, UUID jobId, MatchFilters filters) {
-        JobPosting job = JobPosting.findByIdAndOwner(jobId, ownerUserId)
-                .orElseThrow(() -> new IllegalArgumentException("Job not found"));
-        if (job.embedding == null) {
-            return Collections.emptyList();
-        }
-
-        String vectorLiteral = vectorToString(job.embedding);
-        int poolSize = config.matching().candidatePoolSize();
-
-        @SuppressWarnings("unchecked")
-        List<Object[]> candidates = em.createNativeQuery(
-                        "SELECT p.id, p.user_id, p.seniority, p.skills_technical, p.skills_soft, " +
-                        "p.tools_and_tech, p.work_mode, p.employment_type, p.collaboration_goals, " +
-                        "p.topics_frequent, p.learning_areas, p.country, p.timezone, p.updated_at, " +
-                        "p.show_country, " +
-                        "(1 - (p.embedding <=> cast(:vec as vector))) as cosine_sim " +
-                        "FROM profiles.user_profile p " +
-                        "WHERE p.deleted_at IS NULL " +
-                        "AND p.searchable = true " +
-                        "AND p.embedding IS NOT NULL " +
-                        "AND p.user_id != :ownerUserId " +
-                        "ORDER BY p.embedding <=> cast(:vec as vector) " +
-                        "LIMIT :poolSize")
-                .setParameter("vec", vectorLiteral)
-                .setParameter("ownerUserId", ownerUserId)
-                .setParameter("poolSize", poolSize)
-                .getResultList();
-
-        List<MatchResult> results = new ArrayList<>();
-        for (Object[] row : candidates) {
-            UUID candidateUserId = (UUID) row[1];
-            if (BlocklistEntry.isBlocked(ownerUserId, candidateUserId)) {
-                continue;
-            }
-
-            List<String> candidateSkills = parseArray(row[3]);
-            List<String> candidateTools = parseArray(row[5]);
-            List<String> candidateSkillPool = combineLists(candidateSkills, candidateTools);
-            List<String> jobSkillPool = job.skillsRequired == null ? Collections.emptyList() : job.skillsRequired;
-            List<String> candidateGoals = parseArray(row[8]);
-            List<CollaborationGoal> candidateGoalEnums = candidateGoals.stream()
-                    .map(s -> parseEnum(CollaborationGoal.class, s))
-                    .filter(Objects::nonNull)
-                    .toList();
-            WorkMode candidateWorkMode = parseEnum(WorkMode.class, (String) row[6]);
-            EmploymentType candidateEmploymentType = parseEnum(EmploymentType.class, (String) row[7]);
-            String candidateCountry = (String) row[11];
-
-            if (filters != null && !passesFilters(filters, candidateSkills, candidateGoalEnums,
-                    candidateWorkMode, candidateEmploymentType, candidateCountry)) {
-                continue;
-            }
-
-            double cosineSim = ((Number) row[15]).doubleValue();
-            double skillsOverlap = jaccardSimilarity(jobSkillPool, candidateSkillPool);
-            double employmentMatch = employmentCompatibility(candidateEmploymentType, job.employmentType);
-            double geoScore = geographyScore(job.country, candidateCountry, job.workMode);
-            double rawScore = cosineSim * WEIGHT_EMBEDDING
-                    + skillsOverlap * WEIGHT_SKILLS
-                    + employmentMatch * WEIGHT_GOALS
-                    + geoScore * WEIGHT_GEOGRAPHY;
-
-            Instant updatedAt = ((java.sql.Timestamp) row[13]).toInstant();
-            double decayedScore = applyDecay(rawScore, updatedAt);
-            double decayMultiplier = rawScore == 0.0 ? 1.0 : decayedScore / rawScore;
-            boolean showCountry = (Boolean) row[14];
-            List<String> matchedSkills = intersectCaseInsensitive(jobSkillPool, candidateSkillPool);
-            List<String> reasonCodes = new ArrayList<>();
-            if (cosineSim >= 0.65) reasonCodes.add("SEMANTIC_SIMILARITY");
-            if (!matchedSkills.isEmpty()) reasonCodes.add("SKILLS_OVERLAP");
-            if (employmentMatch > 0.5) reasonCodes.add("EMPLOYMENT_COMPATIBLE");
-            if (geoScore > 0) reasonCodes.add("LOCATION_COMPATIBLE");
-            if (decayMultiplier < 1.0) reasonCodes.add("RECENCY_DECAY_APPLIED");
-
-            results.add(new MatchResult(
-                    (UUID) row[0],
-                    round3(decayedScore),
-                    parseEnum(Seniority.class, (String) row[2]),
-                    candidateSkills,
-                    candidateTools,
-                    parseArray(row[4]),
-                    candidateWorkMode,
-                    candidateEmploymentType,
-                    candidateGoalEnums,
-                    parseArray(row[9]),
-                    parseArray(row[10]),
-                    showCountry ? candidateCountry : null,
-                    (String) row[12],
-                    new MatchScoreBreakdown(
-                            round3(cosineSim),
-                            round3(skillsOverlap),
-                            round3(employmentMatch),
-                            round3(geoScore),
-                            round3(rawScore),
-                            round3(decayMultiplier),
-                            round3(decayedScore),
-                            matchedSkills,
-                            Collections.emptyList(),
-                            geographyReason(job.country, candidateCountry, job.workMode),
-                            reasonCodes
-                    )
-            ));
-        }
-
-        audit.log(ownerUserId, "CANDIDATES_MATCHED_FOR_JOB", "job_find_candidates");
-        return results.stream()
-                .sorted(Comparator.comparingDouble(MatchResult::score).reversed())
-                .limit(config.matching().resultLimit())
-                .toList();
-    }
-
-    double jaccardSimilarity(List<String> a, List<String> b) {
-        if (a == null || b == null || a.isEmpty() || b.isEmpty()) return 0.0;
-        Set<String> setA = a.stream().map(String::toLowerCase).collect(Collectors.toSet());
-        Set<String> setB = b.stream().map(String::toLowerCase).collect(Collectors.toSet());
-        Set<String> intersection = new HashSet<>(setA);
-        intersection.retainAll(setB);
-        Set<String> union = new HashSet<>(setA);
-        union.addAll(setB);
-        return union.isEmpty() ? 0.0 : (double) intersection.size() / union.size();
-    }
 
     double geographyScore(String myCountry, String theirCountry, WorkMode myWorkMode) {
         if (myWorkMode == WorkMode.REMOTE) return 1.0;
@@ -402,14 +435,10 @@ public class MatchingService {
     }
 
     double applyDecay(double score, Instant updatedAt) {
+        if (updatedAt == null) return score;
         long monthsOld = Duration.between(updatedAt, Instant.now()).toDays() / 30;
         if (monthsOld <= 6) return score;
         return score * Math.exp(-config.matching().decayLambda() * (monthsOld - 6));
-    }
-
-    private <T> boolean hasOverlap(List<T> a, List<T> b) {
-        if (a == null || b == null) return false;
-        return a.stream().anyMatch(b::contains);
     }
 
     private double employmentCompatibility(EmploymentType candidate, EmploymentType required) {
@@ -421,7 +450,6 @@ public class MatchingService {
     private boolean passesFilters(
             MatchFilters filters,
             List<String> skillsTechnical,
-            List<CollaborationGoal> collaborationGoals,
             WorkMode workMode,
             EmploymentType employmentType,
             String country) {
@@ -435,40 +463,13 @@ public class MatchingService {
             return false;
         }
         if (filters.skillsTechnical() != null && !filters.skillsTechnical().isEmpty()) {
-            if (intersectCaseInsensitive(filters.skillsTechnical(), skillsTechnical).isEmpty()) {
-                return false;
-            }
-        }
-        if (filters.collaborationGoals() != null && !filters.collaborationGoals().isEmpty()) {
-            if (intersectEnums(filters.collaborationGoals(), collaborationGoals).isEmpty()) {
+            if (MatchingUtils.intersectCaseInsensitive(filters.skillsTechnical(), skillsTechnical).isEmpty()) {
                 return false;
             }
         }
         return true;
     }
 
-    private <T> List<T> intersectEnums(List<T> a, List<T> b) {
-        if (a == null || b == null || a.isEmpty() || b.isEmpty()) {
-            return Collections.emptyList();
-        }
-        Set<T> set = new HashSet<>(b);
-        return a.stream().filter(set::contains).distinct().toList();
-    }
-
-    private List<String> intersectCaseInsensitive(List<String> a, List<String> b) {
-        if (a == null || b == null || a.isEmpty() || b.isEmpty()) {
-            return Collections.emptyList();
-        }
-        Set<String> bLower = b.stream()
-                .filter(Objects::nonNull)
-                .map(s -> s.toLowerCase(Locale.ROOT))
-                .collect(Collectors.toSet());
-        return a.stream()
-                .filter(Objects::nonNull)
-                .filter(s -> bLower.contains(s.toLowerCase(Locale.ROOT)))
-                .distinct()
-                .toList();
-    }
 
     private String geographyReason(String myCountry, String theirCountry, WorkMode myWorkMode) {
         if (myWorkMode == WorkMode.REMOTE) return "remote_friendly";
@@ -478,49 +479,6 @@ public class MatchingService {
         return "different_region";
     }
 
-    private List<String> combineLists(List<String> a, List<String> b) {
-        List<String> combined = new ArrayList<>();
-        if (a != null) combined.addAll(a);
-        if (b != null) combined.addAll(b);
-        return combined;
-    }
-
-    private static <E extends Enum<E>> E parseEnum(Class<E> enumClass, String value) {
-        if (value == null) return null;
-        try {
-            return Enum.valueOf(enumClass, value);
-        } catch (IllegalArgumentException e) {
-            return null;
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    private List<String> parseArray(Object obj) {
-        if (obj == null) return Collections.emptyList();
-        if (obj instanceof String[] arr) return List.of(arr);
-        if (obj instanceof java.sql.Array sqlArray) {
-            try {
-                Object value = sqlArray.getArray();
-                if (value instanceof String[] arr) {
-                    return List.of(arr);
-                }
-            } catch (Exception ignored) {
-                return Collections.emptyList();
-            }
-        }
-        if (obj instanceof List) return (List<String>) obj;
-        return Collections.emptyList();
-    }
-
-    private String vectorToString(float[] vec) {
-        StringBuilder sb = new StringBuilder("[");
-        for (int i = 0; i < vec.length; i++) {
-            if (i > 0) sb.append(",");
-            sb.append(vec[i]);
-        }
-        sb.append("]");
-        return sb.toString();
-    }
 
     private boolean sameContinent(String a, String b) {
         String contA = CONTINENT_MAP.getOrDefault(a.toUpperCase(), "XX");
@@ -528,7 +486,44 @@ public class MatchingService {
         return contA.equals(contB);
     }
 
-    private double round3(double value) {
-        return Math.round(value * 1000.0) / 1000.0;
+    private static List<String> buildReasonCodes(double cosineSim, List<String> matchedSkills,
+                                                   double geoScore, double decayMultiplier) {
+        List<String> codes = new ArrayList<>();
+        if (cosineSim >= 0.65) codes.add("SEMANTIC_SIMILARITY");
+        if (!matchedSkills.isEmpty()) codes.add("SKILLS_OVERLAP");
+        if (geoScore > 0) codes.add("LOCATION_COMPATIBLE");
+        if (decayMultiplier < 1.0) codes.add("RECENCY_DECAY_APPLIED");
+        return codes;
     }
+
+
+    private record MatchResult(
+            UUID nodeId, double score, String displayName, String avatarUrl,
+            List<String> roles, Seniority seniority,
+            List<String> skillsTechnical, List<String> toolsAndTech, List<String> skillsSoft,
+            WorkMode workMode, EmploymentType employmentType,
+            List<String> topicsFrequent, List<String> learningAreas,
+            List<String> hobbies, List<String> sports, List<String> causes,
+            String country, String city, String timezone,
+            String slackHandle, String email,
+            MatchScoreBreakdown breakdown
+    ) {}
+
+    private record MatchScoreBreakdown(
+            double embeddingScore, double skillsScore, double geographyScore,
+            double rawScore, double decayMultiplier, double finalScore,
+            List<String> matchedSkills, String geographyReason, List<String> reasonCodes
+    ) {}
+
+    private record NodeMatchResult(
+            UUID nodeId, NodeType nodeType, String title, String description,
+            List<String> tags, String country, double score,
+            NodeMatchBreakdown breakdown
+    ) {}
+
+    private record NodeMatchBreakdown(
+            double embeddingScore, double tagsScore, double geographyScore,
+            double rawScore, double decayMultiplier, double finalScore,
+            List<String> matchedTags, String geographyReason, List<String> reasonCodes
+    ) {}
 }
