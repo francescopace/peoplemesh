@@ -126,7 +126,7 @@ public interface AppConfig {
 
         java.util.Optional<String> bindPassword();
 
-        @WithDefault("cn=users,cn=accounts,dc=ipa,dc=redhat,dc=com")
+        @WithDefault("ou=users,dc=example,dc=com")
         String userBase();
 
         @WithDefault("(objectClass=person)")
