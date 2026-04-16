@@ -1,13 +1,14 @@
 package org.peoplemesh.service;
 
 import org.junit.jupiter.api.Test;
+import org.peoplemesh.repository.UserIdentityRepository;
 
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
 
 class EntitlementServiceTest {
@@ -15,20 +16,24 @@ class EntitlementServiceTest {
     @Test
     void isAdmin_usesExpectedEntitlementField() {
         UUID nodeId = UUID.randomUUID();
-        EntitlementService service = spy(new EntitlementService());
-        doReturn(true).when(service).hasEntitlement(nodeId, "isAdmin");
+        UserIdentityRepository repository = mock(UserIdentityRepository.class);
+        when(repository.hasAdminEntitlement(nodeId)).thenReturn(true);
+        EntitlementService service = new EntitlementService();
+        service.userIdentityRepository = repository;
 
         assertTrue(service.isAdmin(nodeId));
-        verify(service).hasEntitlement(nodeId, "isAdmin");
+        verify(repository).hasAdminEntitlement(nodeId);
     }
 
     @Test
     void isAdmin_returnsFalseWhenHelperReturnsFalse() {
         UUID nodeId = UUID.randomUUID();
-        EntitlementService service = spy(new EntitlementService());
-        doReturn(false).when(service).hasEntitlement(nodeId, "isAdmin");
+        UserIdentityRepository repository = mock(UserIdentityRepository.class);
+        when(repository.hasAdminEntitlement(nodeId)).thenReturn(false);
+        EntitlementService service = new EntitlementService();
+        service.userIdentityRepository = repository;
 
         assertFalse(service.isAdmin(nodeId));
-        verify(service).hasEntitlement(nodeId, "isAdmin");
+        verify(repository).hasAdminEntitlement(nodeId);
     }
 }

@@ -34,10 +34,7 @@ public final class MaintenanceAuthHelper {
         if (cidrs == null || cidrs.isBlank()) {
             return;
         }
-        String callerIp = httpHeaders.getHeaderString("X-Forwarded-For");
-        if (callerIp != null && callerIp.contains(",")) {
-            callerIp = callerIp.split(",")[0].trim();
-        }
+        String callerIp = ClientIpResolver.resolveClientIp(httpHeaders).orElse(null);
         if (callerIp == null || callerIp.isBlank()) {
             throw new ForbiddenException("Cannot determine caller IP for maintenance allowlist check");
         }

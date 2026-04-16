@@ -36,8 +36,6 @@ import org.peoplemesh.domain.dto.ProfileSchema;
 import org.peoplemesh.domain.dto.SkillAssessmentDto;
 import org.peoplemesh.domain.dto.UserNotificationDto;
 import org.peoplemesh.mcp.UserResolver;
-import org.peoplemesh.service.AuditService;
-import org.peoplemesh.service.ConsentService;
 import org.peoplemesh.service.CvImportService;
 import org.peoplemesh.service.GdprService;
 import org.peoplemesh.service.MeService;
@@ -45,7 +43,6 @@ import org.peoplemesh.service.OAuthCallbackService;
 import org.peoplemesh.service.ProfileService;
 import org.peoplemesh.service.SessionService;
 import org.peoplemesh.service.UserNotificationService;
-import org.peoplemesh.util.HashUtils;
 
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -83,12 +80,6 @@ public class MeResource {
 
     @Inject
     AppConfig appConfig;
-
-    @Inject
-    ConsentService consentService;
-
-    @Inject
-    AuditService auditService;
 
     @Inject
     MeService meService;
@@ -142,12 +133,7 @@ public class MeResource {
     @Consumes(MediaType.APPLICATION_JSON)
     public Response applyImport(@Valid ProfileSchema selectedFields, @QueryParam("source") String source) {
         UUID userId = userResolver.resolveUserId();
-        if (source == null || source.isBlank()) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(ProblemDetail.of(400, "Bad Request", "Missing source parameter"))
-                    .build();
-        }
-        profileService.applySelectiveImport(userId, selectedFields, source);
+        meService.applySelectiveImport(userId, selectedFields, source);
         return profileService.getProfile(userId)
                 .map(schema -> Response.ok(schema).build())
                 .orElse(Response.noContent().build());
@@ -245,7 +231,7 @@ public class MeResource {
     @Path("/consents")
     public Response getConsents() {
         UUID userId = userResolver.resolveUserId();
-        List<String> active = consentService.getActiveScopes(userId);
+        List<String> active = meService.getActiveConsentScopes(userId);
         return Response.ok(Map.of("scopes", OAuthCallbackService.DEFAULT_CONSENT_SCOPES, "active", active)).build();
     }
 
@@ -254,15 +240,8 @@ public class MeResource {
     @Path("/consents/{scope}")
     @Consumes(MediaType.APPLICATION_JSON)
     public Response grantConsent(@PathParam("scope") String scope, @Context HttpHeaders headers) {
-        meService.validateConsentScope(scope, OAuthCallbackService.DEFAULT_CONSENT_SCOPES);
         UUID userId = userResolver.resolveUserId();
-        String ip = null;
-        String forwarded = headers.getHeaderString("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            ip = forwarded.split(",")[0].trim();
-        }
-        consentService.recordConsent(userId, scope, ip != null ? HashUtils.sha256(ip) : null);
-        auditService.log(userId, "CONSENT_GRANTED", "privacy_consent");
+        meService.grantConsent(userId, scope, OAuthCallbackService.DEFAULT_CONSENT_SCOPES, headers);
         return Response.ok(Map.of("scope", scope, "status", "granted")).build();
     }
 
@@ -270,10 +249,8 @@ public class MeResource {
     @Authenticated
     @Path("/consents/{scope}")
     public Response revokeConsent(@PathParam("scope") String scope) {
-        meService.validateConsentScope(scope, OAuthCallbackService.DEFAULT_CONSENT_SCOPES);
         UUID userId = userResolver.resolveUserId();
-        consentService.revokeConsent(userId, scope);
-        auditService.log(userId, "CONSENT_REVOKED", "privacy_consent");
+        meService.revokeConsent(userId, scope, OAuthCallbackService.DEFAULT_CONSENT_SCOPES);
         return Response.ok(Map.of("scope", scope, "status", "revoked")).build();
     }
 

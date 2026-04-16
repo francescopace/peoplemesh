@@ -13,11 +13,7 @@ public class EntitlementService {
     UserIdentityRepository userIdentityRepository;
 
     public boolean isAdmin(UUID nodeId) {
-        return hasEntitlement(nodeId, "isAdmin");
-    }
-
-    boolean hasEntitlement(UUID nodeId, String entitlementField) {
-        return userIdentityRepository.hasEntitlement(nodeId, entitlementField);
+        return userIdentityRepository.hasAdminEntitlement(nodeId);
     }
 
 }

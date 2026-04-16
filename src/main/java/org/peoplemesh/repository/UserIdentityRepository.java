@@ -38,9 +38,10 @@ public class UserIdentityRepository {
                 .getResultList();
     }
 
-    public boolean hasEntitlement(UUID nodeId, String entitlementField) {
-        String query = "SELECT COUNT(u) FROM UserIdentity u WHERE u.nodeId = :nodeId AND u." + entitlementField + " = true";
-        Long count = em.createQuery(query, Long.class)
+    public boolean hasAdminEntitlement(UUID nodeId) {
+        Long count = em.createQuery(
+                        "SELECT COUNT(u) FROM UserIdentity u WHERE u.nodeId = :nodeId AND u.isAdmin = true",
+                        Long.class)
                 .setParameter("nodeId", nodeId)
                 .getSingleResult();
         return count != null && count > 0;

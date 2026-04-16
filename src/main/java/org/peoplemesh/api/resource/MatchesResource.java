@@ -3,6 +3,8 @@ package org.peoplemesh.api.resource;
 import io.quarkus.security.Authenticated;
 import jakarta.inject.Inject;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
@@ -37,8 +39,8 @@ public class MatchesResource {
     @Consumes(MediaType.APPLICATION_JSON)
     public Response matchFromSchema(
             @Valid ProfileSchema profile,
-            @QueryParam("type") String type,
-            @QueryParam("country") String country) {
+            @QueryParam("type") @Size(max = 40) @Pattern(regexp = "^[A-Za-z_]*$") String type,
+            @QueryParam("country") @Pattern(regexp = "^[A-Za-z]{2}$|^$") String country) {
         UUID userId = userResolver.resolveUserId();
         List<MeshMatchResult> matches = matchesService.matchFromSchema(userId, profile, type, country);
         return Response.ok(matches).build();
@@ -56,8 +58,8 @@ public class MatchesResource {
     @GET
     @Path("me")
     public Response matchMyProfile(
-            @QueryParam("type") String type,
-            @QueryParam("country") String country) {
+            @QueryParam("type") @Size(max = 40) @Pattern(regexp = "^[A-Za-z_]*$") String type,
+            @QueryParam("country") @Pattern(regexp = "^[A-Za-z]{2}$|^$") String country) {
         UUID userId = userResolver.resolveUserId();
         List<MeshMatchResult> matches = matchesService.matchMyProfile(userId, type, country);
         return Response.ok(matches).build();
@@ -67,8 +69,8 @@ public class MatchesResource {
     @Path("{nodeId}")
     public Response matchFromNode(
             @PathParam("nodeId") UUID nodeId,
-            @QueryParam("type") String type,
-            @QueryParam("country") String country) {
+            @QueryParam("type") @Size(max = 40) @Pattern(regexp = "^[A-Za-z_]*$") String type,
+            @QueryParam("country") @Pattern(regexp = "^[A-Za-z]{2}$|^$") String country) {
         UUID userId = userResolver.resolveUserId();
         List<MeshMatchResult> matches = matchesService.matchFromNode(userId, nodeId, type, country);
         return Response.ok(matches).build();

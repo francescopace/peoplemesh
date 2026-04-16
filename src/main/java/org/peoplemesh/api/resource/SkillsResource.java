@@ -3,6 +3,8 @@ package org.peoplemesh.api.resource;
 import io.quarkus.security.Authenticated;
 import jakarta.inject.Inject;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
@@ -78,6 +80,11 @@ public class SkillsResource {
     @Path("/{catalogId}/import")
     @Consumes(MediaType.APPLICATION_OCTET_STREAM)
     public Response importCsv(@PathParam("catalogId") UUID catalogId, InputStream csvStream) throws IOException {
+        if (csvStream == null) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(ProblemDetail.of(400, "Bad Request", "Missing CSV payload"))
+                    .build();
+        }
         UUID userId = userResolver.resolveUserId();
         int count = skillsService.importCsv(userId, catalogId, csvStream);
         return Response.ok(Map.of("imported", count)).build();
@@ -87,8 +94,8 @@ public class SkillsResource {
     @Path("/{catalogId}/definitions")
     public Response listSkills(@PathParam("catalogId") UUID catalogId,
                                @QueryParam("category") String category,
-                               @QueryParam("page") @DefaultValue("0") int page,
-                               @QueryParam("size") @DefaultValue("50") int size) {
+                               @QueryParam("page") @DefaultValue("0") @Min(0) int page,
+                               @QueryParam("size") @DefaultValue("50") @Min(1) @Max(200) int size) {
         List<SkillDefinitionDto> skills = skillsService.listSkills(catalogId, category, page, size);
         return Response.ok(skills).build();
     }

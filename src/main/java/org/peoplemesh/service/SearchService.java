@@ -22,8 +22,6 @@ import org.peoplemesh.domain.enums.WorkMode;
 import org.peoplemesh.domain.model.SkillAssessment;
 import java.time.Instant;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 @ApplicationScoped
@@ -39,10 +37,6 @@ public class SearchService {
 
     private static final int VECTOR_POOL_SIZE = 50;
     private static final int RESULT_LIMIT = 20;
-
-    private record RateLimitBucket(long windowStart, AtomicInteger count) {}
-    // In-memory rate limiter: effective only in single-JVM deployments, not shared across instances.
-    private final Map<UUID, RateLimitBucket> rateLimitBuckets = new ConcurrentHashMap<>();
 
     @Inject @All
     List<SearchQueryParser> queryParsers;
@@ -68,12 +62,18 @@ public class SearchService {
     @Inject
     SkillDefinitionRepository skillDefinitionRepository;
 
+    @Inject
+    SearchRateLimiter searchRateLimiter;
+
+    private final SearchRateLimiter localRateLimiter = new SearchRateLimiter();
+
     public SearchResponse search(UUID userId, String queryText, String countryFilter) {
         if (!consentService.hasActiveConsent(userId, "professional_matching")) {
             return new SearchResponse(null, Collections.emptyList());
         }
 
-        if (isRateLimited(userId)) {
+        SearchRateLimiter rateLimiter = searchRateLimiter != null ? searchRateLimiter : localRateLimiter;
+        if (rateLimiter.isRateLimited(userId, config.search().maxPerMinute())) {
             throw new RateLimitException("Search rate limit exceeded");
         }
 
@@ -96,14 +96,15 @@ public class SearchService {
 
         List<RawNodeCandidate> rawCandidates = unifiedVectorSearch(queryEmbedding, userId,
                 parsedQuery, countryFilter);
-        List<ScoredCandidate> allScored = unifiedScore(rawCandidates, parsedQuery);
+        SkillLevelContext skillLevelContext = loadSkillLevelsContext(rawCandidates);
+        List<ScoredCandidate> allScored = unifiedScore(rawCandidates, parsedQuery, skillLevelContext.levelsByNodeForScoring());
         allScored = rerank(allScored, parsedQuery);
         double minScore = config.search().minScore();
         allScored = allScored.stream()
                 .filter(sc -> sc.score >= minScore)
                 .limit(RESULT_LIMIT).toList();
 
-        List<SearchResultItem> results = toResultItems(allScored);
+        List<SearchResultItem> results = toResultItems(allScored, skillLevelContext.levelsByNodeForResult());
 
         return new SearchResponse(parsedQuery, results);
     }
@@ -127,7 +128,7 @@ public class SearchService {
                 try {
                     sd = objectMapper.readValue(sdRaw, new TypeReference<>() {});
                 } catch (Exception e) {
-                    LOG.warnf("Failed to parse structured_data for node row: %s", e.getMessage());
+                    LOG.debugf("Failed to parse structured_data for nodeId=%s", row[0]);
                 }
             }
             candidates.add(new RawNodeCandidate(
@@ -147,7 +148,10 @@ public class SearchService {
 
     // === Unified scoring ===
 
-    private List<ScoredCandidate> unifiedScore(List<RawNodeCandidate> candidates, ParsedSearchQuery parsed) {
+    private List<ScoredCandidate> unifiedScore(
+            List<RawNodeCandidate> candidates,
+            ParsedSearchQuery parsed,
+            Map<UUID, Map<String, Short>> levelCacheByNode) {
         List<String> mustHaveSkills = parsed.mustHave() != null && parsed.mustHave().skills() != null
                 ? parsed.mustHave().skills() : Collections.emptyList();
         List<String> niceToHaveSkills = parsed.niceToHave() != null && parsed.niceToHave().skills() != null
@@ -164,7 +168,6 @@ public class SearchService {
                 ? parsed.mustHave().skillsWithLevel() : null;
         List<SkillWithLevel> niceToHaveWithLevel = parsed.niceToHave() != null
                 ? parsed.niceToHave().skillsWithLevel() : null;
-        Map<UUID, Map<String, Short>> levelCacheByNode = loadSkillLevelCacheByNode(candidates, mustHaveWithLevel, niceToHaveWithLevel);
 
         List<ScoredCandidate> scored = new ArrayList<>();
 
@@ -331,13 +334,9 @@ public class SearchService {
 
     // === Result conversion ===
 
-    private List<SearchResultItem> toResultItems(List<ScoredCandidate> scored) {
-        List<UUID> userNodeIds = scored.stream()
-                .map(ScoredCandidate::node)
-                .filter(c -> c.nodeType == NodeType.USER)
-                .map(c -> c.nodeId)
-                .toList();
-        Map<UUID, Map<String, Integer>> skillLevelsByNodeId = loadSkillLevelsByNodeIds(userNodeIds);
+    private List<SearchResultItem> toResultItems(
+            List<ScoredCandidate> scored,
+            Map<UUID, Map<String, Integer>> skillLevelsByNodeId) {
         List<SearchResultItem> items = new ArrayList<>();
         for (ScoredCandidate sc : scored) {
             RawNodeCandidate c = sc.node;
@@ -380,19 +379,6 @@ public class SearchService {
     }
 
     // === Helpers ===
-
-    private boolean isRateLimited(UUID userId) {
-        int maxPerMinute = config.search().maxPerMinute();
-        long now = System.currentTimeMillis();
-        RateLimitBucket bucket = rateLimitBuckets.compute(userId, (k, existing) -> {
-            if (existing == null || now - existing.windowStart() > 60_000) {
-                return new RateLimitBucket(now, new AtomicInteger(1));
-            }
-            existing.count().incrementAndGet();
-            return existing;
-        });
-        return bucket.count().get() > maxPerMinute;
-    }
 
     private static List<String> splitCommaSeparated(String plain) {
         return MatchingUtils.splitCommaSeparated(plain);
@@ -439,85 +425,67 @@ public class SearchService {
         );
     }
 
-    private Map<UUID, Map<String, Integer>> loadSkillLevelsByNodeIds(List<UUID> nodeIds) {
-        if (nodeIds == null || nodeIds.isEmpty()) {
-            return Collections.emptyMap();
-        }
-        Map<UUID, List<SkillAssessment>> assessmentsByNode = skillAssessmentRepository.findByNodeIds(nodeIds);
-        if (assessmentsByNode.isEmpty()) {
-            return Collections.emptyMap();
-        }
-        Set<UUID> skillIds = assessmentsByNode.values().stream()
-                .flatMap(List::stream)
-                .filter(a -> a.level > 0)
-                .map(a -> a.skillId)
-                .collect(Collectors.toSet());
-        Map<UUID, String> definitionNames = skillDefinitionRepository.findByIds(new ArrayList<>(skillIds)).stream()
-                .collect(Collectors.toMap(d -> d.id, d -> d.name));
-        Map<UUID, Map<String, Integer>> result = new HashMap<>();
-        for (Map.Entry<UUID, List<SkillAssessment>> entry : assessmentsByNode.entrySet()) {
-            Map<String, Integer> levels = new LinkedHashMap<>();
-            for (SkillAssessment assessment : entry.getValue()) {
-                if (assessment.level <= 0) {
-                    continue;
-                }
-                String name = definitionNames.get(assessment.skillId);
-                if (name != null) {
-                    levels.put(name, (int) assessment.level);
-                }
-            }
-            if (!levels.isEmpty()) {
-                result.put(entry.getKey(), levels);
-            }
-        }
-        return result;
-    }
-
-    private Map<UUID, Map<String, Short>> loadSkillLevelCacheByNode(
-            List<RawNodeCandidate> candidates,
-            List<SkillWithLevel> mustHaveWithLevel,
-            List<SkillWithLevel> niceToHaveWithLevel
-    ) {
-        boolean needsLevelData = (mustHaveWithLevel != null && !mustHaveWithLevel.isEmpty())
-                || (niceToHaveWithLevel != null && !niceToHaveWithLevel.isEmpty());
-        if (!needsLevelData || candidates == null || candidates.isEmpty()) {
-            return Collections.emptyMap();
+    private SkillLevelContext loadSkillLevelsContext(List<RawNodeCandidate> candidates) {
+        if (candidates == null || candidates.isEmpty()) {
+            return SkillLevelContext.empty();
         }
         List<UUID> nodeIds = candidates.stream()
                 .filter(c -> c.nodeType == NodeType.USER)
                 .map(c -> c.nodeId)
                 .toList();
         if (nodeIds.isEmpty()) {
-            return Collections.emptyMap();
+            return SkillLevelContext.empty();
         }
         Map<UUID, List<SkillAssessment>> assessmentsByNode = skillAssessmentRepository.findByNodeIds(nodeIds);
         if (assessmentsByNode.isEmpty()) {
-            return Collections.emptyMap();
+            return SkillLevelContext.empty();
         }
         Set<UUID> skillIds = assessmentsByNode.values().stream()
                 .flatMap(List::stream)
                 .map(a -> a.skillId)
                 .collect(Collectors.toSet());
+        if (skillIds.isEmpty()) {
+            return SkillLevelContext.empty();
+        }
         Map<UUID, String> namesById = skillDefinitionRepository.findByIds(new ArrayList<>(skillIds)).stream()
                 .collect(Collectors.toMap(d -> d.id, d -> d.name));
-        Map<UUID, Map<String, Short>> result = new HashMap<>();
+
+        Map<UUID, Map<String, Integer>> levelsByNodeForResult = new HashMap<>();
+        Map<UUID, Map<String, Short>> levelsByNodeForScoring = new HashMap<>();
         for (Map.Entry<UUID, List<SkillAssessment>> entry : assessmentsByNode.entrySet()) {
-            Map<String, Short> perNode = new HashMap<>();
+            Map<String, Integer> resultLevels = new LinkedHashMap<>();
+            Map<String, Short> scoringLevels = new HashMap<>();
             for (SkillAssessment assessment : entry.getValue()) {
-                String name = namesById.get(assessment.skillId);
-                if (name != null) {
-                    perNode.put(name.toLowerCase(Locale.ROOT).trim(), assessment.level);
+                if (assessment.level <= 0) {
+                    continue;
                 }
+                String name = namesById.get(assessment.skillId);
+                if (name == null) {
+                    continue;
+                }
+                resultLevels.put(name, (int) assessment.level);
+                scoringLevels.put(name.toLowerCase(Locale.ROOT).trim(), assessment.level);
             }
-            if (!perNode.isEmpty()) {
-                result.put(entry.getKey(), perNode);
+            if (!resultLevels.isEmpty()) {
+                levelsByNodeForResult.put(entry.getKey(), resultLevels);
+            }
+            if (!scoringLevels.isEmpty()) {
+                levelsByNodeForScoring.put(entry.getKey(), scoringLevels);
             }
         }
-        return result;
+        return new SkillLevelContext(levelsByNodeForResult, levelsByNodeForScoring);
     }
 
-
     // === Records ===
+
+    private record SkillLevelContext(
+            Map<UUID, Map<String, Integer>> levelsByNodeForResult,
+            Map<UUID, Map<String, Short>> levelsByNodeForScoring
+    ) {
+        private static SkillLevelContext empty() {
+            return new SkillLevelContext(Collections.emptyMap(), Collections.emptyMap());
+        }
+    }
 
     private record RawNodeCandidate(
             UUID nodeId, NodeType nodeType, String title, String description,

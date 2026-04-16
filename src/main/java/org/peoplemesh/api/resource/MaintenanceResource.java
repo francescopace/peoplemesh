@@ -2,6 +2,8 @@ package org.peoplemesh.api.resource;
 
 import io.smallrye.common.annotation.Blocking;
 import jakarta.inject.Inject;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.HeaderParam;
@@ -93,7 +95,7 @@ public class MaintenanceResource {
     @POST
     @Path("/ldap-import/preview")
     public Response ldapPreview(@HeaderParam("X-Maintenance-Key") String key,
-                                @QueryParam("limit") @DefaultValue("20") int limit) {
+                                @QueryParam("limit") @DefaultValue("20") @Min(1) @Max(200) int limit) {
         assertAuthorized(key);
         try {
             if (maintenanceService != null) {
@@ -129,7 +131,7 @@ public class MaintenanceResource {
     public Response regenerateEmbeddings(@HeaderParam("X-Maintenance-Key") String key,
                                          @QueryParam("nodeType") String nodeTypeParam,
                                          @QueryParam("onlyMissing") @DefaultValue("true") boolean onlyMissing,
-                                         @QueryParam("batchSize") @DefaultValue("1") int batchSize) {
+                                         @QueryParam("batchSize") @DefaultValue("1") @Min(1) @Max(1000) int batchSize) {
         assertAuthorized(key);
         try {
             if (maintenanceService != null) {

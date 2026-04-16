@@ -60,7 +60,7 @@ This reference follows PeopleMesh's security- and GDPR-first posture by design (
 | POST | `/api/v1/maintenance/purge-consent-tokens` | Remove expired consent tokens |
 | POST | `/api/v1/maintenance/enforce-retention` | Hard-delete inactive users past retention |
 | POST | `/api/v1/maintenance/run-clustering` | Auto-discover communities (k-means) |
-| POST | `/api/v1/maintenance/regenerate-embeddings` | Start asynchronous node embedding regeneration job (`onlyMissing=true` and `batchSize=1` by default; supports `?nodeType=...`, `?onlyMissing=false`, `?batchSize=1..32`) |
+| POST | `/api/v1/maintenance/regenerate-embeddings` | Start asynchronous node embedding regeneration job (`onlyMissing=true` and `batchSize=1` by default; supports `?nodeType=...`, `?onlyMissing=false`, `?batchSize=1..1000`) |
 | GET | `/api/v1/maintenance/regenerate-embeddings/{jobId}` | Poll embedding regeneration job status |
 | POST | `/api/v1/maintenance/ldap-import/preview` | LDAP import preview |
 | POST | `/api/v1/maintenance/ldap-import` | Execute LDAP import |

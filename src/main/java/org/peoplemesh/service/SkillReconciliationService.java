@@ -42,6 +42,10 @@ public class SkillReconciliationService {
      * Returns suggestions with match type and confidence.
      */
     public List<SkillAssessmentDto> reconcile(UUID nodeId, UUID catalogId) {
+        return reconcile(nodeId, catalogId, loadExistingAssessmentIds(nodeId));
+    }
+
+    public List<SkillAssessmentDto> reconcile(UUID nodeId, UUID catalogId, Set<UUID> existingAssessments) {
         MeshNode node = loadNode(nodeId);
         if (node == null || node.tags == null || node.tags.isEmpty()) {
             return Collections.emptyList();
@@ -62,8 +66,6 @@ public class SkillReconciliationService {
                 }
             }
         }
-
-        Set<UUID> existingAssessments = loadExistingAssessmentIds(nodeId);
 
         double threshold = reconciliationThreshold();
         List<SkillAssessmentDto> results = new ArrayList<>();

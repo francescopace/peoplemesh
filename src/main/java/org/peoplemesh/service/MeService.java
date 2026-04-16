@@ -3,21 +3,26 @@ package org.peoplemesh.service;
 import io.quarkus.security.identity.SecurityIdentity;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.ws.rs.core.HttpHeaders;
+import org.peoplemesh.api.ClientIpResolver;
 import org.peoplemesh.domain.enums.NodeType;
 import org.peoplemesh.domain.exception.NotFoundBusinessException;
 import org.peoplemesh.domain.exception.ValidationBusinessException;
 import org.peoplemesh.domain.model.MeshNode;
 import org.peoplemesh.domain.model.UserIdentity;
+import org.peoplemesh.domain.dto.ProfileSchema;
 import org.peoplemesh.domain.dto.SkillAssessmentDto;
 import org.peoplemesh.repository.NodeRepository;
 import org.peoplemesh.repository.UserIdentityRepository;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @ApplicationScoped
@@ -37,6 +42,15 @@ public class MeService {
 
     @Inject
     SkillReconciliationService skillReconciliationService;
+
+    @Inject
+    ProfileService profileService;
+
+    @Inject
+    ConsentService consentService;
+
+    @Inject
+    AuditService auditService;
 
     public Optional<Map<String, Object>> resolveIdentityPayload(SecurityIdentity identity) {
         UUID userId = identity.<UUID>getAttribute("pm.userId");
@@ -67,7 +81,13 @@ public class MeService {
             return List.of();
         }
         List<SkillAssessmentDto> result = new ArrayList<>(skillAssessmentService.listAssessments(nodeId.get(), catalogId));
-        result.addAll(skillReconciliationService.reconcile(nodeId.get(), catalogId));
+        Set<UUID> existingIds = new HashSet<>();
+        for (SkillAssessmentDto assessment : result) {
+            if (assessment.skillId() != null) {
+                existingIds.add(assessment.skillId());
+            }
+        }
+        result.addAll(skillReconciliationService.reconcile(nodeId.get(), catalogId, existingIds));
         return result;
     }
 
@@ -76,6 +96,32 @@ public class MeService {
                 .orElseThrow(() -> new NotFoundBusinessException("No published profile found"));
         skillReconciliationService.applyReconciliation(nodeId, userId, assessments);
         return assessments.size();
+    }
+
+    public void applySelectiveImport(UUID userId, ProfileSchema selectedFields, String source) {
+        if (source == null || source.isBlank()) {
+            throw new ValidationBusinessException("Missing source parameter");
+        }
+        profileService.applySelectiveImport(userId, selectedFields, source.trim());
+    }
+
+    public void grantConsent(UUID userId, String scope, Collection<String> allowedScopes, HttpHeaders headers) {
+        validateConsentScope(scope, allowedScopes);
+        String ipHash = ClientIpResolver.resolveClientIp(headers)
+                .map(org.peoplemesh.util.HashUtils::sha256)
+                .orElse(null);
+        consentService.recordConsent(userId, scope, ipHash);
+        auditService.log(userId, "CONSENT_GRANTED", "privacy_consent");
+    }
+
+    public void revokeConsent(UUID userId, String scope, Collection<String> allowedScopes) {
+        validateConsentScope(scope, allowedScopes);
+        consentService.revokeConsent(userId, scope);
+        auditService.log(userId, "CONSENT_REVOKED", "privacy_consent");
+    }
+
+    public List<String> getActiveConsentScopes(UUID userId) {
+        return consentService.getActiveScopes(userId);
     }
 
     public void validateConsentScope(String scope, Collection<String> allowedScopes) {

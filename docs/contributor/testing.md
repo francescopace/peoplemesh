@@ -16,6 +16,7 @@ Coverage policy:
 
 - JaCoCo enforces 80% line coverage at bundle level
 - Coverage is merged across unit and integration runs
+- Class exclusions for coverage are configured in `pom.xml` (`jacoco-maven-plugin` -> `configuration.excludes`)
 
 Test style:
 
