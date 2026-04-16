@@ -37,6 +37,13 @@ describe("showLoginModal()", () => {
     expect(buttons.length).toBe(2);
   });
 
+  it("redirects directly when only one provider is available", () => {
+    authMock.getProviders.mockReturnValue(["google"]);
+    showLoginModal();
+    expect(authMock.login).toHaveBeenCalledWith("google");
+    expect(document.getElementById("login-modal-overlay")).toBeNull();
+  });
+
   it("shows provider labels", () => {
     showLoginModal();
     const overlay = document.getElementById("login-modal-overlay");

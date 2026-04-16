@@ -19,11 +19,16 @@ export function showLoginModal() {
   const existing = document.getElementById("login-modal-overlay");
   if (existing) existing.remove();
 
+  const providers = Auth.getProviders();
+  if (providers.length === 1) {
+    Auth.login(providers[0]);
+    return;
+  }
+
   const overlay = document.createElement("div");
   overlay.id = "login-modal-overlay";
   overlay.className = "login-overlay";
 
-  const providers = Auth.getProviders();
   const buttons = providers
     .map((p) => {
       const meta = PROVIDER_META[p] || { label: p, icon: "" };
