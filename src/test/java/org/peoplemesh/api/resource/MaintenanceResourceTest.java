@@ -1,4 +1,4 @@
-package org.peoplemesh.api;
+package org.peoplemesh.api.resource;
 
 import jakarta.ws.rs.ForbiddenException;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -17,6 +17,7 @@ import org.peoplemesh.service.GdprService;
 import org.peoplemesh.service.JdbcConsentTokenStore;
 import org.peoplemesh.service.LdapImportService;
 import org.peoplemesh.service.NodeEmbeddingMaintenanceService;
+import org.peoplemesh.util.IpAllowlistUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -51,51 +52,51 @@ class MaintenanceResourceTest {
 
     @Test
     void matchesAnyCidr_exactIpMatch() {
-        assertTrue(MaintenanceResource.matchesAnyCidr("10.0.0.1", List.of("10.0.0.1")));
+        assertTrue(IpAllowlistUtils.matchesAnyCidr("10.0.0.1", List.of("10.0.0.1")));
     }
 
     @Test
     void matchesAnyCidr_noMatch() {
-        assertFalse(MaintenanceResource.matchesAnyCidr("10.0.0.2", List.of("10.0.0.1")));
+        assertFalse(IpAllowlistUtils.matchesAnyCidr("10.0.0.2", List.of("10.0.0.1")));
     }
 
     @Test
     void matchesAnyCidr_cidrMatch() {
-        assertTrue(MaintenanceResource.matchesAnyCidr("192.168.1.50", List.of("192.168.1.0/24")));
+        assertTrue(IpAllowlistUtils.matchesAnyCidr("192.168.1.50", List.of("192.168.1.0/24")));
     }
 
     @Test
     void matchesAnyCidr_cidrNoMatch() {
-        assertFalse(MaintenanceResource.matchesAnyCidr("192.168.2.1", List.of("192.168.1.0/24")));
+        assertFalse(IpAllowlistUtils.matchesAnyCidr("192.168.2.1", List.of("192.168.1.0/24")));
     }
 
     @Test
     void matchesAnyCidr_multipleCidrs() {
         List<String> cidrs = List.of("10.0.0.0/8", "192.168.1.0/24");
-        assertTrue(MaintenanceResource.matchesAnyCidr("10.1.2.3", cidrs));
-        assertTrue(MaintenanceResource.matchesAnyCidr("192.168.1.100", cidrs));
-        assertFalse(MaintenanceResource.matchesAnyCidr("172.16.0.1", cidrs));
+        assertTrue(IpAllowlistUtils.matchesAnyCidr("10.1.2.3", cidrs));
+        assertTrue(IpAllowlistUtils.matchesAnyCidr("192.168.1.100", cidrs));
+        assertFalse(IpAllowlistUtils.matchesAnyCidr("172.16.0.1", cidrs));
     }
 
     @Test
     void matchesAnyCidr_smallPrefix() {
-        assertTrue(MaintenanceResource.matchesAnyCidr("10.255.255.255", List.of("10.0.0.0/8")));
+        assertTrue(IpAllowlistUtils.matchesAnyCidr("10.255.255.255", List.of("10.0.0.0/8")));
     }
 
     @Test
     void matchesAnyCidr_slash32_exactMatch() {
-        assertTrue(MaintenanceResource.matchesAnyCidr("192.168.1.1", List.of("192.168.1.1/32")));
-        assertFalse(MaintenanceResource.matchesAnyCidr("192.168.1.2", List.of("192.168.1.1/32")));
+        assertTrue(IpAllowlistUtils.matchesAnyCidr("192.168.1.1", List.of("192.168.1.1/32")));
+        assertFalse(IpAllowlistUtils.matchesAnyCidr("192.168.1.2", List.of("192.168.1.1/32")));
     }
 
     @Test
     void matchesAnyCidr_invalidIp_returnsFalse() {
-        assertFalse(MaintenanceResource.matchesAnyCidr("not-an-ip", List.of("10.0.0.0/8")));
+        assertFalse(IpAllowlistUtils.matchesAnyCidr("not-an-ip", List.of("10.0.0.0/8")));
     }
 
     @Test
     void matchesAnyCidr_emptyList_returnsFalse() {
-        assertFalse(MaintenanceResource.matchesAnyCidr("10.0.0.1", List.of()));
+        assertFalse(IpAllowlistUtils.matchesAnyCidr("10.0.0.1", List.of()));
     }
 
     @Test

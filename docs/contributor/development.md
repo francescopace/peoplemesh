@@ -6,7 +6,9 @@ This guide is for contributors working on PeopleMesh locally.
 
 ```
 src/main/java/org/peoplemesh/
-├── api/            REST resources
+├── api/
+│   ├── error/      API error payload and exception mapping
+│   └── resource/   REST resources (JAX-RS endpoints)
 ├── config/         Application and security configuration
 ├── domain/
 │   ├── dto/        Data transfer objects
@@ -18,7 +20,9 @@ src/main/java/org/peoplemesh/
 └── service/        Core business logic
 
 src/test/java/org/peoplemesh/
-├── api/            Resource and filter tests
+├── api/
+│   ├── resource/   Resource tests
+│   └── ...         API filter/error tests
 ├── domain/dto/     DTO record tests
 ├── integration/    End-to-end flows
 ├── security/       Auth and provider tests
@@ -47,5 +51,9 @@ src/main/web/
 
 - Keep changes small and focused by topic.
 - Add or update tests for behavioral changes.
-- Use existing conventions in API/resource/service layers.
+- Keep layers separated by responsibility:
+  - `api/resource` handles HTTP request/response only.
+  - `service` contains business/use-case orchestration.
+  - `repository` handles persistence and query logic.
+- Keep API errors centralized in `api/error`.
 - For licensing details, review [`../../CLA.md`](../../CLA.md).

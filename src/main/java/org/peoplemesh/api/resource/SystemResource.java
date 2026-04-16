@@ -1,4 +1,4 @@
-package org.peoplemesh.api;
+package org.peoplemesh.api.resource;
 
 import io.quarkus.security.Authenticated;
 import io.smallrye.common.annotation.Blocking;

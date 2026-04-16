@@ -8,6 +8,8 @@ import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.NotAuthorizedException;
 import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.Test;
+import org.peoplemesh.api.error.GlobalExceptionMapper;
+import org.peoplemesh.api.error.ProblemDetail;
 import org.peoplemesh.domain.exception.RateLimitException;
 
 import java.util.Set;

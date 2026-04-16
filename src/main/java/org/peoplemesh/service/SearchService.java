@@ -7,6 +7,8 @@ import io.quarkus.arc.All;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.peoplemesh.repository.MeshNodeSearchRepository;
+import org.peoplemesh.repository.SkillAssessmentRepository;
+import org.peoplemesh.repository.SkillDefinitionRepository;
 import org.jboss.logging.Logger;
 import org.peoplemesh.config.AppConfig;
 import org.peoplemesh.domain.exception.RateLimitException;
@@ -18,7 +20,6 @@ import org.peoplemesh.domain.enums.NodeType;
 import org.peoplemesh.domain.enums.Seniority;
 import org.peoplemesh.domain.enums.WorkMode;
 import org.peoplemesh.domain.model.SkillAssessment;
-import org.peoplemesh.domain.model.SkillDefinition;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -60,6 +61,12 @@ public class SearchService {
 
     @Inject
     ConsentService consentService;
+
+    @Inject
+    SkillAssessmentRepository skillAssessmentRepository;
+
+    @Inject
+    SkillDefinitionRepository skillDefinitionRepository;
 
     public SearchResponse search(UUID userId, String queryText, String countryFilter) {
         if (!consentService.hasActiveConsent(userId, "professional_matching")) {
@@ -321,6 +328,12 @@ public class SearchService {
     // === Result conversion ===
 
     private List<SearchResultItem> toResultItems(List<ScoredCandidate> scored) {
+        List<UUID> userNodeIds = scored.stream()
+                .map(ScoredCandidate::node)
+                .filter(c -> c.nodeType == NodeType.USER)
+                .map(c -> c.nodeId)
+                .toList();
+        Map<UUID, Map<String, Integer>> skillLevelsByNodeId = loadSkillLevelsByNodeIds(userNodeIds);
         List<SearchResultItem> items = new ArrayList<>();
         for (ScoredCandidate sc : scored) {
             RawNodeCandidate c = sc.node;
@@ -339,7 +352,7 @@ public class SearchService {
                 List<String> toolsAndTech = sdListOrEmpty(c.structuredData, "tools_and_tech");
                 String avatarUrl = sdString(c.structuredData, "avatar_url");
 
-                Map<String, Integer> skillLevels = loadSkillLevels(c.nodeId);
+                Map<String, Integer> skillLevels = skillLevelsByNodeId.get(c.nodeId);
 
                 items.add(SearchResultItem.profile(
                         c.nodeId, MatchingUtils.round3(sc.score),
@@ -415,29 +428,38 @@ public class SearchService {
         );
     }
 
-    private Map<String, Integer> loadSkillLevels(UUID nodeId) {
-        List<SkillAssessment> assessments = SkillAssessment.findByNode(nodeId);
-        if (assessments.isEmpty()) return null;
-
-        List<UUID> skillIds = assessments.stream()
+    private Map<UUID, Map<String, Integer>> loadSkillLevelsByNodeIds(List<UUID> nodeIds) {
+        if (nodeIds == null || nodeIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<UUID, List<SkillAssessment>> assessmentsByNode = skillAssessmentRepository.findByNodeIds(nodeIds);
+        if (assessmentsByNode.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Set<UUID> skillIds = assessmentsByNode.values().stream()
+                .flatMap(List::stream)
                 .filter(a -> a.level > 0)
                 .map(a -> a.skillId)
-                .toList();
-        if (skillIds.isEmpty()) return null;
-
-        Map<UUID, String> defNames = SkillDefinition.<SkillDefinition>list("id in ?1", skillIds)
-                .stream()
+                .collect(Collectors.toSet());
+        Map<UUID, String> definitionNames = skillDefinitionRepository.findByIds(new ArrayList<>(skillIds)).stream()
                 .collect(Collectors.toMap(d -> d.id, d -> d.name));
-
-        Map<String, Integer> levels = new LinkedHashMap<>();
-        for (SkillAssessment a : assessments) {
-            if (a.level <= 0) continue;
-            String name = defNames.get(a.skillId);
-            if (name != null) {
-                levels.put(name, (int) a.level);
+        Map<UUID, Map<String, Integer>> result = new HashMap<>();
+        for (Map.Entry<UUID, List<SkillAssessment>> entry : assessmentsByNode.entrySet()) {
+            Map<String, Integer> levels = new LinkedHashMap<>();
+            for (SkillAssessment assessment : entry.getValue()) {
+                if (assessment.level <= 0) {
+                    continue;
+                }
+                String name = definitionNames.get(assessment.skillId);
+                if (name != null) {
+                    levels.put(name, (int) assessment.level);
+                }
+            }
+            if (!levels.isEmpty()) {
+                result.put(entry.getKey(), levels);
             }
         }
-        return levels.isEmpty() ? null : levels;
+        return result;
     }
 
 

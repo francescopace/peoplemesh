@@ -4,6 +4,7 @@ import org.peoplemesh.domain.dto.NodeDto;
 import org.peoplemesh.domain.dto.NodePayload;
 import org.peoplemesh.domain.enums.NodeType;
 import org.peoplemesh.domain.model.MeshNode;
+import org.peoplemesh.repository.NodeRepository;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -23,6 +24,9 @@ public class NodeService {
 
     @Inject
     AuditService auditService;
+
+    @Inject
+    NodeRepository nodeRepository;
 
     @Transactional
     public NodeDto createNode(UUID ownerUserId, NodePayload payload) {
@@ -98,19 +102,19 @@ public class NodeService {
     }
 
     Optional<MeshNode> findNodeById(UUID nodeId) {
-        return MeshNode.findByIdOptional(nodeId);
+        return nodeRepository.findById(nodeId);
     }
 
     Optional<MeshNode> findNodeByIdAndOwner(UUID nodeId, UUID ownerUserId) {
-        return MeshNode.findByIdAndOwner(nodeId, ownerUserId);
+        return nodeRepository.findByIdAndOwner(nodeId, ownerUserId);
     }
 
     List<MeshNode> findNodesByOwner(UUID ownerUserId) {
-        return MeshNode.findByOwner(ownerUserId);
+        return nodeRepository.findByOwner(ownerUserId);
     }
 
     List<MeshNode> findNodesByOwnerAndType(UUID ownerUserId, NodeType type) {
-        return MeshNode.findByOwnerAndType(ownerUserId, type);
+        return nodeRepository.findByOwnerAndType(ownerUserId, type);
     }
 
     float[] generateEmbedding(String text) {
@@ -118,7 +122,7 @@ public class NodeService {
     }
 
     void persistNode(MeshNode node) {
-        node.persist();
+        nodeRepository.persist(node);
     }
 
     void logAudit(UUID userId, String action, String toolName) {

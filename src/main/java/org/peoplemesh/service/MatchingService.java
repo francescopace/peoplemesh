@@ -11,6 +11,8 @@ import org.peoplemesh.domain.enums.WorkMode;
 
 import org.peoplemesh.domain.model.MeshNode;
 import org.peoplemesh.repository.MeshNodeSearchRepository;
+import org.peoplemesh.repository.SkillAssessmentRepository;
+import org.peoplemesh.repository.SkillDefinitionRepository;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
@@ -18,6 +20,7 @@ import org.jboss.logging.Logger;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @ApplicationScoped
 public class MatchingService {
@@ -89,6 +92,12 @@ public class MatchingService {
     @Inject
     ConsentService consentService;
 
+    @Inject
+    SkillAssessmentRepository skillAssessmentRepository;
+
+    @Inject
+    SkillDefinitionRepository skillDefinitionRepository;
+
     private static List<String> parseCommaSeparatedRoles(String plain) {
         return MatchingUtils.splitCommaSeparated(plain);
     }
@@ -109,6 +118,7 @@ public class MatchingService {
         int poolSize = config.matching().candidatePoolSize();
         List<Object[]> candidates = searchRepository.findUserCandidatesByEmbedding(
                 queryEmbedding, excludeUserId, poolSize);
+        Map<UUID, Map<String, Short>> skillLevelsByNode = loadSkillLevelsByNode(candidates, filters);
 
         List<String> mySkillPool = referenceSkillPool != null ? referenceSkillPool : Collections.emptyList();
         List<MatchResult> results = new ArrayList<>();
@@ -120,7 +130,9 @@ public class MatchingService {
 
             if (filters != null && filters.skillsWithLevel() != null && !filters.skillsWithLevel().isEmpty()) {
                 double levelScore = MatchingUtils.computeLevelAwareCoverage(
-                        c.nodeId(), filters.skillsWithLevel(), c.combinedSkillsAndTools());
+                        filters.skillsWithLevel(),
+                        c.combinedSkillsAndTools(),
+                        skillLevelsByNode.get(c.nodeId()));
                 skillsOverlap = Math.max(skillsOverlap, levelScore);
             }
 
@@ -189,6 +201,40 @@ public class MatchingService {
         return results.stream()
                 .limit(config.matching().resultLimit())
                 .toList();
+    }
+
+    private Map<UUID, Map<String, Short>> loadSkillLevelsByNode(List<Object[]> candidates, MatchFilters filters) {
+        if (filters == null || filters.skillsWithLevel() == null || filters.skillsWithLevel().isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<UUID> nodeIds = candidates.stream()
+                .map(row -> (UUID) row[0])
+                .toList();
+        Map<UUID, List<org.peoplemesh.domain.model.SkillAssessment>> assessmentsByNode =
+                skillAssessmentRepository.findByNodeIds(nodeIds);
+        if (assessmentsByNode.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Set<UUID> skillIds = assessmentsByNode.values().stream()
+                .flatMap(List::stream)
+                .map(a -> a.skillId)
+                .collect(Collectors.toSet());
+        Map<UUID, String> namesById = skillDefinitionRepository.findByIds(new ArrayList<>(skillIds)).stream()
+                .collect(Collectors.toMap(d -> d.id, d -> d.name));
+        Map<UUID, Map<String, Short>> result = new HashMap<>();
+        for (Map.Entry<UUID, List<org.peoplemesh.domain.model.SkillAssessment>> entry : assessmentsByNode.entrySet()) {
+            Map<String, Short> byName = new HashMap<>();
+            for (org.peoplemesh.domain.model.SkillAssessment assessment : entry.getValue()) {
+                String name = namesById.get(assessment.skillId);
+                if (name != null) {
+                    byName.put(name.toLowerCase(Locale.ROOT).trim(), assessment.level);
+                }
+            }
+            if (!byName.isEmpty()) {
+                result.put(entry.getKey(), byName);
+            }
+        }
+        return result;
     }
 
     /**

@@ -1,9 +1,12 @@
 package org.peoplemesh.service;
 
+import io.quarkus.cache.CacheInvalidateAll;
+import io.quarkus.cache.CacheResult;
 import org.peoplemesh.config.AppConfig;
 import org.peoplemesh.util.HashUtils;
 import org.peoplemesh.util.HmacSigner;
 import org.peoplemesh.domain.model.MeshNodeConsent;
+import org.peoplemesh.repository.MeshNodeConsentRepository;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -29,6 +32,9 @@ public class ConsentService {
 
     @Inject
     ConsentTokenStore tokenStore;
+
+    @Inject
+    MeshNodeConsentRepository meshNodeConsentRepository;
 
     /**
      * Validates signature, TTL, scope, and single-use via {@link ConsentTokenStore}.
@@ -91,6 +97,8 @@ public class ConsentService {
     }
 
     @Transactional
+    @CacheInvalidateAll(cacheName = "consent-by-scope")
+    @CacheInvalidateAll(cacheName = "consent-scopes")
     public void recordConsent(UUID nodeId, String scope, String ipHash) {
         MeshNodeConsent consent = new MeshNodeConsent();
         consent.nodeId = nodeId;
@@ -98,21 +106,24 @@ public class ConsentService {
         consent.grantedAt = Instant.now();
         consent.ipHash = ipHash;
         consent.policyVersion = CURRENT_POLICY_VERSION;
-        consent.persist();
+        meshNodeConsentRepository.persist(consent);
     }
 
     @Transactional
+    @CacheInvalidateAll(cacheName = "consent-by-scope")
+    @CacheInvalidateAll(cacheName = "consent-scopes")
     public void revokeConsent(UUID nodeId, String scope) {
-        MeshNodeConsent.revokeByNodeAndScope(nodeId, scope);
+        meshNodeConsentRepository.revokeByNodeAndScope(nodeId, scope);
     }
 
+    @CacheResult(cacheName = "consent-by-scope")
     public boolean hasActiveConsent(UUID nodeId, String scope) {
-        return MeshNodeConsent.findActiveByNodeId(nodeId).stream()
-                .anyMatch(c -> scope.equals(c.scope));
+        return meshNodeConsentRepository.hasActiveConsent(nodeId, scope);
     }
 
+    @CacheResult(cacheName = "consent-scopes")
     public java.util.List<String> getActiveScopes(UUID nodeId) {
-        return MeshNodeConsent.findActiveScopesByNodeId(nodeId);
+        return meshNodeConsentRepository.findActiveScopes(nodeId);
     }
 
 }

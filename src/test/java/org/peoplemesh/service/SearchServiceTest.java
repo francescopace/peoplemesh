@@ -29,6 +29,8 @@ class SearchServiceTest {
     @Mock EmbeddingService embeddingService;
     @Mock ConsentService consentService;
     @Mock org.peoplemesh.repository.MeshNodeSearchRepository searchRepository;
+    @Mock org.peoplemesh.repository.SkillAssessmentRepository skillAssessmentRepository;
+    @Mock org.peoplemesh.repository.SkillDefinitionRepository skillDefinitionRepository;
     @Mock AppConfig config;
     @Mock ObjectMapper objectMapper;
     @Mock AppConfig.SearchConfig searchConfig;
@@ -43,6 +45,8 @@ class SearchServiceTest {
         lenient().when(config.search()).thenReturn(searchConfig);
         lenient().when(searchConfig.maxPerMinute()).thenReturn(100);
         lenient().when(searchConfig.minScore()).thenReturn(0.0);
+        lenient().when(skillAssessmentRepository.findByNodeIds(anyList())).thenReturn(Collections.emptyMap());
+        lenient().when(skillDefinitionRepository.findByIds(anyList())).thenReturn(Collections.emptyList());
 
         Field parsersField = SearchService.class.getDeclaredField("queryParsers");
         parsersField.setAccessible(true);

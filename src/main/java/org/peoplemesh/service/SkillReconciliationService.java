@@ -9,6 +9,8 @@ import org.peoplemesh.domain.dto.SkillAssessmentDto;
 import org.peoplemesh.domain.model.MeshNode;
 import org.peoplemesh.domain.model.SkillAssessment;
 import org.peoplemesh.domain.model.SkillDefinition;
+import org.peoplemesh.repository.NodeRepository;
+import org.peoplemesh.repository.SkillAssessmentRepository;
 
 import java.time.Instant;
 import java.util.*;
@@ -24,6 +26,12 @@ public class SkillReconciliationService {
 
     @Inject
     AppConfig config;
+
+    @Inject
+    SkillAssessmentRepository skillAssessmentRepository;
+
+    @Inject
+    NodeRepository nodeRepository;
 
     /**
      * Reconcile a node's free-text tags against a skill catalog.
@@ -55,6 +63,7 @@ public class SkillReconciliationService {
 
         double threshold = reconciliationThreshold();
         List<SkillAssessmentDto> results = new ArrayList<>();
+        Map<String, float[]> embeddingCache = new HashMap<>();
 
         for (String tag : node.tags) {
             String tagLower = tag.toLowerCase(Locale.ROOT);
@@ -74,7 +83,7 @@ public class SkillReconciliationService {
             }
 
             try {
-                float[] tagEmbedding = embeddingService.generateEmbedding(tag);
+                float[] tagEmbedding = embeddingCache.computeIfAbsent(tagLower, k -> embeddingService.generateEmbedding(tag));
                 SkillDefinition bestMatch = null;
                 double bestSim = 0;
 
@@ -93,7 +102,7 @@ public class SkillReconciliationService {
                             "FUZZY", Math.round(bestSim * 1000.0) / 1000.0));
                 }
             } catch (Exception e) {
-                LOG.debugf("Failed to generate embedding for tag '%s': %s", tag, e.getMessage());
+                LOG.debugf("Failed to generate embedding for tag value");
             }
         }
 
@@ -101,7 +110,7 @@ public class SkillReconciliationService {
     }
 
     MeshNode loadNode(UUID nodeId) {
-        return MeshNode.findById(nodeId);
+        return nodeRepository.findById(nodeId).orElse(null);
     }
 
     List<SkillDefinition> loadCatalogSkills(UUID catalogId) {
@@ -112,7 +121,7 @@ public class SkillReconciliationService {
     }
 
     Set<UUID> loadExistingAssessmentIds(UUID nodeId) {
-        return SkillAssessment.findByNode(nodeId).stream()
+        return skillAssessmentRepository.findByNode(nodeId).stream()
                 .map(a -> a.skillId)
                 .collect(Collectors.toSet());
     }
@@ -123,20 +132,20 @@ public class SkillReconciliationService {
 
     @Transactional
     public void applyReconciliation(UUID nodeId, UUID userId, List<SkillAssessmentDto> assessments) {
-        MeshNode.findByIdOptional(nodeId)
-                .filter(n -> ((MeshNode) n).createdBy.equals(userId))
+        nodeRepository.findById(nodeId)
+                .filter(n -> n.createdBy.equals(userId))
                 .orElseThrow(() -> new SecurityException("Not authorized for this node"));
+        Map<UUID, SkillAssessment> existingBySkill = skillAssessmentRepository.findByNodeAsMap(nodeId);
+        Instant now = Instant.now();
         for (SkillAssessmentDto dto : assessments) {
             if (dto.skillId() == null) continue;
 
-            SkillAssessment existing = SkillAssessment.find(
-                    "nodeId = ?1 and skillId = ?2", nodeId, dto.skillId()
-            ).firstResult();
+            SkillAssessment existing = existingBySkill.get(dto.skillId());
 
             if (existing != null) {
                 existing.level = (short) dto.level();
                 existing.interest = dto.interest();
-                existing.assessedAt = Instant.now();
+                existing.assessedAt = now;
                 if (dto.source() != null) existing.source = dto.source();
             } else {
                 SkillAssessment a = new SkillAssessment();
@@ -145,8 +154,9 @@ public class SkillReconciliationService {
                 a.level = (short) dto.level();
                 a.interest = dto.interest();
                 a.source = dto.source() != null ? dto.source() : "SELF";
-                a.assessedAt = Instant.now();
-                a.persist();
+                a.assessedAt = now;
+                skillAssessmentRepository.persist(a);
+                existingBySkill.put(dto.skillId(), a);
             }
         }
     }

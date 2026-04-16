@@ -3,6 +3,7 @@ package org.peoplemesh.api;
 import jakarta.ws.rs.ForbiddenException;
 import jakarta.ws.rs.core.HttpHeaders;
 import org.peoplemesh.config.AppConfig;
+import org.peoplemesh.util.IpAllowlistUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -44,7 +45,7 @@ public final class MaintenanceAuthHelper {
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
                 .toList();
-        if (!MaintenanceResource.matchesAnyCidr(callerIp, allowed)) {
+        if (!IpAllowlistUtils.matchesAnyCidr(callerIp, allowed)) {
             throw new ForbiddenException("Caller IP not in maintenance allowlist");
         }
     }

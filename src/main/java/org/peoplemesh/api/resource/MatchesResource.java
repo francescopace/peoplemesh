@@ -1,4 +1,4 @@
-package org.peoplemesh.api;
+package org.peoplemesh.api.resource;
 
 import io.quarkus.security.Authenticated;
 import jakarta.inject.Inject;
@@ -16,12 +16,8 @@ import org.peoplemesh.domain.dto.MeshMatchResult;
 import org.peoplemesh.domain.dto.ProfileSchema;
 import org.peoplemesh.domain.dto.SearchRequest;
 import org.peoplemesh.domain.dto.SearchResponse;
-import org.peoplemesh.domain.model.MeshNode;
 import org.peoplemesh.mcp.UserResolver;
-import org.peoplemesh.service.EmbeddingService;
-import org.peoplemesh.service.EmbeddingTextBuilder;
-import org.peoplemesh.service.MatchingService;
-import org.peoplemesh.service.SearchService;
+import org.peoplemesh.service.MatchesService;
 
 import java.util.List;
 import java.util.UUID;
@@ -35,13 +31,7 @@ public class MatchesResource {
     UserResolver userResolver;
 
     @Inject
-    MatchingService matchingService;
-
-    @Inject
-    EmbeddingService embeddingService;
-
-    @Inject
-    SearchService searchService;
+    MatchesService matchesService;
 
     @POST
     @Consumes(MediaType.APPLICATION_JSON)
@@ -50,14 +40,7 @@ public class MatchesResource {
             @QueryParam("type") String type,
             @QueryParam("country") String country) {
         UUID userId = userResolver.resolveUserId();
-        String text = EmbeddingTextBuilder.buildFromSchema(profile);
-        float[] embedding = embeddingService.generateEmbedding(text);
-        if (embedding == null) {
-            return Response.status(400)
-                    .entity(ProblemDetail.of(400, "Bad Request", "Embedding input was empty"))
-                    .build();
-        }
-        List<MeshMatchResult> matches = matchingService.findAllMatches(userId, embedding, type, country);
+        List<MeshMatchResult> matches = matchesService.matchFromSchema(userId, profile, type, country);
         return Response.ok(matches).build();
     }
 
@@ -66,7 +49,7 @@ public class MatchesResource {
     @Consumes(MediaType.APPLICATION_JSON)
     public Response matchFromPrompt(@Valid SearchRequest request) {
         UUID userId = userResolver.resolveUserId();
-        SearchResponse result = searchService.search(userId, request.query(), request.country());
+        SearchResponse result = matchesService.matchFromPrompt(userId, request);
         return Response.ok(result).build();
     }
 
@@ -76,7 +59,7 @@ public class MatchesResource {
             @QueryParam("type") String type,
             @QueryParam("country") String country) {
         UUID userId = userResolver.resolveUserId();
-        List<MeshMatchResult> matches = matchingService.findAllMatches(userId, type, country);
+        List<MeshMatchResult> matches = matchesService.matchMyProfile(userId, type, country);
         return Response.ok(matches).build();
     }
 
@@ -87,21 +70,7 @@ public class MatchesResource {
             @QueryParam("type") String type,
             @QueryParam("country") String country) {
         UUID userId = userResolver.resolveUserId();
-        MeshNode node = MeshNode.<MeshNode>findByIdOptional(nodeId).orElse(null);
-        if (node == null || node.embedding == null) {
-            return Response.status(404)
-                    .entity(ProblemDetail.of(404, "Not Found", "Node not found or has no embedding"))
-                    .build();
-        }
-        boolean isOwner = userId.equals(node.createdBy);
-        boolean isPublicNonUser = node.searchable && node.nodeType != org.peoplemesh.domain.enums.NodeType.USER;
-        if (!isOwner && !isPublicNonUser) {
-            return Response.status(403)
-                    .entity(ProblemDetail.of(403, "Forbidden", "You do not have access to this node"))
-                    .build();
-        }
-        List<MeshMatchResult> matches = matchingService.findAllMatches(
-                userId, node.embedding, type, country);
+        List<MeshMatchResult> matches = matchesService.matchFromNode(userId, nodeId, type, country);
         return Response.ok(matches).build();
     }
 }

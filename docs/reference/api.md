@@ -75,6 +75,9 @@ This reference follows PeopleMesh's security- and GDPR-first posture by design (
 - Endpoint authorization depends on OIDC/session state and configured entitlements.
 - Maintenance endpoints require `X-Maintenance-Key` and may also enforce IP/CIDR restrictions.
 - MCP integration is read-only by design.
+- API implementation layering:
+  - REST endpoints live under `org.peoplemesh.api.resource`
+  - API error contracts and exception mapping live under `org.peoplemesh.api.error`
 - `GET /api/v1/system/statistics` includes timing summaries for:
   - `timings.llmInference`
   - `timings.embeddingInference`

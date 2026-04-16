@@ -1,9 +1,11 @@
-package org.peoplemesh.api;
+package org.peoplemesh.api.resource;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.smallrye.common.annotation.Blocking;
 import jakarta.annotation.security.PermitAll;
 import jakarta.inject.Inject;
-import io.smallrye.common.annotation.Blocking;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
@@ -13,23 +15,18 @@ import jakarta.ws.rs.core.NewCookie;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriBuilder;
 import jakarta.ws.rs.core.UriInfo;
+import org.jboss.logging.Logger;
+import org.peoplemesh.api.error.ProblemDetail;
 import org.peoplemesh.domain.dto.ProfileSchema;
 import org.peoplemesh.service.CvProfileMergeService;
 import org.peoplemesh.service.OAuthCallbackService;
-import org.peoplemesh.service.OAuthCallbackService.LoginResult;
 import org.peoplemesh.service.OAuthTokenExchangeService;
-import org.peoplemesh.service.OAuthTokenExchangeService.OidcSubject;
 import org.peoplemesh.service.SessionService;
 import org.peoplemesh.util.OAuthHtmlRenderer;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
-
-import jakarta.ws.rs.POST;
-import org.jboss.logging.Logger;
 
 @Path("/api/v1/auth")
 @PermitAll
@@ -40,8 +37,7 @@ public class OAuthLoginResource {
     private static final Logger LOG = Logger.getLogger(OAuthLoginResource.class);
 
     private static final String INTENT_PROFILE_IMPORT = "profile_import";
-    private static final List<String> PROVIDER_ORDER = List.of(
-            "google", "microsoft", "github");
+    private static final List<String> PROVIDER_ORDER = List.of("google", "microsoft", "github");
 
     @Inject
     SessionService sessionService;
@@ -67,9 +63,7 @@ public class OAuthLoginResource {
         List<String> configuredProviders = PROVIDER_ORDER.stream()
                 .filter(tokenExchangeService::isProviderEnabled)
                 .toList();
-        return Response.ok(Map.of(
-                "providers", loginProviders,
-                "configured", configuredProviders)).build();
+        return Response.ok(Map.of("providers", loginProviders, "configured", configuredProviders)).build();
     }
 
     @GET
@@ -103,7 +97,6 @@ public class OAuthLoginResource {
             @jakarta.ws.rs.QueryParam("state") String state,
             @jakarta.ws.rs.QueryParam("error") String error,
             @jakarta.ws.rs.QueryParam("error_description") String errorDescription) {
-
         LOG.debugf("OAuth callback: provider=%s code=%s state=%s error=%s",
                 provider, code != null ? "present" : "null",
                 state != null ? "present" : "null", error);
@@ -115,13 +108,12 @@ public class OAuthLoginResource {
         }
 
         if (error != null && !error.isBlank()) {
-            String msg = errorDescription != null ? errorDescription : error;
             LOG.warnf("OAuth callback error from %s: %s", provider, error);
             if (isImport) {
-                return renderErrorHtml(msg);
+                return renderErrorHtml("OAuth callback failed");
             }
             return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(ProblemDetail.of(400, "Bad Request", msg))
+                    .entity(ProblemDetail.of(400, "Bad Request", "OAuth callback failed"))
                     .build();
         }
 
@@ -145,7 +137,7 @@ public class OAuthLoginResource {
             return handleImportCallback(provider, code, redirectUri);
         }
 
-        OidcSubject subject;
+        OAuthTokenExchangeService.OidcSubject subject;
         try {
             subject = tokenExchangeService.exchangeAndResolveSubject(provider, code, redirectUri);
         } catch (Exception e) {
@@ -160,10 +152,8 @@ public class OAuthLoginResource {
                     .build();
         }
 
-        LoginResult result = oAuthCallbackService.handleLogin(provider, subject);
-
-        String cookieValue = sessionService.encodeSession(
-                result.userId(), provider, result.displayName());
+        OAuthCallbackService.LoginResult result = oAuthCallbackService.handleLogin(provider, subject);
+        String cookieValue = sessionService.encodeSession(result.userId(), provider, result.displayName());
         NewCookie sessionCookie = sessionService.buildSessionCookie(cookieValue, isSecure());
 
         URI after = UriBuilder.fromUri(uriInfo.getBaseUri()).path("/").fragment("/search").build();
@@ -176,7 +166,6 @@ public class OAuthLoginResource {
             String source = CvProfileMergeService.sourceForProvider(provider);
             String origin = resolveOrigin();
             String jsonData = objectMapper.writeValueAsString(importSchema);
-
             OAuthHtmlRenderer.RenderedHtml rendered = OAuthHtmlRenderer.importSuccess(jsonData, source, origin);
             return Response.ok(rendered.html(), MediaType.TEXT_HTML)
                     .header("Content-Security-Policy", rendered.csp())

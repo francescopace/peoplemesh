@@ -1,4 +1,4 @@
-package org.peoplemesh.api;
+package org.peoplemesh.api.resource;
 
 import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.Test;

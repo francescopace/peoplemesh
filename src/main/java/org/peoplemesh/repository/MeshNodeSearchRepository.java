@@ -6,7 +6,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import org.peoplemesh.domain.enums.NodeType;
-import org.peoplemesh.service.MatchingUtils;
+import org.peoplemesh.util.VectorSqlUtils;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -47,7 +47,7 @@ public class MeshNodeSearchRepository {
             histogram = true
     )
     public List<Object[]> findUserCandidatesByEmbedding(float[] embedding, UUID excludeUserId, int poolSize) {
-        String vectorLiteral = MatchingUtils.vectorToString(embedding);
+        String vectorLiteral = VectorSqlUtils.vectorToSqlLiteral(embedding);
         return em.createNativeQuery(
                         USER_MATCH_CANDIDATE_SQL
                                 + "AND n.created_by != :excludeUserId "
@@ -68,7 +68,7 @@ public class MeshNodeSearchRepository {
     )
     public List<Object[]> findNodeCandidatesByEmbedding(float[] embedding, UUID excludeUserId,
                                                          NodeType targetType, int poolSize) {
-        String vectorLiteral = MatchingUtils.vectorToString(embedding);
+        String vectorLiteral = VectorSqlUtils.vectorToSqlLiteral(embedding);
         String typeSql = targetType != null ? "AND n.node_type = :nodeType " : "AND n.node_type != 'USER' ";
         String sql = "SELECT n.id, n.node_type, n.title, n.description, n.tags, "
                 + "n.country, n.updated_at, "
@@ -100,7 +100,7 @@ public class MeshNodeSearchRepository {
     public List<Object[]> unifiedVectorSearch(float[] embedding, UUID excludeUserId,
                                                String countryFilter, List<String> languages,
                                                int poolSize) {
-        String vectorLiteral = MatchingUtils.vectorToString(embedding);
+        String vectorLiteral = VectorSqlUtils.vectorToSqlLiteral(embedding);
 
         StringBuilder sql = new StringBuilder();
         sql.append("SELECT n.id, n.node_type, n.title, n.description, n.tags, n.country, ");

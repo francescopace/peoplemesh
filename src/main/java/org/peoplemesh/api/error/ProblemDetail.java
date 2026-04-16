@@ -1,4 +1,4 @@
-package org.peoplemesh.api;
+package org.peoplemesh.api.error;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import org.eclipse.microprofile.config.ConfigProvider;

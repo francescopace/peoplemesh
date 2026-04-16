@@ -8,12 +8,13 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
-import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import org.peoplemesh.domain.dto.MeshMatchResult;
 import org.peoplemesh.domain.dto.ProfileSchema;
 import org.peoplemesh.domain.model.MeshNode;
+import org.peoplemesh.repository.NodeRepository;
 import org.peoplemesh.service.EmbeddingService;
 import org.peoplemesh.service.MatchingService;
+import org.peoplemesh.service.NodeAccessPolicyService;
 import org.peoplemesh.service.ProfileService;
 
 import java.util.Collections;
@@ -36,6 +37,10 @@ class McpReadToolsTest {
     MatchingService matchingService;
     @Mock
     EmbeddingService embeddingService;
+    @Mock
+    NodeRepository nodeRepository;
+    @Mock
+    NodeAccessPolicyService nodeAccessPolicyService;
     @Spy
     ObjectMapper objectMapper = new ObjectMapper();
 
@@ -157,14 +162,9 @@ class McpReadToolsTest {
     @Test
     void matchNode_notFound_returnsMessage() {
         UUID nodeUuid = UUID.randomUUID();
-
-        try (var panacheMock = mockStatic(PanacheEntityBase.class)) {
-            panacheMock.when(() -> PanacheEntityBase.findByIdOptional(nodeUuid))
-                    .thenReturn(Optional.empty());
-
-            TextContent result = mcpReadTools.matchNode(nodeUuid.toString(), null, null);
-            assertTrue(result.text().contains("Node not found"));
-        }
+        when(nodeRepository.findById(nodeUuid)).thenReturn(Optional.empty());
+        TextContent result = mcpReadTools.matchNode(nodeUuid.toString(), null, null);
+        assertTrue(result.text().contains("Node not found"));
     }
 
     @Test
@@ -179,14 +179,10 @@ class McpReadToolsTest {
         MeshMatchResult one = sampleMatch();
         when(matchingService.findAllMatches(eq(userId), eq(node.embedding), isNull(), isNull()))
                 .thenReturn(List.of(one));
-
-        try (var panacheMock = mockStatic(PanacheEntityBase.class)) {
-            panacheMock.when(() -> PanacheEntityBase.findByIdOptional(nodeUuid))
-                    .thenReturn(Optional.of(node));
-
-            TextContent result = mcpReadTools.matchNode(nodeUuid.toString(), null, null);
-            assertTrue(result.text().contains(one.title()));
-        }
+        when(nodeRepository.findById(nodeUuid)).thenReturn(Optional.of(node));
+        when(nodeAccessPolicyService.canReadNode(userId, node)).thenReturn(true);
+        TextContent result = mcpReadTools.matchNode(nodeUuid.toString(), null, null);
+        assertTrue(result.text().contains(one.title()));
     }
 
     private static MeshMatchResult sampleMatch() {

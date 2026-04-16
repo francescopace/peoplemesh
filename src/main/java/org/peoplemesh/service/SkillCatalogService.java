@@ -10,6 +10,7 @@ import jakarta.ws.rs.NotFoundException;
 import org.jboss.logging.Logger;
 import org.peoplemesh.domain.model.SkillCatalog;
 import org.peoplemesh.domain.model.SkillDefinition;
+import org.peoplemesh.repository.SkillDefinitionRepository;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -31,6 +32,9 @@ public class SkillCatalogService {
 
     @Inject
     EntityManager em;
+
+    @Inject
+    SkillDefinitionRepository skillDefinitionRepository;
 
     @Transactional
     @CacheInvalidateAll(cacheName = "skill-catalogs")
@@ -75,6 +79,12 @@ public class SkillCatalogService {
             CsvColumnMapping mapping = CsvColumnMapping.fromHeader(parseCsvLine(header));
 
             String line;
+            Map<String, SkillDefinition> existingByName = SkillDefinition.findByCatalog(catalogId).stream()
+                    .collect(java.util.stream.Collectors.toMap(
+                            sd -> sd.name.toLowerCase(Locale.ROOT),
+                            sd -> sd,
+                            (a, b) -> a,
+                            LinkedHashMap::new));
             while ((line = reader.readLine()) != null) {
                 line = line.trim();
                 if (line.isEmpty()) continue;
@@ -97,9 +107,9 @@ public class SkillCatalogService {
                 aliases.addAll(mapping.readAliases(parts));
                 aliases = aliases.stream().filter(s -> !s.isBlank()).distinct().toList();
 
-                Optional<SkillDefinition> existing = SkillDefinition.findByCatalogAndName(catalogId, name);
-                if (existing.isPresent()) {
-                    SkillDefinition sd = existing.get();
+                SkillDefinition existing = existingByName.get(name.toLowerCase(Locale.ROOT));
+                if (existing != null) {
+                    SkillDefinition sd = existing;
                     sd.category = category;
                     if (lxpRecommendation != null) sd.lxpRecommendation = lxpRecommendation;
                     if (!aliases.isEmpty()) sd.aliases = aliases;
@@ -111,6 +121,7 @@ public class SkillCatalogService {
                     sd.aliases = aliases.isEmpty() ? null : aliases;
                     sd.lxpRecommendation = lxpRecommendation;
                     sd.persist();
+                    existingByName.put(name.toLowerCase(Locale.ROOT), sd);
                     count++;
                 }
             }
@@ -161,23 +172,7 @@ public class SkillCatalogService {
 
     @CacheResult(cacheName = "skill-definitions")
     public List<SkillDefinition> listSkills(UUID catalogId, String category, int page, int size) {
-        if (category != null && !category.isBlank()) {
-            return em.createQuery(
-                    "FROM SkillDefinition d WHERE d.catalogId = ?1 AND d.category = ?2 ORDER BY d.name",
-                            SkillDefinition.class)
-                    .setParameter(1, catalogId)
-                    .setParameter(2, category)
-                    .setFirstResult(page * size)
-                    .setMaxResults(size)
-                    .getResultList();
-        }
-        return em.createQuery(
-                "FROM SkillDefinition d WHERE d.catalogId = ?1 ORDER BY d.category, d.name",
-                        SkillDefinition.class)
-                .setParameter(1, catalogId)
-                .setFirstResult(page * size)
-                .setMaxResults(size)
-                .getResultList();
+        return skillDefinitionRepository.listSkills(catalogId, category, page, size);
     }
 
     private static String[] parseCsvLine(String line) {

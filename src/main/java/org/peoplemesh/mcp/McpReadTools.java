@@ -6,11 +6,12 @@ import io.quarkiverse.mcp.server.Tool;
 import io.quarkus.security.Authenticated;
 import org.peoplemesh.domain.dto.MeshMatchResult;
 import org.peoplemesh.domain.dto.ProfileSchema;
-import org.peoplemesh.domain.enums.NodeType;
 import org.peoplemesh.domain.model.MeshNode;
+import org.peoplemesh.repository.NodeRepository;
 import org.peoplemesh.service.EmbeddingService;
 import org.peoplemesh.service.EmbeddingTextBuilder;
 import org.peoplemesh.service.MatchingService;
+import org.peoplemesh.service.NodeAccessPolicyService;
 import org.peoplemesh.service.ProfileService;
 import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
@@ -33,6 +34,10 @@ public class McpReadTools {
     EmbeddingService embeddingService;
     @Inject
     ObjectMapper objectMapper;
+    @Inject
+    NodeRepository nodeRepository;
+    @Inject
+    NodeAccessPolicyService nodeAccessPolicyService;
 
     @Tool(name = "peoplemesh_get_my_profile",
           description = "Retrieve your current PeopleMesh profile including professional, personal, and interest data.")
@@ -123,14 +128,12 @@ public class McpReadTools {
             } catch (IllegalArgumentException e) {
                 return new TextContent("Error: Invalid nodeId format.");
             }
-            MeshNode node = MeshNode.<MeshNode>findByIdOptional(id).orElse(null);
+            MeshNode node = nodeRepository.findById(id).orElse(null);
             if (node == null || node.embedding == null) {
                 return new TextContent("Node not found or has no embedding.");
             }
             UUID userId = userResolver.resolveUserId();
-            boolean isOwner = userId.equals(node.createdBy);
-            boolean isPublicNonUser = node.searchable && node.nodeType != NodeType.USER;
-            if (!isOwner && !isPublicNonUser) {
+            if (!nodeAccessPolicyService.canReadNode(userId, node)) {
                 return new TextContent("Error: You do not have access to this node.");
             }
             List<MeshMatchResult> results = matchingService.findAllMatches(userId, node.embedding, type, country);

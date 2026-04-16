@@ -213,6 +213,34 @@ public final class MatchingUtils {
         return totalWeight == 0 ? 0 : matchedWeight / totalWeight;
     }
 
+    static double computeLevelAwareCoverage(List<SkillWithLevel> required,
+                                            List<String> candidateSkills,
+                                            Map<String, Short> levelsBySkillName) {
+        if (required == null || required.isEmpty()) {
+            return 0;
+        }
+        double totalWeight = 0;
+        double matchedWeight = 0;
+        for (SkillWithLevel swl : required) {
+            totalWeight += 1.0;
+            String requiredName = swl.name();
+            int requiredLevel = swl.minLevel() != null ? swl.minLevel() : 0;
+            Short candidateLevel = levelsBySkillName == null
+                    ? null
+                    : levelsBySkillName.get(normalizeTerm(requiredName));
+            boolean hasSkill = candidateSkills != null && candidateSkills.stream()
+                    .anyMatch(s -> s.equalsIgnoreCase(requiredName));
+            if (candidateLevel != null && (requiredLevel <= 0 || candidateLevel >= requiredLevel)) {
+                matchedWeight += 1.0;
+            } else if (candidateLevel != null && requiredLevel > 0) {
+                matchedWeight += (double) candidateLevel / requiredLevel;
+            } else if (hasSkill) {
+                matchedWeight += requiredLevel <= 0 ? 1.0 : 0.5;
+            }
+        }
+        return totalWeight == 0 ? 0 : matchedWeight / totalWeight;
+    }
+
     private static Short findAssessmentLevelByName(Map<UUID, Short> assessments,
                                                      Map<UUID, String> skillNames,
                                                      String skillName) {

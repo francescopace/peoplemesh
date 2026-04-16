@@ -230,11 +230,11 @@
                         <!-- Infrastructure-bound: LDAP SDK, real LDAP server required -->
                         <exclude>org/peoplemesh/service/LdapImportService.class</exclude>
                         <!-- JAX-RS resources: thin delegates to services, covered by FullFlowIT -->
-                        <exclude>org/peoplemesh/api/MeResource.class</exclude>
-                        <exclude>org/peoplemesh/api/OAuthLoginResource.class</exclude>
-                        <exclude>org/peoplemesh/api/MatchesResource.class</exclude>
-                        <exclude>org/peoplemesh/api/NodesResource.class</exclude>
-                        <exclude>org/peoplemesh/api/SkillsResource.class</exclude>
+                        <exclude>org/peoplemesh/api/resource/MeResource.class</exclude>
+                        <exclude>org/peoplemesh/api/resource/OAuthLoginResource.class</exclude>
+                        <exclude>org/peoplemesh/api/resource/MatchesResource.class</exclude>
+                        <exclude>org/peoplemesh/api/resource/NodesResource.class</exclude>
+                        <exclude>org/peoplemesh/api/resource/SkillsResource.class</exclude>
                     </excludes>
                 </configuration>
                 <executions>

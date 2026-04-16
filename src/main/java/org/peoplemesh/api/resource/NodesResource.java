@@ -1,20 +1,30 @@
-package org.peoplemesh.api;
+package org.peoplemesh.api.resource;
 
 import io.quarkus.security.Authenticated;
+import jakarta.inject.Inject;
+import jakarta.validation.Valid;
+import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.POST;
+import jakarta.ws.rs.PUT;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.PathParam;
+import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
+import org.peoplemesh.api.error.ProblemDetail;
 import org.peoplemesh.domain.dto.NodeDto;
 import org.peoplemesh.domain.dto.NodePayload;
 import org.peoplemesh.domain.dto.SkillAssessmentDto;
 import org.peoplemesh.domain.enums.NodeType;
 import org.peoplemesh.domain.model.MeshNode;
 import org.peoplemesh.mcp.UserResolver;
+import org.peoplemesh.repository.NodeRepository;
+import org.peoplemesh.service.NodeAccessPolicyService;
 import org.peoplemesh.service.NodeService;
 import org.peoplemesh.service.ProfileService;
-import org.peoplemesh.service.SkillAssessmentHelper;
-import jakarta.inject.Inject;
-import jakarta.validation.Valid;
-import jakarta.ws.rs.*;
-import jakarta.ws.rs.core.MediaType;
-import jakarta.ws.rs.core.Response;
+import org.peoplemesh.service.SkillAssessmentService;
 
 import java.util.List;
 import java.util.UUID;
@@ -32,6 +42,15 @@ public class NodesResource {
 
     @Inject
     ProfileService profileService;
+
+    @Inject
+    NodeRepository nodeRepository;
+
+    @Inject
+    NodeAccessPolicyService nodeAccessPolicyService;
+
+    @Inject
+    SkillAssessmentService skillAssessmentService;
 
     @GET
     public Response listMyNodes(@QueryParam("type") String type) {
@@ -77,22 +96,19 @@ public class NodesResource {
     public Response getNodeSkills(@PathParam("nodeId") UUID nodeId,
                                   @QueryParam("catalog_id") UUID catalogId) {
         UUID userId = userResolver.resolveUserId();
-        MeshNode node = MeshNode.<MeshNode>findByIdOptional(nodeId)
-                .orElse(null);
+        MeshNode node = nodeRepository.findById(nodeId).orElse(null);
         if (node == null) {
             return Response.status(404)
                     .entity(ProblemDetail.of(404, "Not Found", "Node not found"))
                     .build();
         }
-        boolean isOwner = userId.equals(node.createdBy);
-        boolean isPublicNonUser = node.searchable && node.nodeType != NodeType.USER;
-        if (!isOwner && !isPublicNonUser) {
+        if (!nodeAccessPolicyService.canReadNode(userId, node)) {
             return Response.status(403)
                     .entity(ProblemDetail.of(403, "Forbidden", "You do not have access to this node"))
                     .build();
         }
 
-        List<SkillAssessmentDto> result = SkillAssessmentHelper.listAssessments(node.id, catalogId);
+        List<SkillAssessmentDto> result = skillAssessmentService.listAssessments(node.id, catalogId);
         return Response.ok(result).build();
     }
 

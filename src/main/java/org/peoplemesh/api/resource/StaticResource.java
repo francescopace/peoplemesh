@@ -1,8 +1,4 @@
-package org.peoplemesh.api;
-
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
+package org.peoplemesh.api.resource;
 
 import io.quarkus.arc.profile.IfBuildProfile;
 import jakarta.annotation.Priority;
@@ -12,6 +8,10 @@ import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Priorities;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 
 @Path("/")
 @Priority(Priorities.USER + 1000)

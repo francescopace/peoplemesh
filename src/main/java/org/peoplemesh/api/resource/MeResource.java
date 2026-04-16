@@ -1,4 +1,4 @@
-package org.peoplemesh.api;
+package org.peoplemesh.api.resource;
 
 import io.quarkus.security.Authenticated;
 import io.quarkus.security.identity.SecurityIdentity;
@@ -6,8 +6,15 @@ import io.smallrye.common.annotation.Blocking;
 import jakarta.annotation.security.PermitAll;
 import jakarta.inject.Inject;
 import jakarta.validation.Valid;
-import jakarta.ws.rs.NotAuthorizedException;
-import jakarta.ws.rs.*;
+import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DELETE;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.POST;
+import jakarta.ws.rs.PUT;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.PathParam;
+import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
@@ -17,32 +24,28 @@ import jakarta.ws.rs.core.UriInfo;
 import org.jboss.logging.Logger;
 import org.jboss.resteasy.reactive.RestForm;
 import org.jboss.resteasy.reactive.multipart.FileUpload;
+import org.peoplemesh.api.error.ProblemDetail;
 import org.peoplemesh.config.AppConfig;
-import org.peoplemesh.util.HashUtils;
 import org.peoplemesh.domain.dto.PrivacyDashboard;
 import org.peoplemesh.domain.dto.ProfileSchema;
 import org.peoplemesh.domain.dto.SkillAssessmentDto;
 import org.peoplemesh.domain.dto.UserNotificationDto;
-import org.peoplemesh.domain.enums.NodeType;
-import org.peoplemesh.domain.model.MeshNode;
-import org.peoplemesh.domain.model.UserIdentity;
 import org.peoplemesh.mcp.UserResolver;
 import org.peoplemesh.service.AuditService;
 import org.peoplemesh.service.ConsentService;
 import org.peoplemesh.service.CvImportService;
-import org.peoplemesh.service.EntitlementService;
 import org.peoplemesh.service.GdprService;
+import org.peoplemesh.service.MeService;
 import org.peoplemesh.service.OAuthCallbackService;
 import org.peoplemesh.service.ProfileService;
 import org.peoplemesh.service.SessionService;
-import org.peoplemesh.service.SkillAssessmentHelper;
+import org.peoplemesh.service.SkillAssessmentService;
 import org.peoplemesh.service.SkillReconciliationService;
 import org.peoplemesh.service.UserNotificationService;
+import org.peoplemesh.util.HashUtils;
 
 import java.io.InputStream;
 import java.nio.file.Files;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -76,9 +79,6 @@ public class MeResource {
     SkillReconciliationService reconciliationService;
 
     @Inject
-    EntitlementService entitlementService;
-
-    @Inject
     CvImportService cvImportService;
 
     @Inject
@@ -89,6 +89,12 @@ public class MeResource {
 
     @Inject
     AuditService auditService;
+
+    @Inject
+    MeService meService;
+
+    @Inject
+    SkillAssessmentService skillAssessmentService;
 
     @Context
     UriInfo uriInfo;
@@ -107,51 +113,19 @@ public class MeResource {
             return profileService.getProfile(userId)
                     .map(schema -> Response.ok(schema).build())
                     .orElse(Response.noContent().build());
-        } catch (NotAuthorizedException | SecurityException e) {
-            // 204 is intentional for SPA clients: anonymous users should get "no content".
+        } catch (jakarta.ws.rs.NotAuthorizedException | SecurityException e) {
             return Response.noContent().build();
         }
     }
 
     private Response identityPayload() {
-        UUID userId = identity.<UUID>getAttribute("pm.userId");
-        String provider = identity.<String>getAttribute("pm.provider");
-        String displayName = identity.<String>getAttribute("pm.displayName");
-        if (userId != null) {
-            return MeshNode.<MeshNode>findByIdOptional(userId)
-                    .filter(n -> n.nodeType == NodeType.USER)
-                    .map(node -> Response.ok(mePayload(userId, provider, displayName, node)).build())
-                    .orElseGet(() -> Response.noContent().build());
-        }
-
-        if (identity.isAnonymous()) {
-            return Response.noContent().build();
-        }
-
-        String subject = identity.getPrincipal().getName();
-        return UserIdentity.find("oauthSubject = ?1", subject)
-                .<UserIdentity>firstResultOptional()
-                .flatMap(user -> MeshNode.<MeshNode>findByIdOptional(user.nodeId)
-                        .map(node -> Response.ok(mePayload(user.nodeId, user.oauthProvider, null, node)).build()))
-                .orElseGet(() -> Response.status(404)
+        return meService.resolveIdentityPayload(identity)
+                .map(payload -> Response.ok(payload).build())
+                .orElseGet(() -> identity.isAnonymous()
+                        ? Response.noContent().build()
+                        : Response.status(404)
                         .entity(ProblemDetail.of(404, "Not Found", "User not registered"))
                         .build());
-    }
-
-    private Map<String, Object> mePayload(UUID nodeId, String provider, String displayName, MeshNode node) {
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("user_id", nodeId);
-        payload.put("provider", provider);
-        payload.put("email_present", node.externalId != null && !node.externalId.isBlank());
-        payload.put("profile_id", node.id);
-        if (displayName != null && !displayName.isBlank()) {
-            payload.put("display_name", displayName);
-        }
-        Map<String, Boolean> entitlements = new LinkedHashMap<>();
-        entitlements.put("can_create_job", entitlementService.canCreateJob(nodeId));
-        entitlements.put("can_manage_skills", entitlementService.canManageSkills(nodeId));
-        payload.put("entitlements", entitlements);
-        return payload;
     }
 
     @PUT
@@ -169,8 +143,7 @@ public class MeResource {
     @Authenticated
     @Path("/import-apply")
     @Consumes(MediaType.APPLICATION_JSON)
-    public Response applyImport(@Valid ProfileSchema selectedFields,
-                                @QueryParam("source") String source) {
+    public Response applyImport(@Valid ProfileSchema selectedFields, @QueryParam("source") String source) {
         UUID userId = userResolver.resolveUserId();
         if (source == null || source.isBlank()) {
             return Response.status(Response.Status.BAD_REQUEST)
@@ -219,13 +192,13 @@ public class MeResource {
     @Path("/skills")
     public Response getSkillAssessments(@QueryParam("catalog_id") UUID catalogId) {
         UUID userId = userResolver.resolveUserId();
-        MeshNode node = MeshNode.findPublishedUserNode(userId).orElse(null);
+        var node = meService.findCurrentUserNode(userId);
         if (node == null) {
             return Response.noContent().build();
         }
 
-        List<SkillAssessmentDto> result = new ArrayList<>(
-                SkillAssessmentHelper.listAssessments(node.id, catalogId));
+        List<SkillAssessmentDto> result = new java.util.ArrayList<>(
+                skillAssessmentService.listAssessments(node.id, catalogId));
 
         List<SkillAssessmentDto> suggestions = reconciliationService.reconcile(node.id, catalogId);
         result.addAll(suggestions);
@@ -239,7 +212,7 @@ public class MeResource {
     @Consumes(MediaType.APPLICATION_JSON)
     public Response updateSkillAssessments(List<@Valid SkillAssessmentDto> assessments) {
         UUID userId = userResolver.resolveUserId();
-        MeshNode node = MeshNode.findPublishedUserNode(userId).orElse(null);
+        var node = meService.findCurrentUserNode(userId);
         if (node == null) {
             return Response.status(404)
                     .entity(ProblemDetail.of(404, "Not Found", "No published profile found"))
@@ -270,15 +243,13 @@ public class MeResource {
         try (InputStream is = Files.newInputStream(file.filePath())) {
             CvImportService.CvImportResult result = cvImportService.parseCv(
                     is, file.fileName(), file.size(), userId);
-            return Response.ok(Map.of(
-                    "imported", result.schema(),
-                    "source", result.source())).build();
+            return Response.ok(Map.of("imported", result.schema(), "source", result.source())).build();
         } catch (IllegalStateException e) {
             return Response.status(Response.Status.BAD_GATEWAY)
-                    .entity(ProblemDetail.of(502, "Bad Gateway", e.getMessage()))
+                    .entity(ProblemDetail.of(502, "Bad Gateway", "CV processing failed"))
                     .build();
         } catch (Exception e) {
-            LOG.errorf(e, "CV upload processing failed: userId=%s fileName=%s", userId, file.fileName());
+            LOG.errorf(e, "CV upload processing failed for userId=%s", userId);
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
                     .entity(ProblemDetail.of(500, "Internal Server Error", "Error processing file"))
                     .build();
@@ -298,21 +269,15 @@ public class MeResource {
     @Authenticated
     @Path("/consents/{scope}")
     @Consumes(MediaType.APPLICATION_JSON)
-    public Response grantConsent(@PathParam("scope") String scope,
-                                 @Context HttpHeaders headers) {
-        if (!OAuthCallbackService.DEFAULT_CONSENT_SCOPES.contains(scope)) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(ProblemDetail.of(400, "Bad Request", "Invalid consent scope: " + scope))
-                    .build();
-        }
+    public Response grantConsent(@PathParam("scope") String scope, @Context HttpHeaders headers) {
+        meService.validateConsentScope(scope, OAuthCallbackService.DEFAULT_CONSENT_SCOPES);
         UUID userId = userResolver.resolveUserId();
         String ip = null;
         String forwarded = headers.getHeaderString("X-Forwarded-For");
         if (forwarded != null && !forwarded.isBlank()) {
             ip = forwarded.split(",")[0].trim();
         }
-        consentService.recordConsent(userId, scope,
-                ip != null ? HashUtils.sha256(ip) : null);
+        consentService.recordConsent(userId, scope, ip != null ? HashUtils.sha256(ip) : null);
         auditService.log(userId, "CONSENT_GRANTED", "privacy_consent");
         return Response.ok(Map.of("scope", scope, "status", "granted")).build();
     }
@@ -321,11 +286,7 @@ public class MeResource {
     @Authenticated
     @Path("/consents/{scope}")
     public Response revokeConsent(@PathParam("scope") String scope) {
-        if (!OAuthCallbackService.DEFAULT_CONSENT_SCOPES.contains(scope)) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(ProblemDetail.of(400, "Bad Request", "Invalid consent scope: " + scope))
-                    .build();
-        }
+        meService.validateConsentScope(scope, OAuthCallbackService.DEFAULT_CONSENT_SCOPES);
         UUID userId = userResolver.resolveUserId();
         consentService.revokeConsent(userId, scope);
         auditService.log(userId, "CONSENT_REVOKED", "privacy_consent");
