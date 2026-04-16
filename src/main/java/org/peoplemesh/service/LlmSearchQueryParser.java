@@ -10,28 +10,82 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
 import org.peoplemesh.domain.dto.ParsedSearchQuery;
+import org.peoplemesh.domain.dto.SkillWithLevel;
 
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 @ApplicationScoped
 public class LlmSearchQueryParser implements SearchQueryParser {
 
     private static final Logger LOG = Logger.getLogger(LlmSearchQueryParser.class);
+    private static final Set<String> ALLOWED_SENIORITY = Set.of("junior", "mid", "senior", "lead", "unknown");
+    private static final Pattern EXPLICIT_SENIORITY_SIGNAL = Pattern.compile(
+            "\\b(junior|jr\\.?|entry[\\s-]?level|graduate|intern|mid|middle|intermediate|senior|sr\\.?|lead|principal|staff|head|director|executive|vp|chief|c-level)\\b",
+            Pattern.CASE_INSENSITIVE
+    );
 
     private static final String SYSTEM_PROMPT = """
-            Extract search criteria from the query into JSON with this schema:
-            {"must_have":{"skills":[],"skills_with_level":[],"languages":[],"industries":[]},\
-            "nice_to_have":{"skills":[],"skills_with_level":[],"industries":[]},\
-            "seniority":"junior|mid|senior|lead|unknown",\
-            "keywords":[],"embedding_text":""}
+            Extract search criteria from the user query.
+            Output ONLY one raw JSON object (no markdown, no comments) using this exact schema:
+            {
+              "must_have": {
+                "skills": [],
+                "skills_with_level": [],
+                "roles": [],
+                "languages": [],
+                "location": [],
+                "industries": []
+              },
+              "nice_to_have": {
+                "skills": [],
+                "skills_with_level": [],
+                "industries": [],
+                "experience": []
+              },
+              "seniority": "junior|mid|senior|lead|unknown",
+              "negative_filters": {
+                "seniority": null,
+                "skills": [],
+                "location": []
+              },
+              "keywords": [],
+              "embedding_text": ""
+            }
             Rules:
+            - Return ALL keys from the schema every time; use [] or null when unknown.
             - Do not invent facts absent from the query.
             - must_have = strict requirements; nice_to_have = preferences.
-            - Normalize aliases (k8s->Kubernetes, js->JavaScript, ts->TypeScript).
-            - seniority: only if clearly implied, else "unknown".
-            - skills_with_level format: {"name":"X","level":1-5}. Use only when explicit level signal exists.
-            - keywords: short deduplicated intent terms.
-            - embedding_text: max 10-word English phrase describing the ideal candidate.""";
+            - skills = technologies, methods, or professional domains (Java, Kubernetes, machine learning).
+            - roles = job titles only (developer, architect, data engineer).
+            - languages = spoken human languages only (English, Italian). Never technologies.
+            - location = geographic places (city, country, region, continent: Europe, Italy, Berlin).
+            - industries = business sectors only (finance, healthcare, telecom, e-commerce).
+            - Normalize aliases only when explicit: k8s->Kubernetes, js->JavaScript, ts->TypeScript, ml->machine learning, ai->AI.
+            - skills_with_level item format is {"name":"X","min_level":1-5}; use only with explicit level signals.
+            - seniority must be set only when clearly implied, else "unknown".
+            - For queries about open roles/jobs/opportunities, keep seniority as "unknown" unless explicit seniority words appear.
+            - negative_filters only for explicit exclusions (e.g., "not junior", "exclude Germany").
+            - keywords must be short deduplicated intent terms useful for non-profile nodes (events, community, jobs).
+            - embedding_text must be an English phrase of max 10 words describing user intent.
+
+            Examples:
+            Query: "Java developer with Kubernetes experience"
+            JSON: {"must_have":{"skills":["Java","Kubernetes"],"skills_with_level":[],"roles":["developer"],"languages":[],"location":[],"industries":[]},"nice_to_have":{"skills":[],"skills_with_level":[],"industries":[],"experience":[]},"seniority":"unknown","negative_filters":{"seniority":null,"skills":[],"location":[]},"keywords":["developer"],"embedding_text":"Java developer with Kubernetes"}
+
+            Query: "Community for data engineers in Europe"
+            JSON: {"must_have":{"skills":["data engineering"],"skills_with_level":[],"roles":["data engineer"],"languages":[],"location":["Europe"],"industries":[]},"nice_to_have":{"skills":[],"skills_with_level":[],"industries":[],"experience":[]},"seniority":"unknown","negative_filters":{"seniority":null,"skills":[],"location":[]},"keywords":["community"],"embedding_text":"Data engineering community in Europe"}
+
+            Query: "Events about AI and machine learning"
+            JSON: {"must_have":{"skills":["AI","machine learning"],"skills_with_level":[],"roles":[],"languages":[],"location":[],"industries":[]},"nice_to_have":{"skills":[],"skills_with_level":[],"industries":[],"experience":[]},"seniority":"unknown","negative_filters":{"seniority":null,"skills":[],"location":[]},"keywords":["events"],"embedding_text":"Events about AI and machine learning"}
+
+            Query: "Open roles in cloud architecture"
+            JSON: {"must_have":{"skills":["cloud architecture"],"skills_with_level":[],"roles":["architect"],"languages":[],"location":[],"industries":[]},"nice_to_have":{"skills":[],"skills_with_level":[],"industries":[],"experience":[]},"seniority":"unknown","negative_filters":{"seniority":null,"skills":[],"location":[]},"keywords":["roles"],"embedding_text":"Open roles in cloud architecture"}""";
 
     @Inject
     ChatModel chatModel;
@@ -75,13 +129,152 @@ public class LlmSearchQueryParser implements SearchQueryParser {
                     .configure(DeserializationFeature.ACCEPT_EMPTY_STRING_AS_NULL_OBJECT, true)
                     .configure(DeserializationFeature.ACCEPT_EMPTY_ARRAY_AS_NULL_OBJECT, true);
             ParsedSearchQuery parsed = lenient.readValue(MatchingUtils.stripMarkdownFences(content), ParsedSearchQuery.class);
+            ParsedSearchQuery normalized = normalizeParsedQuery(parsed, userQuery);
             LOG.debugf("Parsed search query: skills=%s, seniority=%s",
-                    parsed.mustHave() != null ? parsed.mustHave().skills() : "[]",
-                    parsed.seniority());
-            return Optional.ofNullable(parsed);
+                    normalized.mustHave().skills(),
+                    normalized.seniority());
+            return Optional.of(normalized);
         } catch (Exception e) {
             LOG.warnf("Failed to parse LLM response: %s", e.getMessage());
             return Optional.empty();
         }
+    }
+
+    private ParsedSearchQuery normalizeParsedQuery(ParsedSearchQuery parsed, String userQuery) {
+        if (parsed == null) {
+            return null;
+        }
+        ParsedSearchQuery.MustHaveFilters mustHave = normalizeMustHave(parsed.mustHave());
+        ParsedSearchQuery.NiceToHaveFilters niceToHave = normalizeNiceToHave(parsed.niceToHave());
+        ParsedSearchQuery.NegativeFilters negativeFilters = normalizeNegativeFilters(parsed.negativeFilters());
+        List<String> keywords = normalizeStringList(parsed.keywords());
+        String embeddingText = parsed.embeddingText() == null || parsed.embeddingText().isBlank()
+                ? userQuery
+                : parsed.embeddingText().trim();
+        String seniority = normalizeSeniority(parsed.seniority(), userQuery);
+        return new ParsedSearchQuery(mustHave, niceToHave, seniority, negativeFilters, keywords, embeddingText);
+    }
+
+    private ParsedSearchQuery.MustHaveFilters normalizeMustHave(ParsedSearchQuery.MustHaveFilters source) {
+        if (source == null) {
+            return new ParsedSearchQuery.MustHaveFilters(
+                    Collections.emptyList(),
+                    Collections.emptyList(),
+                    Collections.emptyList(),
+                    Collections.emptyList(),
+                    Collections.emptyList(),
+                    Collections.emptyList()
+            );
+        }
+        return new ParsedSearchQuery.MustHaveFilters(
+                normalizeStringList(source.skills()),
+                normalizeSkillWithLevelList(source.skillsWithLevel()),
+                normalizeStringList(source.roles()),
+                normalizeStringList(source.languages()),
+                normalizeStringList(source.location()),
+                normalizeStringList(source.industries())
+        );
+    }
+
+    private ParsedSearchQuery.NiceToHaveFilters normalizeNiceToHave(ParsedSearchQuery.NiceToHaveFilters source) {
+        if (source == null) {
+            return new ParsedSearchQuery.NiceToHaveFilters(
+                    Collections.emptyList(),
+                    Collections.emptyList(),
+                    Collections.emptyList(),
+                    Collections.emptyList()
+            );
+        }
+        return new ParsedSearchQuery.NiceToHaveFilters(
+                normalizeStringList(source.skills()),
+                normalizeSkillWithLevelList(source.skillsWithLevel()),
+                normalizeStringList(source.industries()),
+                normalizeStringList(source.experience())
+        );
+    }
+
+    private ParsedSearchQuery.NegativeFilters normalizeNegativeFilters(ParsedSearchQuery.NegativeFilters source) {
+        if (source == null) {
+            return new ParsedSearchQuery.NegativeFilters(null, Collections.emptyList(), Collections.emptyList());
+        }
+        return new ParsedSearchQuery.NegativeFilters(
+                source.seniority() == null || source.seniority().isBlank() ? null : source.seniority().trim(),
+                normalizeStringList(source.skills()),
+                normalizeStringList(source.location())
+        );
+    }
+
+    private List<SkillWithLevel> normalizeSkillWithLevelList(List<SkillWithLevel> source) {
+        if (source == null || source.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<SkillWithLevel> cleaned = source.stream()
+                .filter(s -> s != null && s.name() != null && !s.name().isBlank())
+                .map(s -> {
+                    Integer minLevel = s.minLevel();
+                    if (minLevel != null) {
+                        minLevel = Math.max(1, Math.min(5, minLevel));
+                    }
+                    return new SkillWithLevel(s.name().trim(), minLevel);
+                })
+                .toList();
+        if (cleaned.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return cleaned.stream()
+                .collect(java.util.stream.Collectors.collectingAndThen(
+                        java.util.stream.Collectors.toMap(
+                                swl -> swl.name().toLowerCase(Locale.ROOT),
+                                swl -> swl,
+                                (left, right) -> right,
+                                java.util.LinkedHashMap::new
+                        ),
+                        m -> List.copyOf(m.values())
+                ));
+    }
+
+    private List<String> normalizeStringList(List<String> values) {
+        if (values == null || values.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return List.copyOf(values.stream()
+                .filter(v -> v != null && !v.isBlank())
+                .map(String::trim)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new)));
+    }
+
+    private String normalizeSeniority(String rawSeniority, String userQuery) {
+        String mapped = mapSeniorityValue(rawSeniority);
+        if (!ALLOWED_SENIORITY.contains(mapped)) {
+            mapped = "unknown";
+        }
+        if (!"unknown".equals(mapped) && (userQuery == null || !EXPLICIT_SENIORITY_SIGNAL.matcher(userQuery).find())) {
+            return "unknown";
+        }
+        return mapped;
+    }
+
+    private static String mapSeniorityValue(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return "unknown";
+        }
+        String normalized = raw.trim().toLowerCase(Locale.ROOT);
+        if (normalized.contains("junior") || normalized.matches(".*\\bjr\\b.*")
+                || normalized.contains("entry") || normalized.contains("intern")) {
+            return "junior";
+        }
+        if (normalized.contains("mid") || normalized.contains("middle") || normalized.contains("intermediate")) {
+            return "mid";
+        }
+        if (normalized.contains("senior") || normalized.matches(".*\\bsr\\b.*")) {
+            return "senior";
+        }
+        if (normalized.contains("lead") || normalized.contains("principal") || normalized.contains("staff")
+                || normalized.contains("head") || normalized.contains("director")
+                || normalized.contains("executive") || normalized.contains("chief")
+                || normalized.contains("vp")) {
+            return "lead";
+        }
+        return "unknown";
     }
 }
