@@ -3,9 +3,11 @@ package org.peoplemesh.api.resource;
 import io.smallrye.common.annotation.Blocking;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.DefaultValue;
+import jakarta.ws.rs.GET;
 import jakarta.ws.rs.HeaderParam;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
+import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.Context;
@@ -122,20 +124,19 @@ public class MaintenanceResource {
     @Path("/regenerate-embeddings")
     public Response regenerateEmbeddings(@HeaderParam("X-Maintenance-Key") String key,
                                          @QueryParam("nodeType") String nodeTypeParam,
-                                         @QueryParam("onlyMissing") @DefaultValue("true") boolean onlyMissing) {
+                                         @QueryParam("onlyMissing") @DefaultValue("true") boolean onlyMissing,
+                                         @QueryParam("batchSize") @DefaultValue("1") int batchSize) {
         assertAuthorized(key);
         try {
             NodeType nodeType = parseNodeType(nodeTypeParam);
-            NodeEmbeddingMaintenanceService.EmbeddingRegenerationResult result =
-                    nodeEmbeddingMaintenanceService.regenerateEmbeddings(MAINTENANCE_ACTOR_ID, nodeType, onlyMissing);
-            return Response.ok(Map.of(
-                    "action", "regenerate-embeddings",
-                    "nodeType", result.nodeType() == null ? "ALL" : result.nodeType().name(),
-                    "onlyMissing", result.onlyMissing(),
-                    "processed", result.processed(),
-                    "succeeded", result.succeeded(),
-                    "failed", result.failed()
-            )).build();
+            NodeEmbeddingMaintenanceService.EmbeddingRegenerationJobStatus status =
+                    nodeEmbeddingMaintenanceService.startRegenerationEmbeddings(
+                            MAINTENANCE_ACTOR_ID,
+                            nodeType,
+                            onlyMissing,
+                            batchSize
+                    );
+            return Response.accepted(status).build();
         } catch (IllegalArgumentException e) {
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity(ProblemDetail.of(400, "Validation Error", e.getMessage()))
@@ -143,6 +144,25 @@ public class MaintenanceResource {
         } catch (Exception e) {
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
                     .entity(ProblemDetail.of(500, "Embedding Error", "Embedding regeneration failed"))
+                    .build();
+        }
+    }
+
+    @GET
+    @Path("/regenerate-embeddings/{jobId}")
+    public Response regenerateEmbeddingsStatus(@HeaderParam("X-Maintenance-Key") String key,
+                                               @PathParam("jobId") String jobIdParam) {
+        assertAuthorized(key);
+        try {
+            UUID jobId = UUID.fromString(jobIdParam);
+            return nodeEmbeddingMaintenanceService.getRegenerationJobStatus(jobId)
+                    .<Response>map(status -> Response.ok(status).build())
+                    .orElseGet(() -> Response.status(Response.Status.NOT_FOUND)
+                            .entity(ProblemDetail.of(404, "Not Found", "Embedding job not found: " + jobIdParam))
+                            .build());
+        } catch (IllegalArgumentException e) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(ProblemDetail.of(400, "Validation Error", "Invalid jobId: " + jobIdParam))
                     .build();
         }
     }

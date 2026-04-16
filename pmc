@@ -34,7 +34,10 @@ Commands:
   ldap-import            Execute LDAP import and apply changes
   regenerate-embeddings  Regenerate node embeddings (all or filtered)
                          Options: --node-type <type> --only-missing[=true|false]
+                                  --batch-size <1..32> --no-wait --poll-interval-seconds <sec>
                          node-type values: USER, JOB, COMMUNITY, EVENT, PROJECT, INTEREST_GROUP
+  regenerate-embeddings-status  Poll status for an embedding regeneration job
+                                Options: --job-id <uuid>
 EOF
 }
 
@@ -61,11 +64,24 @@ EOF
 print_regenerate_embeddings_usage() {
   cat <<'EOF'
 Usage: maintenance regenerate-embeddings [--node-type <type>] [--only-missing[=true|false]]
+                                        [--batch-size <1..32>] [--no-wait]
+                                        [--poll-interval-seconds <sec>]
 Options:
   --node-type <type>      Optional node type filter.
                           Allowed values: USER, JOB, COMMUNITY, EVENT, PROJECT, INTEREST_GROUP
   --only-missing          Shortcut for --only-missing=true
   --only-missing=<bool>   true (default) or false
+  --batch-size <n>        Embedding batch size (default: 1, max: 32)
+  --no-wait               Return immediately with queued job response
+  --poll-interval-seconds Poll interval for status checks (default: 2)
+EOF
+}
+
+print_regenerate_embeddings_status_usage() {
+  cat <<'EOF'
+Usage: maintenance regenerate-embeddings-status --job-id <uuid>
+Options:
+  --job-id <uuid>         Embedding regeneration job id
 EOF
 }
 
@@ -107,9 +123,24 @@ format_body() {
   printf "%s\n" "${body}"
 }
 
-post_request() {
-  local path_with_query="$1"
-  local request_body="${2:-}"
+extract_json_field() {
+  local body="$1"
+  local field="$2"
+  if command -v jq >/dev/null 2>&1; then
+    printf "%s" "${body}" | jq -r --arg field "${field}" '.[$field] // empty'
+    return 0
+  fi
+  if command -v python3 >/dev/null 2>&1; then
+    printf "%s" "${body}" | python3 -c "import json,sys; d=json.loads(sys.stdin.read() or '{}'); v=d.get('${field}', ''); print(v if v is not None else '')"
+    return 0
+  fi
+  return 1
+}
+
+request_json() {
+  local method="$1"
+  local path_with_query="$2"
+  local request_body="${3:-}"
   local url="${BASE_URL%/}${path_with_query}"
   local key
   key="$(resolve_maintenance_key)"
@@ -117,11 +148,11 @@ post_request() {
   local tmp_body
   tmp_body="$(mktemp)"
   local http_code
-  if [[ -n "${request_body}" ]]; then
+  if [[ "${method}" == "POST" && -n "${request_body}" ]]; then
     http_code="$(
       curl -sS -o "${tmp_body}" -w "%{http_code}" \
         --max-time "${TIMEOUT_SECONDS}" \
-        -X POST \
+        -X "${method}" \
         -H "X-Maintenance-Key: ${key}" \
         -H "Accept: application/json" \
         -H "Content-Type: application/json" \
@@ -132,7 +163,7 @@ post_request() {
     http_code="$(
       curl -sS -o "${tmp_body}" -w "%{http_code}" \
         --max-time "${TIMEOUT_SECONDS}" \
-        -X POST \
+        -X "${method}" \
         -H "X-Maintenance-Key: ${key}" \
         -H "Accept: application/json" \
         "${url}"
@@ -148,7 +179,51 @@ post_request() {
     print_error "${body}"
     return 1
   fi
+  printf "%s" "${body}"
+}
+
+post_request() {
+  local path_with_query="$1"
+  local request_body="${2:-}"
+  local body
+  body="$(request_json "POST" "${path_with_query}" "${request_body}")"
   format_body "${body}"
+}
+
+get_request() {
+  local path_with_query="$1"
+  local body
+  body="$(request_json "GET" "${path_with_query}")"
+  format_body "${body}"
+}
+
+wait_for_regenerate_embeddings_job() {
+  local job_id="$1"
+  local poll_interval_seconds="$2"
+  while true; do
+    local status_body
+    status_body="$(request_json "GET" "/api/v1/maintenance/regenerate-embeddings/${job_id}")"
+    local status
+    status="$(extract_json_field "${status_body}" "status" || true)"
+    case "${status}" in
+      COMPLETED)
+        format_body "${status_body}"
+        return 0
+        ;;
+      FAILED)
+        format_body "${status_body}"
+        return 1
+        ;;
+      QUEUED|RUNNING)
+        sleep "${poll_interval_seconds}"
+        ;;
+      *)
+        print_error "Unexpected regenerate-embeddings job status: ${status:-<empty>}"
+        format_body "${status_body}"
+        return 1
+        ;;
+    esac
+  done
 }
 
 parse_global_options() {
@@ -283,6 +358,9 @@ command_ldap_preview() {
 command_regenerate_embeddings() {
   local node_type=""
   local only_missing="true"
+  local batch_size="1"
+  local no_wait="false"
+  local poll_interval_seconds="2"
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -306,6 +384,26 @@ command_regenerate_embeddings() {
         only_missing="${1#*=}"
         shift
         ;;
+      --batch-size)
+        batch_size="${2:-}"
+        shift 2
+        ;;
+      --batch-size=*)
+        batch_size="${1#*=}"
+        shift
+        ;;
+      --no-wait)
+        no_wait="true"
+        shift
+        ;;
+      --poll-interval-seconds)
+        poll_interval_seconds="${2:-}"
+        shift 2
+        ;;
+      --poll-interval-seconds=*)
+        poll_interval_seconds="${1#*=}"
+        shift
+        ;;
       *)
         print_error "Unknown option for regenerate-embeddings: $1"
         print_regenerate_embeddings_usage
@@ -319,19 +417,80 @@ command_regenerate_embeddings() {
     exit 2
   fi
 
-  if [[ -z "${node_type}" ]]; then
-    post_request "/api/v1/maintenance/regenerate-embeddings?onlyMissing=${only_missing}"
-    return 0
+  if [[ ! "${batch_size}" =~ ^[0-9]+$ ]]; then
+    print_error "--batch-size must be an integer between 1 and 32"
+    exit 2
   fi
-
-  local normalized_node_type
-  if ! normalized_node_type="$(normalize_node_type "${node_type}")"; then
-    print_error "Invalid --node-type: ${node_type}"
-    print_error "Allowed values: ${NODE_TYPE_OPTIONS[*]}"
+  if (( batch_size < 1 || batch_size > 32 )); then
+    print_error "--batch-size must be between 1 and 32"
+    exit 2
+  fi
+  if [[ ! "${poll_interval_seconds}" =~ ^[0-9]+$ ]] || (( poll_interval_seconds < 1 )); then
+    print_error "--poll-interval-seconds must be an integer >= 1"
     exit 2
   fi
 
-  post_request "/api/v1/maintenance/regenerate-embeddings?nodeType=${normalized_node_type}&onlyMissing=${only_missing}"
+  local path="/api/v1/maintenance/regenerate-embeddings?onlyMissing=${only_missing}&batchSize=${batch_size}"
+
+  if [[ -n "${node_type}" ]]; then
+    local normalized_node_type
+    if ! normalized_node_type="$(normalize_node_type "${node_type}")"; then
+      print_error "Invalid --node-type: ${node_type}"
+      print_error "Allowed values: ${NODE_TYPE_OPTIONS[*]}"
+      exit 2
+    fi
+    path="${path}&nodeType=${normalized_node_type}"
+  fi
+
+  local started_body
+  started_body="$(request_json "POST" "${path}")"
+  if [[ "${no_wait}" == "true" ]]; then
+    format_body "${started_body}"
+    return 0
+  fi
+
+  local job_id
+  job_id="$(extract_json_field "${started_body}" "jobId" || true)"
+  if [[ -z "${job_id}" ]]; then
+    print_error "Missing jobId from regenerate-embeddings response"
+    format_body "${started_body}"
+    return 1
+  fi
+  wait_for_regenerate_embeddings_job "${job_id}" "${poll_interval_seconds}"
+}
+
+command_regenerate_embeddings_status() {
+  local job_id=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h|--help)
+        print_regenerate_embeddings_status_usage
+        exit 0
+        ;;
+      --job-id)
+        job_id="${2:-}"
+        shift 2
+        ;;
+      --job-id=*)
+        job_id="${1#*=}"
+        shift
+        ;;
+      *)
+        print_error "Unknown option for regenerate-embeddings-status: $1"
+        print_regenerate_embeddings_status_usage
+        exit 2
+        ;;
+    esac
+  done
+
+  if [[ -z "${job_id}" ]]; then
+    print_error "Missing required option --job-id"
+    print_regenerate_embeddings_status_usage
+    exit 2
+  fi
+
+  get_request "/api/v1/maintenance/regenerate-embeddings/${job_id}"
 }
 
 main() {
@@ -363,6 +522,7 @@ main() {
     ldap-preview) command_ldap_preview "$@" ;;
     ldap-import) post_request "/api/v1/maintenance/ldap-import" ;;
     regenerate-embeddings) command_regenerate_embeddings "$@" ;;
+    regenerate-embeddings-status) command_regenerate_embeddings_status "$@" ;;
     *)
       print_error "Unknown command: ${command}"
       print_usage

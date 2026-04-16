@@ -31,8 +31,13 @@ Embedding maintenance helps keep derived data aligned with source updates and mo
 3. Run the CLI command for your scope:
    - all missing: `./pmc regenerate-embeddings --base-url http://localhost:8080`
    - missing for one type: `./pmc regenerate-embeddings --node-type USER --only-missing --base-url http://localhost:8080`
-   - full rebuild for one type: `./pmc regenerate-embeddings --node-type USER --base-url http://localhost:8080`
-4. Use this after LDAP import to backfill only missing user embeddings:
+   - full rebuild for one type: `./pmc regenerate-embeddings --node-type USER --only-missing=false --base-url http://localhost:8080`
+   - explicit batch tuning (default is `1`): `./pmc regenerate-embeddings --node-type USER --only-missing=false --batch-size 4`
+4. Choose execution style:
+   - default mode waits and polls until completion
+   - asynchronous fire-and-return: `./pmc regenerate-embeddings --node-type USER --no-wait`
+   - manual status polling: `./pmc regenerate-embeddings-status --job-id <uuid>`
+5. Use this after LDAP import to backfill only missing user embeddings:
    - run LDAP import (`ldap-import`)
    - then run `regenerate-embeddings --node-type USER --only-missing`
 
@@ -40,9 +45,9 @@ Note: Equivalent REST APIs are available for B2B integrations; see [`../referenc
 
 ## Verification
 
-- Response includes `processed`, `succeeded`, and `failed`.
-- `failed` should be `0` in normal operation.
-- Logs include maintenance execution summary with node type and mode.
+- Start response returns a job descriptor containing `jobId`, `status`, `batchSize`, and scope fields.
+- Final status should show `status=COMPLETED`, with `failed=0` in normal operation.
+- Logs include maintenance execution summary with node type, mode, and batch size.
 
 ## Troubleshooting
 

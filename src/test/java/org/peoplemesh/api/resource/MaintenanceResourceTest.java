@@ -19,9 +19,10 @@ import org.peoplemesh.service.LdapImportService;
 import org.peoplemesh.service.NodeEmbeddingMaintenanceService;
 import org.peoplemesh.util.IpAllowlistUtils;
 
+import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -157,20 +158,31 @@ class MaintenanceResourceTest {
         when(config.maintenance()).thenReturn(maintenanceConfig);
         when(maintenanceConfig.apiKey()).thenReturn(Optional.of("valid-key"));
         when(maintenanceConfig.allowedCidrs()).thenReturn(Optional.empty());
-        when(nodeEmbeddingMaintenanceService.regenerateEmbeddings(any(), isNull(), eq(false)))
-                .thenReturn(new NodeEmbeddingMaintenanceService.EmbeddingRegenerationResult(12, 12, 0, null, false));
+        NodeEmbeddingMaintenanceService.EmbeddingRegenerationJobStatus queuedStatus =
+                new NodeEmbeddingMaintenanceService.EmbeddingRegenerationJobStatus(
+                        "regenerate-embeddings",
+                        UUID.randomUUID(),
+                        NodeEmbeddingMaintenanceService.JobState.QUEUED,
+                        "ALL",
+                        false,
+                        1,
+                        12,
+                        0,
+                        0,
+                        0,
+                        null,
+                        Instant.now(),
+                        null,
+                        null
+                );
+        when(nodeEmbeddingMaintenanceService.startRegenerationEmbeddings(any(), isNull(), eq(false), eq(1)))
+                .thenReturn(queuedStatus);
 
-        Response response = resource.regenerateEmbeddings("valid-key", null, false);
+        Response response = resource.regenerateEmbeddings("valid-key", null, false, 1);
 
-        assertEquals(200, response.getStatus());
-        @SuppressWarnings("unchecked")
-        Map<String, Object> body = (Map<String, Object>) response.getEntity();
-        assertEquals("ALL", body.get("nodeType"));
-        assertEquals(false, body.get("onlyMissing"));
-        assertEquals(12, body.get("processed"));
-        assertEquals(12, body.get("succeeded"));
-        assertEquals(0, body.get("failed"));
-        verify(nodeEmbeddingMaintenanceService).regenerateEmbeddings(any(), isNull(), eq(false));
+        assertEquals(202, response.getStatus());
+        assertSame(queuedStatus, response.getEntity());
+        verify(nodeEmbeddingMaintenanceService).startRegenerationEmbeddings(any(), isNull(), eq(false), eq(1));
     }
 
     @Test
@@ -178,18 +190,31 @@ class MaintenanceResourceTest {
         when(config.maintenance()).thenReturn(maintenanceConfig);
         when(maintenanceConfig.apiKey()).thenReturn(Optional.of("valid-key"));
         when(maintenanceConfig.allowedCidrs()).thenReturn(Optional.empty());
-        when(nodeEmbeddingMaintenanceService.regenerateEmbeddings(any(), eq(NodeType.JOB), eq(true)))
-                .thenReturn(new NodeEmbeddingMaintenanceService.EmbeddingRegenerationResult(5, 5, 0, NodeType.JOB, true));
+        NodeEmbeddingMaintenanceService.EmbeddingRegenerationJobStatus queuedStatus =
+                new NodeEmbeddingMaintenanceService.EmbeddingRegenerationJobStatus(
+                        "regenerate-embeddings",
+                        UUID.randomUUID(),
+                        NodeEmbeddingMaintenanceService.JobState.QUEUED,
+                        "JOB",
+                        true,
+                        32,
+                        5,
+                        0,
+                        0,
+                        0,
+                        null,
+                        Instant.now(),
+                        null,
+                        null
+                );
+        when(nodeEmbeddingMaintenanceService.startRegenerationEmbeddings(any(), eq(NodeType.JOB), eq(true), eq(32)))
+                .thenReturn(queuedStatus);
 
-        Response response = resource.regenerateEmbeddings("valid-key", "job", true);
+        Response response = resource.regenerateEmbeddings("valid-key", "job", true, 32);
 
-        assertEquals(200, response.getStatus());
-        @SuppressWarnings("unchecked")
-        Map<String, Object> body = (Map<String, Object>) response.getEntity();
-        assertEquals("JOB", body.get("nodeType"));
-        assertEquals(true, body.get("onlyMissing"));
-        assertEquals(5, body.get("processed"));
-        verify(nodeEmbeddingMaintenanceService).regenerateEmbeddings(any(), eq(NodeType.JOB), eq(true));
+        assertEquals(202, response.getStatus());
+        assertSame(queuedStatus, response.getEntity());
+        verify(nodeEmbeddingMaintenanceService).startRegenerationEmbeddings(any(), eq(NodeType.JOB), eq(true), eq(32));
     }
 
     @Test
@@ -198,9 +223,78 @@ class MaintenanceResourceTest {
         when(maintenanceConfig.apiKey()).thenReturn(Optional.of("valid-key"));
         when(maintenanceConfig.allowedCidrs()).thenReturn(Optional.empty());
 
-        Response response = resource.regenerateEmbeddings("valid-key", "not-valid", false);
+        Response response = resource.regenerateEmbeddings("valid-key", "not-valid", false, 1);
 
         assertEquals(400, response.getStatus());
-        verify(nodeEmbeddingMaintenanceService, never()).regenerateEmbeddings(any(), any(), anyBoolean());
+        verify(nodeEmbeddingMaintenanceService, never()).startRegenerationEmbeddings(any(), any(), anyBoolean(), anyInt());
+    }
+
+    @Test
+    void regenerateEmbeddings_invalidBatchSize_returns400() {
+        when(config.maintenance()).thenReturn(maintenanceConfig);
+        when(maintenanceConfig.apiKey()).thenReturn(Optional.of("valid-key"));
+        when(maintenanceConfig.allowedCidrs()).thenReturn(Optional.empty());
+        when(nodeEmbeddingMaintenanceService.startRegenerationEmbeddings(any(), isNull(), eq(true), eq(64)))
+                .thenThrow(new IllegalArgumentException("batchSize must be between 1 and 32"));
+
+        Response response = resource.regenerateEmbeddings("valid-key", null, true, 64);
+
+        assertEquals(400, response.getStatus());
+    }
+
+    @Test
+    void regenerateEmbeddingsStatus_knownJob_returns200() {
+        when(config.maintenance()).thenReturn(maintenanceConfig);
+        when(maintenanceConfig.apiKey()).thenReturn(Optional.of("valid-key"));
+        when(maintenanceConfig.allowedCidrs()).thenReturn(Optional.empty());
+        UUID jobId = UUID.randomUUID();
+        NodeEmbeddingMaintenanceService.EmbeddingRegenerationJobStatus status =
+                new NodeEmbeddingMaintenanceService.EmbeddingRegenerationJobStatus(
+                        "regenerate-embeddings",
+                        jobId,
+                        NodeEmbeddingMaintenanceService.JobState.RUNNING,
+                        "ALL",
+                        true,
+                        16,
+                        100,
+                        32,
+                        32,
+                        0,
+                        null,
+                        Instant.now(),
+                        Instant.now(),
+                        null
+                );
+        when(nodeEmbeddingMaintenanceService.getRegenerationJobStatus(jobId)).thenReturn(Optional.of(status));
+
+        Response response = resource.regenerateEmbeddingsStatus("valid-key", jobId.toString());
+
+        assertEquals(200, response.getStatus());
+        assertSame(status, response.getEntity());
+    }
+
+    @Test
+    void regenerateEmbeddingsStatus_unknownJob_returns404() {
+        when(config.maintenance()).thenReturn(maintenanceConfig);
+        when(maintenanceConfig.apiKey()).thenReturn(Optional.of("valid-key"));
+        when(maintenanceConfig.allowedCidrs()).thenReturn(Optional.empty());
+        UUID jobId = UUID.randomUUID();
+        when(nodeEmbeddingMaintenanceService.getRegenerationJobStatus(jobId)).thenReturn(Optional.empty());
+
+        Response response = resource.regenerateEmbeddingsStatus("valid-key", jobId.toString());
+
+        assertEquals(404, response.getStatus());
+    }
+
+    @Test
+    void regenerateEmbeddingsStatus_invalidJobId_returns400() {
+        when(config.maintenance()).thenReturn(maintenanceConfig);
+        when(maintenanceConfig.apiKey()).thenReturn(Optional.of("valid-key"));
+        when(maintenanceConfig.allowedCidrs()).thenReturn(Optional.empty());
+
+        Response response = resource.regenerateEmbeddingsStatus("valid-key", "not-a-uuid");
+
+        assertEquals(400, response.getStatus());
+        verify(nodeEmbeddingMaintenanceService, never()).getRegenerationJobStatus(any());
     }
 }

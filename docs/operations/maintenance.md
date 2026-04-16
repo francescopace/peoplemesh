@@ -29,7 +29,7 @@ Task-specific procedures stay in the dedicated how-to guides.
 | Purge consent tokens | `./pmc purge-consent-tokens` | `POST /api/v1/maintenance/purge-consent-tokens` | Hourly | [`purge-consent-tokens.md#procedure`](../how-to/purge-consent-tokens.md#procedure) |
 | Enforce retention | `./pmc enforce-retention` | `POST /api/v1/maintenance/enforce-retention` | Daily | [`enforce-retention.md#procedure`](../how-to/enforce-retention.md#procedure) |
 | Community auto-clustering | `./pmc run-clustering` | `POST /api/v1/maintenance/run-clustering` | Weekly | [`configure-community-auto-clustering.md#procedure`](../how-to/configure-community-auto-clustering.md#procedure) |
-| Regenerate embeddings (all, by type, or only missing) | `./pmc regenerate-embeddings ...` | `POST /api/v1/maintenance/regenerate-embeddings` | On demand / after embedding-model changes or LDAP import | [`regenerate-node-embeddings.md#procedure`](../how-to/regenerate-node-embeddings.md#procedure) |
+| Regenerate embeddings (all, by type, or only missing) | `./pmc regenerate-embeddings ...` | `POST /api/v1/maintenance/regenerate-embeddings` + `GET /api/v1/maintenance/regenerate-embeddings/{jobId}` | On demand / after embedding-model changes or LDAP import | [`regenerate-node-embeddings.md#procedure`](../how-to/regenerate-node-embeddings.md#procedure) |
 | LDAP import | `./pmc ldap-import` | `POST /api/v1/maintenance/ldap-import` | Daily | [`configure-ldap-import.md#procedure`](../how-to/configure-ldap-import.md#procedure) |
 
 ## Maintenance CLI
@@ -44,8 +44,10 @@ Then run commands via executable (omit `--base-url` for local default):
 
 - `./pmc ldap-import`
 - `./pmc regenerate-embeddings --node-type USER --only-missing`
+- `./pmc regenerate-embeddings-status --job-id <uuid>`
 
 `regenerate-embeddings` defaults to `onlyMissing=true`.
+It also defaults to `batchSize=1`, and by default waits for completion through polling.
 
 Defaults:
 
