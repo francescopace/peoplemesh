@@ -4,8 +4,6 @@ import org.peoplemesh.domain.dto.SkillWithLevel;
 import org.peoplemesh.domain.enums.EmploymentType;
 import org.peoplemesh.domain.enums.WorkMode;
 import org.peoplemesh.domain.model.MeshNode;
-import org.peoplemesh.domain.model.SkillDefinition;
-import org.peoplemesh.domain.model.SkillAssessment;
 
 import java.time.Instant;
 import java.util.*;
@@ -163,54 +161,11 @@ public final class MatchingUtils {
     }
 
     /**
-     * Compute level-aware skill coverage. If candidateSkills is non-null, also gives
-     * partial credit (0.5) for tag-present but unassessed skills.
+     * Compute level-aware skill coverage when no per-node cached levels are available.
      */
     static double computeLevelAwareCoverage(UUID nodeId, List<SkillWithLevel> required,
                                              List<String> candidateSkills) {
-        if (required == null || required.isEmpty()) return 0;
-
-        Map<UUID, Short> assessmentCache = null;
-        Map<UUID, String> skillNameCache = null;
-        if (nodeId != null) {
-            List<SkillAssessment> assessments = SkillAssessment.findByNode(nodeId);
-            assessmentCache = new HashMap<>();
-            for (SkillAssessment a : assessments) {
-                assessmentCache.put(a.skillId, a.level);
-            }
-            if (!assessmentCache.isEmpty()) {
-                List<UUID> skillIds = new ArrayList<>(assessmentCache.keySet());
-                skillNameCache = SkillDefinition.<SkillDefinition>list("id in ?1", skillIds)
-                        .stream()
-                        .collect(java.util.stream.Collectors.toMap(d -> d.id, d -> d.name));
-            }
-        }
-
-        double totalWeight = 0;
-        double matchedWeight = 0;
-        for (SkillWithLevel swl : required) {
-            totalWeight += 1.0;
-
-            boolean hasSkill = candidateSkills != null && candidateSkills.stream()
-                    .anyMatch(s -> s.equalsIgnoreCase(swl.name()));
-
-            int requiredLevel = swl.minLevel() != null ? swl.minLevel() : 0;
-
-            if (assessmentCache != null) {
-                Short candidateLevel = findAssessmentLevelByName(
-                        assessmentCache, skillNameCache, swl.name());
-                if (candidateLevel != null && (requiredLevel <= 0 || candidateLevel >= requiredLevel)) {
-                    matchedWeight += 1.0;
-                } else if (candidateLevel != null && requiredLevel > 0) {
-                    matchedWeight += (double) candidateLevel / requiredLevel;
-                } else if (hasSkill) {
-                    matchedWeight += 0.5;
-                }
-            } else if (hasSkill) {
-                matchedWeight += requiredLevel <= 0 ? 1.0 : 0.5;
-            }
-        }
-        return totalWeight == 0 ? 0 : matchedWeight / totalWeight;
+        return computeLevelAwareCoverage(required, candidateSkills, null);
     }
 
     static double computeLevelAwareCoverage(List<SkillWithLevel> required,
@@ -239,19 +194,6 @@ public final class MatchingUtils {
             }
         }
         return totalWeight == 0 ? 0 : matchedWeight / totalWeight;
-    }
-
-    private static Short findAssessmentLevelByName(Map<UUID, Short> assessments,
-                                                     Map<UUID, String> skillNames,
-                                                     String skillName) {
-        if (skillNames == null) return null;
-        for (Map.Entry<UUID, Short> entry : assessments.entrySet()) {
-            String name = skillNames.get(entry.getKey());
-            if (name != null && name.equalsIgnoreCase(skillName)) {
-                return entry.getValue();
-            }
-        }
-        return null;
     }
 
     static double round3(double value) {

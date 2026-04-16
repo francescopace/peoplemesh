@@ -95,6 +95,28 @@ Dev model defaults are configured in `application-dev.properties`:
 | `peoplemesh.session.secret` | — | HMAC signing key for session cookies |
 | `peoplemesh.oauth.state-secret` | — | HMAC signing key for OAuth state values |
 
+## Persistence and Database Tuning
+
+The defaults below are tuned for a balanced dev/prod baseline and can be adjusted with load tests.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `quarkus.datasource.jdbc.min-size` | `3` | Minimum JDBC connections kept in pool |
+| `quarkus.datasource.jdbc.max-size` | `30` | Maximum JDBC connections in pool |
+| `quarkus.datasource.jdbc.acquisition-timeout` | `10S` | Max wait for a JDBC connection from pool |
+| `quarkus.hibernate-orm.jdbc.statement-batch-size` | `50` | JDBC batch size for write-heavy operations |
+| `quarkus.hibernate-orm.jdbc.statement-fetch-size` | `100` | JDBC fetch size hint for read-heavy operations |
+
+Flyway applies persistence-performance indexes in:
+
+- `src/main/resources/db/migration/V1__init.sql`
+
+Current migration includes:
+
+- Expression/partial index for ATS job external id lookups
+- GIN index for node tags array filtering
+- HNSW index for `skills.skill_definition.embedding` is intentionally deferred until the column uses a fixed-dimension `vector(n)` definition
+
 ## Search
 
 | Key | Default | Description |

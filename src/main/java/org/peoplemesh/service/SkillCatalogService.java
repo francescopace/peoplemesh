@@ -2,7 +2,6 @@ package org.peoplemesh.service;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.NotFoundException;
 import org.jboss.logging.Logger;
@@ -27,9 +26,6 @@ public class SkillCatalogService {
 
     @Inject
     EmbeddingService embeddingService;
-
-    @Inject
-    EntityManager em;
 
     @Inject
     SkillDefinitionRepository skillDefinitionRepository;
@@ -74,7 +70,7 @@ public class SkillCatalogService {
             CsvColumnMapping mapping = CsvColumnMapping.fromHeader(parseCsvLine(header));
 
             String line;
-            Map<String, SkillDefinition> existingByName = SkillDefinition.findByCatalog(catalogId).stream()
+            Map<String, SkillDefinition> existingByName = findCatalogSkills(catalogId).stream()
                     .collect(java.util.stream.Collectors.toMap(
                             sd -> sd.name.toLowerCase(Locale.ROOT),
                             sd -> sd,
@@ -128,23 +124,66 @@ public class SkillCatalogService {
 
     @Transactional
     public void generateEmbeddings(UUID catalogId) {
-        List<SkillDefinition> skills = SkillDefinition.findByCatalog(catalogId);
+        List<SkillDefinition> skills = findCatalogSkills(catalogId).stream()
+                .filter(sd -> sd.embedding == null)
+                .toList();
         int generated = 0;
-        for (SkillDefinition sd : skills) {
-            if (sd.embedding != null) continue;
+        int batchSize = 24;
+        for (int i = 0; i < skills.size(); i += batchSize) {
+            List<SkillDefinition> batch = skills.subList(i, Math.min(i + batchSize, skills.size()));
+            List<String> texts = batch.stream().map(SkillCatalogService::toEmbeddingText).toList();
             try {
-                String text = sd.category + ": " + sd.name;
-                if (sd.aliases != null && !sd.aliases.isEmpty()) {
-                    text += " (" + String.join(", ", sd.aliases) + ")";
-                }
-                sd.embedding = embeddingService.generateEmbedding(text);
-                generated++;
+                List<float[]> embeddings = embeddingService.generateEmbeddings(texts);
+                generated += persistEmbeddingBatch(batch, embeddings);
             } catch (Exception e) {
-                LOG.warnf("Failed to generate embedding for skill %s: %s", sd.name, e.getMessage());
+                LOG.warnf("Batch skill embedding failed, fallback to single-item mode: %s", e.getMessage());
+                generated += generateEmbeddingSingleFallback(batch);
             }
         }
         LOG.infof("Generated %d embeddings for catalog %s (of %d total skills)",
                 generated, catalogId, skills.size());
+    }
+
+    private static String toEmbeddingText(SkillDefinition sd) {
+        String text = sd.category + ": " + sd.name;
+        if (sd.aliases != null && !sd.aliases.isEmpty()) {
+            text += " (" + String.join(", ", sd.aliases) + ")";
+        }
+        return text;
+    }
+
+    private int persistEmbeddingBatch(List<SkillDefinition> batch, List<float[]> embeddings) {
+        int generated = 0;
+        int upTo = Math.min(batch.size(), embeddings.size());
+        for (int i = 0; i < upTo; i++) {
+            float[] embedding = embeddings.get(i);
+            if (embedding == null) {
+                continue;
+            }
+            SkillDefinition skill = batch.get(i);
+            skill.embedding = embedding;
+            persistSkillDefinition(skill);
+            generated++;
+        }
+        return generated;
+    }
+
+    private int generateEmbeddingSingleFallback(List<SkillDefinition> batch) {
+        int generated = 0;
+        for (SkillDefinition skill : batch) {
+            try {
+                float[] embedding = embeddingService.generateEmbedding(toEmbeddingText(skill));
+                if (embedding == null) {
+                    continue;
+                }
+                skill.embedding = embedding;
+                persistSkillDefinition(skill);
+                generated++;
+            } catch (Exception e) {
+                LOG.warnf("Failed to generate embedding for skill %s: %s", skill.name, e.getMessage());
+            }
+        }
+        return generated;
     }
 
     @Transactional
@@ -163,7 +202,37 @@ public class SkillCatalogService {
     }
 
     public List<SkillDefinition> listSkills(UUID catalogId, String category, int page, int size) {
-        return skillDefinitionRepository.listSkills(catalogId, category, page, size);
+        if (skillDefinitionRepository != null) {
+            return skillDefinitionRepository.listSkills(catalogId, category, page, size);
+        }
+        List<SkillDefinition> catalogSkills = findCatalogSkills(catalogId);
+        if (category != null && !category.isBlank()) {
+            catalogSkills = catalogSkills.stream()
+                    .filter(sd -> category.equals(sd.category))
+                    .toList();
+        }
+        int from = Math.max(0, page * size);
+        if (from >= catalogSkills.size()) {
+            return List.of();
+        }
+        int to = Math.min(catalogSkills.size(), from + size);
+        return catalogSkills.subList(from, to);
+    }
+
+    private List<SkillDefinition> findCatalogSkills(UUID catalogId) {
+        if (skillDefinitionRepository != null) {
+            List<SkillDefinition> skills = skillDefinitionRepository.findByCatalog(catalogId);
+            return skills != null ? skills : List.of();
+        }
+        return SkillDefinition.findByCatalog(catalogId);
+    }
+
+    private void persistSkillDefinition(SkillDefinition skillDefinition) {
+        if (skillDefinitionRepository != null) {
+            skillDefinitionRepository.upsert(skillDefinition);
+            return;
+        }
+        skillDefinition.persist();
     }
 
     private static String[] parseCsvLine(String line) {

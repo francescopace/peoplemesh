@@ -6,8 +6,10 @@ import org.jboss.logging.Logger;
 import org.peoplemesh.config.AppConfig;
 import org.peoplemesh.util.StringUtils;
 import org.peoplemesh.domain.model.MeshNode;
+import org.peoplemesh.repository.NodeRepository;
 
 import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 
 @ApplicationScoped
@@ -18,6 +20,9 @@ public class NotificationService {
     @Inject
     AppConfig appConfig;
 
+    @Inject
+    NodeRepository nodeRepository;
+
     public void notifyAuditEvent(UUID userId, String action, String toolName, String metadataJson) {
         if (userId == null || action == null || action.isBlank()) {
             return;
@@ -26,8 +31,15 @@ public class NotificationService {
             return;
         }
 
-        MeshNode node = MeshNode.<MeshNode>findByIdOptional(userId).orElse(null);
-        if (node == null || node.externalId == null || node.externalId.isBlank()) {
+        Optional<MeshNode> maybeNode = nodeRepository != null
+                ? nodeRepository.findById(userId)
+                : MeshNode.findByIdOptional(userId).map(MeshNode.class::cast);
+        if (maybeNode.isEmpty()) {
+            LOG.debugf("Notification skipped (node missing): userId=%s action=%s", userId, action);
+            return;
+        }
+        MeshNode node = maybeNode.get();
+        if (node.externalId == null || node.externalId.isBlank()) {
             LOG.debugf("Notification skipped (no email): userId=%s action=%s", userId, action);
             return;
         }

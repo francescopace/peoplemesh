@@ -2,11 +2,10 @@ package org.peoplemesh.service;
 
 import org.peoplemesh.domain.dto.JobPostingDto;
 import org.peoplemesh.domain.enums.NodeType;
-
 import org.peoplemesh.domain.model.MeshNode;
+import org.peoplemesh.repository.NodeRepository;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
@@ -22,16 +21,13 @@ public class JobService {
     private static final Logger LOG = Logger.getLogger(JobService.class);
 
     @Inject
-    NodeService nodeService;
-
-    @Inject
     EmbeddingService embeddingService;
 
     @Inject
     AuditService auditService;
 
     @Inject
-    EntityManager entityManager;
+    NodeRepository nodeRepository;
 
     /**
      * Upsert a job from an ATS feed. If a JOB node with the given externalId
@@ -89,16 +85,7 @@ public class JobService {
     }
 
     Optional<MeshNode> loadByExternalId(UUID ownerUserId, String externalId) {
-        return entityManager.createQuery(
-                        "FROM MeshNode n WHERE n.createdBy = :uid AND n.nodeType = :nt " +
-                                "AND n.structuredData IS NOT NULL " +
-                                "AND CAST(function('jsonb_extract_path_text', n.structuredData, 'external_id') AS string) = :eid",
-                        MeshNode.class)
-                .setParameter("uid", ownerUserId)
-                .setParameter("nt", NodeType.JOB)
-                .setParameter("eid", externalId)
-                .getResultStream()
-                .findFirst();
+        return nodeRepository.findJobByExternalId(ownerUserId, externalId);
     }
 
     float[] generateEmbedding(String text) {
@@ -106,13 +93,13 @@ public class JobService {
     }
 
     void persistNode(MeshNode node) {
-        node.persist();
-        entityManager.flush();
+        nodeRepository.persist(node);
+        nodeRepository.flush();
     }
 
     void deleteNode(MeshNode node) {
-        node.delete();
-        entityManager.flush();
+        nodeRepository.delete(node);
+        nodeRepository.flush();
     }
 
     private static boolean isClosedStatus(String atsStatus) {

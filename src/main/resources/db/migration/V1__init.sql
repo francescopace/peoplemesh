@@ -174,3 +174,19 @@ CREATE TABLE skills.skill_assessment (
 
 CREATE INDEX idx_skill_assessment_node  ON skills.skill_assessment (node_id);
 CREATE INDEX idx_skill_assessment_level ON skills.skill_assessment (skill_id, level);
+
+-- ============================================================================
+-- Persistence performance indexes (collapsed from former V2)
+-- ============================================================================
+
+-- ATS job upsert lookup on structured_data->>'external_id' scoped by owner.
+CREATE INDEX idx_mesh_node_job_owner_external_id
+    ON mesh.mesh_node (created_by, (structured_data->>'external_id'))
+    WHERE node_type = 'JOB' AND structured_data IS NOT NULL;
+
+-- Speed up overlap filters on profile tags when used in search/match.
+CREATE INDEX idx_mesh_node_tags_gin
+    ON mesh.mesh_node USING gin (tags);
+
+-- Note: skills.skill_definition.embedding remains unconstrained vector.
+-- pgvector HNSW requires vector(<dim>), so that index is intentionally skipped.

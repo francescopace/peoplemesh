@@ -6,8 +6,8 @@ import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 import org.peoplemesh.config.AppConfig;
 import org.peoplemesh.domain.enums.NodeType;
-
 import org.peoplemesh.domain.model.MeshNode;
+import org.peoplemesh.repository.NodeRepository;
 import org.peoplemesh.service.ClusteringService.ClusterResult;
 import org.peoplemesh.service.ClusteringService.EmbeddingRow;
 
@@ -32,6 +32,9 @@ public class ClusteringScheduler {
     @Inject
     EmbeddingService embeddingService;
 
+    @Inject
+    NodeRepository nodeRepository;
+
     public void runClustering() {
         if (!config.clustering().enabled()) {
             LOG.debug("Clustering is disabled");
@@ -52,6 +55,7 @@ public class ClusteringScheduler {
             int created = 0;
             int updated = 0;
 
+            List<MeshNode> existingCommunities = loadCommunityNodes();
             for (ClusterResult cluster : clusters) {
                 Map<String, List<String>> traits = clusteringService.extractClusterTraits(cluster.memberUserIds(), 10);
                 Optional<ClusterNamingLlm.ClusterName> nameOpt = clusterNamingLlm.generateName(traits);
@@ -59,12 +63,13 @@ public class ClusteringScheduler {
 
                 ClusterNamingLlm.ClusterName name = nameOpt.get();
 
-                MeshNode existing = findExistingAutoNode(name.tags(), cluster.memberUserIds());
+                MeshNode existing = findExistingAutoNode(name.tags(), existingCommunities);
                 if (existing != null) {
                     updateAutoNode(existing, name, cluster);
                     updated++;
                 } else {
-                    createAutoNode(name, cluster);
+                    MeshNode createdNode = createAutoNode(name, cluster);
+                    existingCommunities.add(createdNode);
                     created++;
                 }
             }
@@ -77,7 +82,7 @@ public class ClusteringScheduler {
     }
 
     @Transactional
-    void createAutoNode(ClusterNamingLlm.ClusterName name, ClusterResult cluster) {
+    MeshNode createAutoNode(ClusterNamingLlm.ClusterName name, ClusterResult cluster) {
         MeshNode node = newCommunityNode();
         node.createdBy = cluster.memberUserIds().get(0);
         node.nodeType = NodeType.COMMUNITY;
@@ -91,6 +96,7 @@ public class ClusteringScheduler {
 
         persistNode(node);
         LOG.infof("Created auto-community: \"%s\" with %d cluster members", name.title(), cluster.memberUserIds().size());
+        return node;
     }
 
     @Transactional
@@ -116,10 +122,8 @@ public class ClusteringScheduler {
     /**
      * Try to match a new cluster to an existing auto-generated community by tag overlap.
      */
-    private MeshNode findExistingAutoNode(List<String> newTags, List<UUID> memberIds) {
+    private MeshNode findExistingAutoNode(List<String> newTags, List<MeshNode> candidates) {
         if (newTags == null || newTags.isEmpty()) return null;
-
-        List<MeshNode> candidates = loadCommunityNodes();
 
         Set<String> newTagSet = newTags.stream().map(String::toLowerCase).collect(Collectors.toSet());
 
@@ -143,7 +147,11 @@ public class ClusteringScheduler {
     }
 
     void persistNode(MeshNode node) {
-        node.persist();
+        if (nodeRepository != null) {
+            nodeRepository.persist(node);
+        } else {
+            node.persist();
+        }
     }
 
     Instant now() {
@@ -151,6 +159,9 @@ public class ClusteringScheduler {
     }
 
     List<MeshNode> loadCommunityNodes() {
+        if (nodeRepository != null) {
+            return new ArrayList<>(nodeRepository.listCommunities());
+        }
         return MeshNode.list("nodeType = ?1", NodeType.COMMUNITY);
     }
 }

@@ -20,22 +20,59 @@ public class SkillDefinitionRepository {
     EntityManager em;
 
     public List<SkillDefinition> findByCatalog(UUID catalogId) {
-        return SkillDefinition.findByCatalog(catalogId);
+        return em.createQuery("FROM SkillDefinition d WHERE d.catalogId = :catalogId", SkillDefinition.class)
+                .setParameter("catalogId", catalogId)
+                .getResultList();
+    }
+
+    public List<SkillDefinition> findAll() {
+        return em.createQuery("FROM SkillDefinition d ORDER BY d.name", SkillDefinition.class)
+                .getResultList();
+    }
+
+    public long countAll() {
+        return em.createQuery("SELECT COUNT(d) FROM SkillDefinition d", Long.class)
+                .getSingleResult();
+    }
+
+    public long countByCatalog(UUID catalogId) {
+        return em.createQuery("SELECT COUNT(d) FROM SkillDefinition d WHERE d.catalogId = :catalogId", Long.class)
+                .setParameter("catalogId", catalogId)
+                .getSingleResult();
     }
 
     public Optional<SkillDefinition> findByCatalogAndName(UUID catalogId, String name) {
-        return SkillDefinition.findByCatalogAndName(catalogId, name);
+        if (name == null) {
+            return Optional.empty();
+        }
+        return em.createQuery(
+                        "FROM SkillDefinition d WHERE d.catalogId = :catalogId AND LOWER(d.name) = :name",
+                        SkillDefinition.class)
+                .setParameter("catalogId", catalogId)
+                .setParameter("name", name.toLowerCase())
+                .getResultStream()
+                .findFirst();
     }
 
     public List<SkillDefinition> findByIds(List<UUID> ids) {
         if (ids == null || ids.isEmpty()) {
             return Collections.emptyList();
         }
-        return SkillDefinition.list("id in ?1", ids);
+        return em.createQuery("FROM SkillDefinition d WHERE d.id in :ids", SkillDefinition.class)
+                .setParameter("ids", ids)
+                .getResultList();
     }
 
     public Map<UUID, SkillDefinition> findMapByIds(List<UUID> ids) {
         return findByIds(ids).stream().collect(Collectors.toMap(sd -> sd.id, sd -> sd));
+    }
+
+    public void upsert(SkillDefinition skillDefinition) {
+        if (skillDefinition.id == null) {
+            em.persist(skillDefinition);
+        } else {
+            em.merge(skillDefinition);
+        }
     }
 
     public Map<UUID, Long> countByCatalogIds(List<UUID> catalogIds) {
@@ -58,7 +95,11 @@ public class SkillDefinitionRepository {
     }
 
     public List<String> listCategories(UUID catalogId) {
-        return SkillDefinition.listCategories(catalogId);
+        return em.createQuery(
+                        "SELECT DISTINCT d.category FROM SkillDefinition d WHERE d.catalogId = :catalogId ORDER BY d.category",
+                        String.class)
+                .setParameter("catalogId", catalogId)
+                .getResultList();
     }
 
     public List<SkillDefinition> listSkills(UUID catalogId, String category, int page, int size) {

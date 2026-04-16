@@ -54,6 +54,7 @@ PeopleMesh is built as a Quarkus backend serving both a browser SPA and MCP clie
 - Natural language prompts are transformed into structured constraints and vector queries.
 - Matching uses hybrid ranking (semantic similarity plus metadata-driven scoring).
 - The same domain services power both REST and MCP read flows.
+- Persistence follows a strict boundary: data access stays in repositories, while services orchestrate use cases.
 
 ## Primary technology choices
 
@@ -72,6 +73,18 @@ Main schema responsibilities:
 - `identity`: user identities and provider linkage
 - `skills`: skill catalogs and assessments
 - `audit`: pseudonymized audit events
+
+## Layering contract
+
+The backend follows this dependency direction:
+
+`api/resource` and `mcp` -> `service` -> `repository` -> database.
+
+Rules:
+
+- `service` code does not run direct SQL/JPQL or use `EntityManager`.
+- `repository` owns query shape decisions (JPQL, native SQL, batching, pagination).
+- Entity classes are persistence models and should not contain query entry points used by services.
 
 ## Architectural trade-offs
 

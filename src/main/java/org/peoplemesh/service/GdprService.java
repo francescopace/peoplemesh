@@ -2,8 +2,12 @@ package org.peoplemesh.service;
 
 import org.peoplemesh.util.HashUtils;
 import org.peoplemesh.domain.dto.PrivacyDashboard;
-import org.peoplemesh.domain.enums.NodeType;
 import org.peoplemesh.domain.model.*;
+import org.peoplemesh.repository.AuditLogRepository;
+import org.peoplemesh.repository.GdprRepository;
+import org.peoplemesh.repository.MeshNodeConsentRepository;
+import org.peoplemesh.repository.NodeRepository;
+import org.peoplemesh.repository.UserIdentityRepository;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -22,6 +26,7 @@ import java.util.UUID;
 public class GdprService {
 
     private static final Logger LOG = Logger.getLogger(GdprService.class);
+    private static final int MAX_AUDIT_EXPORT_ROWS = 1000;
 
     @Inject
     AuditService audit;
@@ -33,6 +38,21 @@ public class GdprService {
     ProfileService profileService;
 
     @Inject
+    NodeRepository nodeRepository;
+
+    @Inject
+    UserIdentityRepository userIdentityRepository;
+
+    @Inject
+    MeshNodeConsentRepository meshNodeConsentRepository;
+
+    @Inject
+    AuditLogRepository auditLogRepository;
+
+    @Inject
+    GdprRepository gdprRepository;
+
+    @Inject
     EntityManager em;
 
     /**
@@ -42,9 +62,9 @@ public class GdprService {
         LOG.infof("action=exportAllData userId=%s", userId);
         ObjectNode root = objectMapper.createObjectNode();
 
-        MeshNode userNode = MeshNode.findPublishedUserNode(userId).orElse(null);
+        MeshNode userNode = findPublishedUserNode(userId);
 
-        List<UserIdentity> identities = UserIdentity.findByNodeId(userId);
+        List<UserIdentity> identities = findUserIdentities(userId);
         if (!identities.isEmpty()) {
             var identityArray = objectMapper.createArrayNode();
             for (UserIdentity identity : identities) {
@@ -74,7 +94,7 @@ public class GdprService {
         }
         root.set("profile", objectMapper.valueToTree(profileNodes));
 
-        List<MeshNodeConsent> consents = MeshNodeConsent.findActiveByNodeId(userId);
+        List<MeshNodeConsent> consents = findActiveConsents(userId);
         root.set("consents", objectMapper.valueToTree(
                 consents.stream().map(c -> {
                     ObjectNode n = objectMapper.createObjectNode();
@@ -86,7 +106,7 @@ public class GdprService {
                 }).toList()
         ));
 
-        List<MeshNode> nodes = MeshNode.findByOwner(userId);
+        List<MeshNode> nodes = findOwnedNodes(userId);
         root.set("mesh_nodes", objectMapper.valueToTree(
                 nodes.stream().map(n -> {
                     ObjectNode nd = objectMapper.createObjectNode();
@@ -119,6 +139,9 @@ public class GdprService {
     }
 
     List<AuditLogEntry> loadAuditEntries(String userIdHash) {
+        if (auditLogRepository != null) {
+            return auditLogRepository.findByUserHash(userIdHash, MAX_AUDIT_EXPORT_ROWS);
+        }
         return AuditLogEntry.list("userIdHash", userIdHash);
     }
 
@@ -132,25 +155,22 @@ public class GdprService {
         LOG.infof("action=deleteAllData userId=%s", userId);
         audit.log(userId, "ACCOUNT_DELETED", "gdpr_delete");
 
-        em.createQuery("DELETE FROM MeshNode n WHERE n.createdBy = :uid AND n.nodeType != :userType")
-                .setParameter("uid", userId)
-                .setParameter("userType", NodeType.USER)
-                .executeUpdate();
-
-        em.createQuery("DELETE FROM MeshNodeConsent c WHERE c.nodeId = :uid")
-                .setParameter("uid", userId).executeUpdate();
-
-        em.createQuery("DELETE FROM MeshNode n WHERE n.id = :uid AND n.nodeType = :userType")
-                .setParameter("uid", userId)
-                .setParameter("userType", NodeType.USER)
-                .executeUpdate();
+        if (gdprRepository != null) {
+            gdprRepository.deleteNonUserNodesByOwner(userId);
+            gdprRepository.deleteConsentsByNodeId(userId);
+            gdprRepository.deleteUserNode(userId);
+            return;
+        }
+        MeshNode.delete("createdBy = ?1 and nodeType != ?2", userId, org.peoplemesh.domain.enums.NodeType.USER);
+        MeshNodeConsent.delete("nodeId", userId);
+        MeshNode.delete("id = ?1 and nodeType = ?2", userId, org.peoplemesh.domain.enums.NodeType.USER);
     }
 
     public PrivacyDashboard getPrivacyDashboard(UUID userId) {
-        MeshNode node = MeshNode.findPublishedUserNode(userId).orElse(null);
+        MeshNode node = findPublishedUserNode(userId);
         Instant lastUpdate = node != null ? node.updatedAt : null;
         boolean searchable = node != null && node.searchable;
-        List<MeshNodeConsent> activeConsentList = MeshNodeConsent.findActiveByNodeId(userId);
+        List<MeshNodeConsent> activeConsentList = findActiveConsents(userId);
         List<String> scopes = activeConsentList.stream().map(c -> c.scope).distinct().toList();
 
         return new PrivacyDashboard(lastUpdate, searchable,
@@ -169,13 +189,47 @@ public class GdprService {
 
     @SuppressWarnings("unchecked")
     private List<UUID> findInactiveUserIds(Instant threshold) {
-        return em.createNativeQuery(
-                "SELECT mn.id FROM mesh.mesh_node mn " +
-                "WHERE mn.node_type = 'USER' " +
-                "AND NOT EXISTS (SELECT 1 FROM identity.user_identity ui " +
-                "WHERE ui.node_id = mn.id AND ui.last_active_at >= :threshold)",
-                UUID.class)
-                .setParameter("threshold", threshold)
-                .getResultList();
+        if (gdprRepository != null) {
+            return gdprRepository.findInactiveUserIds(threshold, 10_000);
+        }
+        if (em != null) {
+            return em.createNativeQuery(
+                            "SELECT mn.id FROM mesh.mesh_node mn " +
+                                    "WHERE mn.node_type = 'USER' " +
+                                    "AND NOT EXISTS (SELECT 1 FROM identity.user_identity ui " +
+                                    "WHERE ui.node_id = mn.id AND ui.last_active_at >= :threshold)",
+                            UUID.class)
+                    .setParameter("threshold", threshold)
+                    .getResultList();
+        }
+        return List.of();
+    }
+
+    private MeshNode findPublishedUserNode(UUID userId) {
+        if (nodeRepository != null) {
+            return nodeRepository.findPublishedUserNode(userId).orElse(null);
+        }
+        return MeshNode.findPublishedUserNode(userId).orElse(null);
+    }
+
+    private List<UserIdentity> findUserIdentities(UUID userId) {
+        if (userIdentityRepository != null) {
+            return userIdentityRepository.findByNodeId(userId);
+        }
+        return UserIdentity.findByNodeId(userId);
+    }
+
+    private List<MeshNodeConsent> findActiveConsents(UUID userId) {
+        if (meshNodeConsentRepository != null) {
+            return meshNodeConsentRepository.findActiveByNodeId(userId);
+        }
+        return MeshNodeConsent.findActiveByNodeId(userId);
+    }
+
+    private List<MeshNode> findOwnedNodes(UUID userId) {
+        if (nodeRepository != null) {
+            return nodeRepository.findByOwner(userId, 500);
+        }
+        return MeshNode.findByOwner(userId);
     }
 }

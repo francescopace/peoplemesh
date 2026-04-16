@@ -1,6 +1,5 @@
 package org.peoplemesh.service;
 
-import io.quarkus.panache.common.Page;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.peoplemesh.config.AppConfig;
@@ -8,6 +7,7 @@ import org.peoplemesh.util.StringUtils;
 import org.peoplemesh.util.HashUtils;
 import org.peoplemesh.domain.dto.UserNotificationDto;
 import org.peoplemesh.domain.model.AuditLogEntry;
+import org.peoplemesh.repository.AuditLogRepository;
 
 import java.util.List;
 import java.util.Set;
@@ -26,22 +26,20 @@ public class UserNotificationService {
     @Inject
     AppConfig appConfig;
 
+    @Inject
+    AuditLogRepository auditLogRepository;
+
     public List<UserNotificationDto> getRecentNotifications(UUID userId, Integer limit) {
         String userHash = hashUserId(userId);
         int pageSize = normalizeLimit(limit);
 
         return fetchRecentEntries(userHash, pageSize).stream()
-                .map(AuditLogEntry.class::cast)
                 .map(this::toDto)
                 .toList();
     }
 
     List<AuditLogEntry> fetchRecentEntries(String userHash, int pageSize) {
-        return AuditLogEntry.find(
-                        "userIdHash = ?1 and action not in ?2 order by timestamp desc",
-                        userHash, SUPPRESSED_ACTIONS)
-                .page(Page.ofSize(pageSize))
-                .list();
+        return auditLogRepository.findRecentNotifications(userHash, SUPPRESSED_ACTIONS, pageSize);
     }
 
     String hashUserId(UUID userId) {

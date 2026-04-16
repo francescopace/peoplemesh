@@ -11,6 +11,7 @@ import org.peoplemesh.domain.model.SkillAssessment;
 import org.peoplemesh.domain.model.SkillDefinition;
 import org.peoplemesh.repository.NodeRepository;
 import org.peoplemesh.repository.SkillAssessmentRepository;
+import org.peoplemesh.repository.SkillDefinitionRepository;
 
 import java.time.Instant;
 import java.util.*;
@@ -32,6 +33,9 @@ public class SkillReconciliationService {
 
     @Inject
     NodeRepository nodeRepository;
+
+    @Inject
+    SkillDefinitionRepository skillDefinitionRepository;
 
     /**
      * Reconcile a node's free-text tags against a skill catalog.
@@ -115,9 +119,9 @@ public class SkillReconciliationService {
 
     List<SkillDefinition> loadCatalogSkills(UUID catalogId) {
         if (catalogId == null) {
-            return SkillDefinition.listAll();
+            return skillDefinitionRepository.findAll();
         }
-        return SkillDefinition.findByCatalog(catalogId);
+        return skillDefinitionRepository.findByCatalog(catalogId);
     }
 
     Set<UUID> loadExistingAssessmentIds(UUID nodeId) {

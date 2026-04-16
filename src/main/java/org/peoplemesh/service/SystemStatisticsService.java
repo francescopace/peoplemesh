@@ -9,8 +9,8 @@ import org.peoplemesh.domain.dto.OperationTimingStatsDto;
 import org.peoplemesh.domain.dto.SystemStatisticsDto;
 import org.peoplemesh.domain.dto.TimingStatisticsDto;
 import org.peoplemesh.domain.enums.NodeType;
-import org.peoplemesh.domain.model.MeshNode;
-import org.peoplemesh.domain.model.SkillDefinition;
+import org.peoplemesh.repository.NodeRepository;
+import org.peoplemesh.repository.SkillDefinitionRepository;
 
 import java.util.Collection;
 import java.util.List;
@@ -23,15 +23,21 @@ public class SystemStatisticsService {
     @Inject
     MeterRegistry meterRegistry;
 
+    @Inject
+    NodeRepository nodeRepository;
+
+    @Inject
+    SkillDefinitionRepository skillDefinitionRepository;
+
     private static final String LLM_METRIC = "peoplemesh.llm.inference";
     private static final String EMBEDDING_METRIC = "peoplemesh.embedding.inference";
     private static final String HNSW_METRIC = "peoplemesh.hnsw.search";
 
     public SystemStatisticsDto loadStatistics() {
-        long users = MeshNode.count("nodeType", NodeType.USER);
-        long jobs = MeshNode.count("nodeType", NodeType.JOB);
-        long groups = MeshNode.count("nodeType in ?1", List.of(NodeType.COMMUNITY, NodeType.INTEREST_GROUP));
-        long skills = SkillDefinition.count();
+        long users = nodeRepository.countByType(NodeType.USER);
+        long jobs = nodeRepository.countByType(NodeType.JOB);
+        long groups = nodeRepository.countByTypes(List.of(NodeType.COMMUNITY, NodeType.INTEREST_GROUP));
+        long skills = skillDefinitionRepository.countAll();
         TimingStatisticsDto timings = new TimingStatisticsDto(
                 aggregateTimer(LLM_METRIC),
                 aggregateTimer(EMBEDDING_METRIC),

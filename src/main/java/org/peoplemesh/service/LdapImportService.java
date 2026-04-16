@@ -14,6 +14,8 @@ import org.peoplemesh.domain.dto.LdapUserPreview;
 import org.peoplemesh.domain.enums.NodeType;
 import org.peoplemesh.domain.model.MeshNode;
 import org.peoplemesh.domain.model.UserIdentity;
+import org.peoplemesh.repository.NodeRepository;
+import org.peoplemesh.repository.UserIdentityRepository;
 
 import javax.net.ssl.SSLSocketFactory;
 import java.security.GeneralSecurityException;
@@ -40,6 +42,12 @@ public class LdapImportService {
 
     @Inject
     AuditService auditService;
+
+    @Inject
+    NodeRepository nodeRepository;
+
+    @Inject
+    UserIdentityRepository userIdentityRepository;
 
     public List<LdapUserPreview> preview(int limit) {
         validateConfig();
@@ -115,29 +123,16 @@ public class LdapImportService {
     }
 
     public int generateEmbeddings(UUID adminUserId) {
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = (List<Object[]>) MeshNode.getEntityManager()
-                .createNativeQuery("""
-                        SELECT mn.id FROM mesh.mesh_node mn
-                        JOIN identity.user_identity ui ON ui.node_id = mn.id
-                        WHERE ui.oauth_provider = :provider
-                          AND mn.node_type = 'USER'
-                          AND mn.embedding IS NULL
-                        """)
-                .setParameter("provider", PROVIDER)
-                .getResultList();
-
-        List<UUID> nodeIds = rows.stream()
-                .map(r -> (UUID) (r instanceof Object[] arr ? arr[0] : r))
-                .toList();
+        List<UUID> nodeIds = nodeRepository.findUserIdsWithMissingEmbeddingByIdentityProvider(PROVIDER);
 
         int count = 0;
-        for (UUID nodeId : nodeIds) {
+        int batchSize = 16;
+        for (int i = 0; i < nodeIds.size(); i += batchSize) {
+            List<UUID> batchIds = nodeIds.subList(i, Math.min(i + batchSize, nodeIds.size()));
             try {
-                generateSingleEmbedding(nodeId);
-                count++;
+                count += generateEmbeddingBatch(batchIds);
             } catch (Exception e) {
-                LOG.warnf("Embedding generation failed for nodeId=%s: %s", nodeId, e.getMessage());
+                LOG.warnf("Embedding generation failed for batch starting at %d: %s", i, e.getMessage());
             }
         }
         LOG.infof("LDAP embedding generation: %d of %d nodes processed", count, nodeIds.size());
@@ -158,20 +153,20 @@ public class LdapImportService {
 
         String effectiveDisplayName = displayName != null ? displayName : cn;
 
-        Optional<UserIdentity> existing = UserIdentity.findByOauth(PROVIDER, uid);
+        Optional<UserIdentity> existing = userIdentityRepository.findByProviderAndSubject(PROVIDER, uid);
         MeshNode node;
         boolean isNew;
 
         if (existing.isPresent()) {
-            node = MeshNode.<MeshNode>findByIdOptional(existing.get().nodeId).orElse(null);
+            node = nodeRepository.findById(existing.get().nodeId).orElse(null);
             if (node == null) {
                 node = createUserNode(mail);
                 existing.get().nodeId = node.id;
-                existing.get().persist();
+                userIdentityRepository.persist(existing.get());
             }
             isNew = false;
         } else {
-            MeshNode existingByEmail = MeshNode.findUserByExternalId(mail).orElse(null);
+            MeshNode existingByEmail = nodeRepository.findUserByExternalId(mail).orElse(null);
             if (existingByEmail != null) {
                 node = existingByEmail;
             } else {
@@ -182,7 +177,7 @@ public class LdapImportService {
             identity.nodeId = node.id;
             identity.oauthProvider = PROVIDER;
             identity.oauthSubject = uid;
-            identity.persist();
+            userIdentityRepository.persist(identity);
             isNew = existingByEmail == null;
         }
 
@@ -190,12 +185,12 @@ public class LdapImportService {
                 node.id, PROVIDER, effectiveDisplayName, givenName, sn, mail, null, null, null);
 
         if (title != null && !title.isBlank()) {
-            node = MeshNode.<MeshNode>findByIdOptional(node.id).orElse(node);
+            node = nodeRepository.findById(node.id).orElse(node);
             if (node.structuredData == null) node.structuredData = new LinkedHashMap<>();
             node.structuredData.put("job_title", title);
             if (city != null && !city.isBlank()) node.structuredData.put("city", city);
             if (country != null && !country.isBlank()) node.country = country;
-            node.persist();
+            nodeRepository.persist(node);
         }
 
         return isNew;
@@ -203,15 +198,37 @@ public class LdapImportService {
 
     @Transactional(Transactional.TxType.REQUIRES_NEW)
     void generateSingleEmbedding(UUID nodeId) {
-        MeshNode node = MeshNode.<MeshNode>findByIdOptional(nodeId).orElse(null);
+        MeshNode node = nodeRepository.findById(nodeId).orElse(null);
         if (node == null) return;
         String text = EmbeddingTextBuilder.buildText(node);
         float[] embedding = embeddingService.generateEmbedding(text);
         if (embedding != null) {
             node.embedding = embedding;
             node.searchable = true;
-            node.persist();
+            nodeRepository.persist(node);
         }
+    }
+
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    int generateEmbeddingBatch(List<UUID> nodeIds) {
+        List<MeshNode> nodes = nodeRepository.findByIds(nodeIds);
+        if (nodes.isEmpty()) {
+            return 0;
+        }
+        List<String> texts = nodes.stream().map(EmbeddingTextBuilder::buildText).toList();
+        List<float[]> embeddings = embeddingService.generateEmbeddings(texts);
+        int generated = Math.min(nodes.size(), embeddings.size());
+        for (int i = 0; i < generated; i++) {
+            float[] embedding = embeddings.get(i);
+            if (embedding == null) {
+                continue;
+            }
+            MeshNode node = nodes.get(i);
+            node.embedding = embedding;
+            node.searchable = true;
+            nodeRepository.persist(node);
+        }
+        return generated;
     }
 
     private MeshNode createUserNode(String email) {
@@ -225,7 +242,7 @@ public class LdapImportService {
         n.tags = new ArrayList<>();
         n.structuredData = new LinkedHashMap<>();
         n.searchable = true;
-        n.persist();
+        nodeRepository.persist(n);
         return n;
     }
 

@@ -3,6 +3,7 @@ package org.peoplemesh.service;
 import org.jboss.logging.Logger;
 import org.peoplemesh.util.HashUtils;
 import org.peoplemesh.domain.model.AuditLogEntry;
+import org.peoplemesh.repository.AuditLogRepository;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -22,6 +23,9 @@ public class AuditService {
     @Inject
     NotificationService notificationService;
 
+    @Inject
+    AuditLogRepository auditLogRepository;
+
     @Transactional(Transactional.TxType.REQUIRES_NEW)
     public void log(UUID userId, String action, String toolName, String ipAddress, String metadataJson) {
         AuditLogEntry entry = new AuditLogEntry();
@@ -31,7 +35,7 @@ public class AuditService {
         entry.timestamp = Instant.now();
         entry.ipHash = ipAddress != null ? HashUtils.sha256(ipAddress) : null;
         entry.metadataJson = metadataJson;
-        entry.persist();
+        auditLogRepository.persist(entry);
         try {
             notificationService.notifyAuditEvent(userId, action, toolName, metadataJson);
         } catch (Exception e) {

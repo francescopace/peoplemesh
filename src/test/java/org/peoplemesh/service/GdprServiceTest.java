@@ -12,10 +12,13 @@ import org.peoplemesh.domain.model.AuditLogEntry;
 import org.peoplemesh.domain.model.MeshNode;
 import org.peoplemesh.domain.model.MeshNodeConsent;
 import org.peoplemesh.domain.model.UserIdentity;
+import org.peoplemesh.repository.AuditLogRepository;
+import org.peoplemesh.repository.GdprRepository;
+import org.peoplemesh.repository.MeshNodeConsentRepository;
+import org.peoplemesh.repository.NodeRepository;
+import org.peoplemesh.repository.UserIdentityRepository;
 
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.Query;
-import jakarta.persistence.TypedQuery;
 
 import java.time.Instant;
 import java.util.*;
@@ -31,6 +34,11 @@ class GdprServiceTest {
     @Mock ProfileService profileService;
     @Mock ObjectMapper objectMapper;
     @Mock EntityManager em;
+    @Mock NodeRepository nodeRepository;
+    @Mock UserIdentityRepository userIdentityRepository;
+    @Mock MeshNodeConsentRepository meshNodeConsentRepository;
+    @Mock GdprRepository gdprRepository;
+    @Mock AuditLogRepository auditLogRepository;
 
     @InjectMocks
     GdprService gdprService;
@@ -39,92 +47,66 @@ class GdprServiceTest {
 
     @Test
     void deleteAllData_hardDeletesAllUserData() {
-        @SuppressWarnings("unchecked")
-        TypedQuery<Object> deleteQuery = mock(TypedQuery.class);
-        when(em.createQuery(anyString())).thenReturn(deleteQuery);
-        when(deleteQuery.setParameter(anyString(), any())).thenReturn(deleteQuery);
-        when(deleteQuery.executeUpdate()).thenReturn(0);
-
         gdprService.deleteAllData(userId);
 
         verify(audit).log(userId, "ACCOUNT_DELETED", "gdpr_delete");
-        verify(em, atLeast(3)).createQuery(anyString());
+        verify(gdprRepository).deleteNonUserNodesByOwner(userId);
+        verify(gdprRepository).deleteConsentsByNodeId(userId);
+        verify(gdprRepository).deleteUserNode(userId);
     }
 
     @Test
     void getPrivacyDashboard_noNode_returnsDefaults() {
-        try (var meshMock = mockStatic(MeshNode.class);
-             var consentMock = mockStatic(MeshNodeConsent.class)) {
+        when(nodeRepository.findPublishedUserNode(userId)).thenReturn(Optional.empty());
+        when(meshNodeConsentRepository.findActiveByNodeId(userId)).thenReturn(Collections.emptyList());
 
-            meshMock.when(() -> MeshNode.findPublishedUserNode(userId)).thenReturn(Optional.empty());
-            consentMock.when(() -> MeshNodeConsent.findActiveByNodeId(userId)).thenReturn(Collections.emptyList());
+        PrivacyDashboard dashboard = gdprService.getPrivacyDashboard(userId);
 
-            PrivacyDashboard dashboard = gdprService.getPrivacyDashboard(userId);
-
-            assertNotNull(dashboard);
-            assertNull(dashboard.lastProfileUpdate());
-            assertFalse(dashboard.searchable());
-            assertEquals(0, dashboard.activeConsents());
-            assertTrue(dashboard.consentScopes().isEmpty());
-        }
+        assertNotNull(dashboard);
+        assertNull(dashboard.lastProfileUpdate());
+        assertFalse(dashboard.searchable());
+        assertEquals(0, dashboard.activeConsents());
+        assertTrue(dashboard.consentScopes().isEmpty());
     }
 
     @Test
     void getPrivacyDashboard_withNode_returnsData() {
-        try (var meshMock = mockStatic(MeshNode.class);
-             var consentMock = mockStatic(MeshNodeConsent.class)) {
+        MeshNode node = new MeshNode();
+        node.updatedAt = Instant.now();
+        node.searchable = true;
+        when(nodeRepository.findPublishedUserNode(userId)).thenReturn(Optional.of(node));
 
-            MeshNode node = new MeshNode();
-            node.updatedAt = Instant.now();
-            node.searchable = true;
-            meshMock.when(() -> MeshNode.findPublishedUserNode(userId)).thenReturn(Optional.of(node));
+        MeshNodeConsent consent = new MeshNodeConsent();
+        consent.scope = "professional_matching";
+        consent.grantedAt = Instant.now();
+        consent.policyVersion = "1.0";
+        when(meshNodeConsentRepository.findActiveByNodeId(userId)).thenReturn(List.of(consent));
 
-            MeshNodeConsent consent = new MeshNodeConsent();
-            consent.scope = "professional_matching";
-            consent.grantedAt = Instant.now();
-            consent.policyVersion = "1.0";
-            consentMock.when(() -> MeshNodeConsent.findActiveByNodeId(userId)).thenReturn(List.of(consent));
+        PrivacyDashboard dashboard = gdprService.getPrivacyDashboard(userId);
 
-            PrivacyDashboard dashboard = gdprService.getPrivacyDashboard(userId);
-
-            assertNotNull(dashboard.lastProfileUpdate());
-            assertTrue(dashboard.searchable());
-            assertEquals(1, dashboard.activeConsents());
-            assertEquals(List.of("professional_matching"), dashboard.consentScopes());
-        }
+        assertNotNull(dashboard.lastProfileUpdate());
+        assertTrue(dashboard.searchable());
+        assertEquals(1, dashboard.activeConsents());
+        assertEquals(List.of("professional_matching"), dashboard.consentScopes());
     }
 
     @Test
     void getPrivacyDashboard_distinctScopes() {
-        try (var meshMock = mockStatic(MeshNode.class);
-             var consentMock = mockStatic(MeshNodeConsent.class)) {
+        when(nodeRepository.findPublishedUserNode(userId)).thenReturn(Optional.empty());
+        MeshNodeConsent c1 = new MeshNodeConsent(); c1.scope = "professional_matching"; c1.grantedAt = Instant.now(); c1.policyVersion = "1.0";
+        MeshNodeConsent c2 = new MeshNodeConsent(); c2.scope = "embedding_processing"; c2.grantedAt = Instant.now(); c2.policyVersion = "1.0";
+        when(meshNodeConsentRepository.findActiveByNodeId(userId)).thenReturn(List.of(c1, c2));
 
-            meshMock.when(() -> MeshNode.findPublishedUserNode(userId)).thenReturn(Optional.empty());
+        PrivacyDashboard dashboard = gdprService.getPrivacyDashboard(userId);
 
-            MeshNodeConsent c1 = new MeshNodeConsent(); c1.scope = "professional_matching"; c1.grantedAt = Instant.now(); c1.policyVersion = "1.0";
-            MeshNodeConsent c2 = new MeshNodeConsent(); c2.scope = "embedding_processing"; c2.grantedAt = Instant.now(); c2.policyVersion = "1.0";
-            consentMock.when(() -> MeshNodeConsent.findActiveByNodeId(userId)).thenReturn(List.of(c1, c2));
-
-            PrivacyDashboard dashboard = gdprService.getPrivacyDashboard(userId);
-
-            assertEquals(2, dashboard.activeConsents());
-            assertEquals(2, dashboard.consentScopes().size());
-        }
+        assertEquals(2, dashboard.activeConsents());
+        assertEquals(2, dashboard.consentScopes().size());
     }
 
     @Test
     void enforceRetention_deletesInactiveUsers() {
-        Query nativeQuery = mock(Query.class);
-        when(em.createNativeQuery(anyString(), eq(UUID.class))).thenReturn(nativeQuery);
-        when(nativeQuery.setParameter(anyString(), any())).thenReturn(nativeQuery);
         UUID inactiveUser = UUID.randomUUID();
-        when(nativeQuery.getResultList()).thenReturn(List.of(inactiveUser));
-
-        @SuppressWarnings("unchecked")
-        TypedQuery<Object> deleteQuery = mock(TypedQuery.class);
-        when(em.createQuery(anyString())).thenReturn(deleteQuery);
-        when(deleteQuery.setParameter(anyString(), any())).thenReturn(deleteQuery);
-        when(deleteQuery.executeUpdate()).thenReturn(0);
+        when(gdprRepository.findInactiveUserIds(any(), anyInt())).thenReturn(List.of(inactiveUser));
 
         int count = gdprService.enforceRetention(12);
 
@@ -138,6 +120,9 @@ class GdprServiceTest {
         service.audit = audit;
         service.profileService = profileService;
         service.objectMapper = new ObjectMapper();
+        service.nodeRepository = nodeRepository;
+        service.userIdentityRepository = userIdentityRepository;
+        service.meshNodeConsentRepository = meshNodeConsentRepository;
 
         MeshNode userNode = new MeshNode();
         userNode.id = userId;
@@ -175,24 +160,20 @@ class GdprServiceTest {
                 new ProfileSchema(null, null, null, null, null, null, null, null, null)
         ));
 
-        try (var meshMock = mockStatic(MeshNode.class);
-             var consentMock = mockStatic(MeshNodeConsent.class);
-             var identityMock = mockStatic(UserIdentity.class)) {
-            meshMock.when(() -> MeshNode.findPublishedUserNode(userId)).thenReturn(Optional.of(userNode));
-            meshMock.when(() -> MeshNode.findByOwner(userId)).thenReturn(List.of(projectNode));
-            consentMock.when(() -> MeshNodeConsent.findActiveByNodeId(userId)).thenReturn(List.of(consent));
-            identityMock.when(() -> UserIdentity.findByNodeId(userId)).thenReturn(List.of(identity));
+        when(nodeRepository.findPublishedUserNode(userId)).thenReturn(Optional.of(userNode));
+        when(nodeRepository.findByOwner(userId, 500)).thenReturn(List.of(projectNode));
+        when(meshNodeConsentRepository.findActiveByNodeId(userId)).thenReturn(List.of(consent));
+        when(userIdentityRepository.findByNodeId(userId)).thenReturn(List.of(identity));
 
-            String json = service.exportAllData(userId);
+        String json = service.exportAllData(userId);
 
-            assertTrue(json.contains("\"identities\""));
-            assertTrue(json.contains("\"oauth_provider\" : \"google\""));
-            assertTrue(json.contains("\"profile\""));
-            assertTrue(json.contains("\"consents\""));
-            assertTrue(json.contains("\"mesh_nodes\""));
-            assertTrue(json.contains("\"audit_log\""));
-            assertTrue(json.contains("\"exported_at\""));
-        }
+        assertTrue(json.contains("\"identities\""));
+        assertTrue(json.contains("\"oauth_provider\" : \"google\""));
+        assertTrue(json.contains("\"profile\""));
+        assertTrue(json.contains("\"consents\""));
+        assertTrue(json.contains("\"mesh_nodes\""));
+        assertTrue(json.contains("\"audit_log\""));
+        assertTrue(json.contains("\"exported_at\""));
 
         verify(audit).log(userId, "DATA_EXPORTED", "gdpr_export");
     }
@@ -203,24 +184,23 @@ class GdprServiceTest {
         service.audit = audit;
         service.profileService = profileService;
         service.objectMapper = new ObjectMapper();
+        service.nodeRepository = nodeRepository;
+        service.userIdentityRepository = userIdentityRepository;
+        service.meshNodeConsentRepository = meshNodeConsentRepository;
         service.auditEntries = List.of();
 
-        try (var meshMock = mockStatic(MeshNode.class);
-             var consentMock = mockStatic(MeshNodeConsent.class);
-             var identityMock = mockStatic(UserIdentity.class)) {
-            meshMock.when(() -> MeshNode.findPublishedUserNode(userId)).thenReturn(Optional.empty());
-            meshMock.when(() -> MeshNode.findByOwner(userId)).thenReturn(List.of());
-            consentMock.when(() -> MeshNodeConsent.findActiveByNodeId(userId)).thenReturn(List.of());
-            identityMock.when(() -> UserIdentity.findByNodeId(userId)).thenReturn(List.of());
+        when(nodeRepository.findPublishedUserNode(userId)).thenReturn(Optional.empty());
+        when(nodeRepository.findByOwner(userId, 500)).thenReturn(List.of());
+        when(meshNodeConsentRepository.findActiveByNodeId(userId)).thenReturn(List.of());
+        when(userIdentityRepository.findByNodeId(userId)).thenReturn(List.of());
 
-            String json = service.exportAllData(userId);
+        String json = service.exportAllData(userId);
 
-            assertTrue(json.contains("\"profile\" : [ ]"));
-            assertTrue(json.contains("\"consents\" : [ ]"));
-            assertTrue(json.contains("\"mesh_nodes\" : [ ]"));
-            assertTrue(json.contains("\"audit_log\" : [ ]"));
-            assertFalse(json.contains("\"identities\""));
-        }
+        assertTrue(json.contains("\"profile\" : [ ]"));
+        assertTrue(json.contains("\"consents\" : [ ]"));
+        assertTrue(json.contains("\"mesh_nodes\" : [ ]"));
+        assertTrue(json.contains("\"audit_log\" : [ ]"));
+        assertFalse(json.contains("\"identities\""));
     }
 
     private static final class TestableGdprService extends GdprService {

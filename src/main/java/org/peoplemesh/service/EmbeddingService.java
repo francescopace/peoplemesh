@@ -11,11 +11,16 @@ import org.jboss.logging.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 @ApplicationScoped
 public class EmbeddingService {
 
     private static final Logger LOG = Logger.getLogger(EmbeddingService.class);
+    private static final int TARGET_VECTOR_DIMENSION = 1024;
+    private static final int[] EMBEDDING_TEXT_LIMITS = {3000, 2000, 1400, 1000, 700, 500, 350};
+    private static final int MAX_ATTEMPTS_PER_LIMIT = 3;
+    private static final long RETRY_BASE_DELAY_MS = 250L;
 
     @Inject
     EmbeddingModel embeddingModel;
@@ -30,7 +35,7 @@ public class EmbeddingService {
         if (text == null || text.isBlank()) {
             return null;
         }
-        return embeddingModel.embed(text).content().vector();
+        return generateEmbeddingWithFallback(text);
     }
 
     @Timed(
@@ -69,7 +74,7 @@ public class EmbeddingService {
                 throw new IllegalStateException("Embedding batch response size mismatch");
             }
             for (int i = 0; i < validIndexes.size(); i++) {
-                result.set(validIndexes.get(i), embeddings.get(i).vector());
+                result.set(validIndexes.get(i), normalizeVectorDimensions(embeddings.get(i).vector()));
             }
             return result;
         } catch (RuntimeException e) {
@@ -77,10 +82,110 @@ public class EmbeddingService {
             LOG.warnf("Batch embedding failed (%s), falling back to single-item embedding", e.getMessage());
             for (int i = 0; i < validIndexes.size(); i++) {
                 int index = validIndexes.get(i);
-                result.set(index, generateEmbedding(texts.get(index)));
+                result.set(index, generateEmbeddingWithFallback(texts.get(index)));
             }
             return result;
         }
+    }
+
+    private float[] generateEmbeddingWithFallback(String text) {
+        RuntimeException lastContextOverflow = null;
+        for (String candidate : buildCandidateTexts(text)) {
+            for (int attempt = 0; attempt < MAX_ATTEMPTS_PER_LIMIT; attempt++) {
+                try {
+                    Embedding embedding = embeddingModel.embed(candidate).content();
+                    return embedding == null ? null : normalizeVectorDimensions(embedding.vector());
+                } catch (RuntimeException e) {
+                    if (isContextLengthError(e)) {
+                        lastContextOverflow = e;
+                        break;
+                    }
+                    if (isRetryableError(e) && attempt < MAX_ATTEMPTS_PER_LIMIT - 1) {
+                        sleepBeforeRetry(attempt);
+                        continue;
+                    }
+                    throw e;
+                }
+            }
+        }
+        if (lastContextOverflow != null) {
+            throw lastContextOverflow;
+        }
+        return null;
+    }
+
+    private static List<String> buildCandidateTexts(String text) {
+        List<String> candidates = new ArrayList<>();
+        candidates.add(text);
+        for (int limit : EMBEDDING_TEXT_LIMITS) {
+            if (text.length() <= limit) {
+                continue;
+            }
+            String shortened = text.substring(0, limit);
+            if (!candidates.get(candidates.size() - 1).equals(shortened)) {
+                candidates.add(shortened);
+            }
+        }
+        return candidates;
+    }
+
+    private static boolean isContextLengthError(RuntimeException e) {
+        String msg = flattenMessages(e);
+        return msg.contains("input length exceeds")
+                || msg.contains("context length")
+                || msg.contains("maximum context length")
+                || msg.contains("too many tokens");
+    }
+
+    private static boolean isRetryableError(RuntimeException e) {
+        String msg = flattenMessages(e);
+        return msg.contains("timeout")
+                || msg.contains("timed out")
+                || msg.contains("connection reset")
+                || msg.contains("connection refused")
+                || msg.contains("temporarily unavailable")
+                || msg.contains("rate limit")
+                || msg.contains("http 429")
+                || msg.contains("http 502")
+                || msg.contains("http 503")
+                || msg.contains("http 504");
+    }
+
+    private static String flattenMessages(Throwable throwable) {
+        StringBuilder sb = new StringBuilder();
+        Throwable cursor = throwable;
+        while (cursor != null) {
+            if (cursor.getMessage() != null) {
+                if (sb.length() > 0) {
+                    sb.append(' ');
+                }
+                sb.append(cursor.getMessage());
+            }
+            cursor = cursor.getCause();
+        }
+        return sb.toString().toLowerCase(Locale.ROOT);
+    }
+
+    private static void sleepBeforeRetry(int attempt) {
+        long sleepMs = RETRY_BASE_DELAY_MS * (1L << attempt);
+        try {
+            Thread.sleep(sleepMs);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Embedding retry interrupted", ie);
+        }
+    }
+
+    private static float[] normalizeVectorDimensions(float[] vector) {
+        if (vector == null) {
+            return null;
+        }
+        if (vector.length == TARGET_VECTOR_DIMENSION) {
+            return vector;
+        }
+        float[] normalized = new float[TARGET_VECTOR_DIMENSION];
+        System.arraycopy(vector, 0, normalized, 0, Math.min(vector.length, TARGET_VECTOR_DIMENSION));
+        return normalized;
     }
 
 }

@@ -9,6 +9,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.peoplemesh.config.AppConfig;
 import org.peoplemesh.domain.enums.NodeType;
 import org.peoplemesh.domain.model.MeshNode;
+import org.peoplemesh.repository.NodeRepository;
 import org.peoplemesh.service.ClusteringService.ClusterResult;
 import org.peoplemesh.service.ClusteringService.EmbeddingRow;
 
@@ -27,6 +28,7 @@ class ClusteringSchedulerTest {
     @Mock ClusteringService clusteringService;
     @Mock ClusterNamingLlm clusterNamingLlm;
     @Mock EmbeddingService embeddingService;
+    @Mock NodeRepository nodeRepository;
 
     @InjectMocks
     ClusteringScheduler scheduler;
@@ -37,6 +39,7 @@ class ClusteringSchedulerTest {
     void setUp() {
         clusteringConfig = mock(AppConfig.ClusteringConfig.class);
         lenient().when(config.clustering()).thenReturn(clusteringConfig);
+        lenient().when(nodeRepository.listCommunities()).thenReturn(List.of());
     }
 
     @Test

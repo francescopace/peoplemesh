@@ -8,6 +8,8 @@ import org.peoplemesh.domain.dto.ProfileSchema;
 import org.peoplemesh.domain.enums.NodeType;
 import org.peoplemesh.domain.model.MeshNode;
 import org.peoplemesh.domain.model.UserIdentity;
+import org.peoplemesh.repository.NodeRepository;
+import org.peoplemesh.repository.UserIdentityRepository;
 import org.peoplemesh.service.OAuthTokenExchangeService.GitHubEnrichedResult;
 import org.peoplemesh.service.OAuthTokenExchangeService.OidcSubject;
 
@@ -35,6 +37,12 @@ public class OAuthCallbackService {
 
     @Inject
     AppConfig appConfig;
+
+    @Inject
+    NodeRepository nodeRepository;
+
+    @Inject
+    UserIdentityRepository userIdentityRepository;
 
     public record LoginResult(UUID userId, String displayName, boolean isNewUser) {}
 
@@ -142,15 +150,15 @@ public class OAuthCallbackService {
     }
 
     Optional<UserIdentity> findIdentityByOauth(String provider, String subject) {
-        return UserIdentity.findByOauth(provider, subject);
+        return userIdentityRepository.findByProviderAndSubject(provider, subject);
     }
 
     Optional<MeshNode> findNodeById(UUID nodeId) {
-        return MeshNode.findByIdOptional(nodeId);
+        return nodeRepository.findById(nodeId);
     }
 
     Optional<MeshNode> findUserNodeByExternalId(String email) {
-        return MeshNode.findUserByExternalId(email);
+        return nodeRepository.findUserByExternalId(email);
     }
 
     UserIdentity newIdentity() {
@@ -162,11 +170,11 @@ public class OAuthCallbackService {
     }
 
     void persistIdentity(UserIdentity identity) {
-        identity.persist();
+        userIdentityRepository.persist(identity);
     }
 
     void persistNode(MeshNode node) {
-        node.persist();
+        nodeRepository.persist(node);
     }
 
     void recordConsent(UUID nodeId, String scope) {

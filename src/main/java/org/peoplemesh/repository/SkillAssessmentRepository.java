@@ -1,6 +1,8 @@
 package org.peoplemesh.repository;
 
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import jakarta.persistence.EntityManager;
 import org.peoplemesh.domain.model.SkillAssessment;
 
 import java.util.Collections;
@@ -13,28 +15,46 @@ import java.util.stream.Collectors;
 @ApplicationScoped
 public class SkillAssessmentRepository {
 
+    @Inject
+    EntityManager em;
+
     public List<SkillAssessment> findByNode(UUID nodeId) {
-        return SkillAssessment.findByNode(nodeId);
+        return em.createQuery("FROM SkillAssessment a WHERE a.nodeId = :nodeId", SkillAssessment.class)
+                .setParameter("nodeId", nodeId)
+                .getResultList();
     }
 
     public Map<UUID, List<SkillAssessment>> findByNodeIds(List<UUID> nodeIds) {
         if (nodeIds == null || nodeIds.isEmpty()) {
             return Collections.emptyMap();
         }
-        return SkillAssessment.<SkillAssessment>list("nodeId in ?1", nodeIds).stream()
+        return em.createQuery("FROM SkillAssessment a WHERE a.nodeId in :nodeIds", SkillAssessment.class)
+                .setParameter("nodeIds", nodeIds)
+                .getResultList().stream()
                 .collect(Collectors.groupingBy(sa -> sa.nodeId));
     }
 
     public Map<UUID, SkillAssessment> findByNodeAsMap(UUID nodeId) {
-        return SkillAssessment.findByNode(nodeId).stream()
+        return findByNode(nodeId).stream()
                 .collect(Collectors.toMap(a -> a.skillId, Function.identity(), (a, b) -> a));
     }
 
     public SkillAssessment findByNodeAndSkill(UUID nodeId, UUID skillId) {
-        return SkillAssessment.find("nodeId = ?1 and skillId = ?2", nodeId, skillId).firstResult();
+        return em.createQuery(
+                        "FROM SkillAssessment a WHERE a.nodeId = :nodeId AND a.skillId = :skillId",
+                        SkillAssessment.class)
+                .setParameter("nodeId", nodeId)
+                .setParameter("skillId", skillId)
+                .getResultStream()
+                .findFirst()
+                .orElse(null);
     }
 
     public void persist(SkillAssessment assessment) {
-        assessment.persist();
+        if (assessment.nodeId == null || assessment.skillId == null) {
+            em.persist(assessment);
+            return;
+        }
+        em.merge(assessment);
     }
 }

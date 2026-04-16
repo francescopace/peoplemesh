@@ -11,6 +11,7 @@ import org.peoplemesh.domain.enums.WorkMode;
 
 import org.peoplemesh.domain.model.MeshNode;
 import org.peoplemesh.repository.MeshNodeSearchRepository;
+import org.peoplemesh.repository.NodeRepository;
 import org.peoplemesh.repository.SkillAssessmentRepository;
 import org.peoplemesh.repository.SkillDefinitionRepository;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -97,6 +98,9 @@ public class MatchingService {
 
     @Inject
     SkillDefinitionRepository skillDefinitionRepository;
+
+    @Inject
+    NodeRepository nodeRepository;
 
     private static List<String> parseCommaSeparatedRoles(String plain) {
         return MatchingUtils.splitCommaSeparated(plain);
@@ -244,7 +248,9 @@ public class MatchingService {
         if (!consentService.hasActiveConsent(userId, "professional_matching")) {
             return Collections.emptyList();
         }
-        MeshNode myNode = MeshNode.findPublishedUserNode(userId).orElse(null);
+        MeshNode myNode = nodeRepository != null
+                ? nodeRepository.findPublishedUserNode(userId).orElse(null)
+                : MeshNode.findPublishedUserNode(userId).orElse(null);
         if (myNode == null || myNode.embedding == null) {
             return Collections.emptyList();
         }

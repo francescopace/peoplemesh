@@ -13,9 +13,9 @@ src/main/java/org/peoplemesh/
 ├── domain/
 │   ├── dto/        Data transfer objects
 │   ├── enums/
-│   └── model/      JPA entities (Panache Active Record)
+│   └── model/      JPA entities and value objects
 ├── mcp/            MCP tool definitions
-├── repository/     Native SQL repositories
+├── repository/     Persistence boundary (EntityManager, JPQL, native SQL)
 ├── security/       HTTP security and OIDC integration
 └── service/        Core business logic
 
@@ -54,6 +54,7 @@ src/main/web/
 - Keep layers separated by responsibility:
   - `api/resource` handles HTTP request/response only.
   - `service` contains business/use-case orchestration.
-  - `repository` handles persistence and query logic.
+  - `repository` handles all persistence and query logic.
+- Do not access `EntityManager`, Panache static queries, or native SQL from `service`, `api`, or `mcp` packages.
 - Keep API errors centralized in `api/error`.
 - For licensing details, review [`../../CLA.md`](../../CLA.md).

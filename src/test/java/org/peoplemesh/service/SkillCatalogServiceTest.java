@@ -7,9 +7,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.peoplemesh.domain.model.SkillCatalog;
 import org.peoplemesh.domain.model.SkillDefinition;
-
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.TypedQuery;
+import org.peoplemesh.repository.SkillDefinitionRepository;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -24,7 +22,7 @@ import static org.mockito.Mockito.*;
 class SkillCatalogServiceTest {
 
     @Mock EmbeddingService embeddingService;
-    @Mock EntityManager em;
+    @Mock SkillDefinitionRepository skillDefinitionRepository;
 
     @InjectMocks
     SkillCatalogService service;
@@ -60,6 +58,7 @@ class SkillCatalogServiceTest {
             SkillCatalog catalog = new SkillCatalog();
             catalog.name = "test";
             mocked.when(() -> SkillCatalog.findByIdOptional(id)).thenReturn(Optional.of(catalog));
+            when(skillDefinitionRepository.findByCatalog(id)).thenReturn(List.of());
 
             int count = service.importFromCsv(id, csvStream("category,name,lxp\n"));
             assertEquals(0, count);
@@ -69,8 +68,7 @@ class SkillCatalogServiceTest {
     @Test
     void importFromCsv_updatesExistingSkill() throws IOException {
         UUID id = UUID.randomUUID();
-        try (var catalogMock = mockStatic(SkillCatalog.class);
-             var skillMock = mockStatic(SkillDefinition.class)) {
+        try (var catalogMock = mockStatic(SkillCatalog.class)) {
 
             SkillCatalog catalog = new SkillCatalog();
             catalog.name = "test";
@@ -79,8 +77,7 @@ class SkillCatalogServiceTest {
             SkillDefinition existing = new SkillDefinition();
             existing.name = "Java";
             existing.category = "OldCategory";
-            skillMock.when(() -> SkillDefinition.findByCatalogAndName(id, "Java"))
-                    .thenReturn(Optional.of(existing));
+            when(skillDefinitionRepository.findByCatalog(id)).thenReturn(List.of(existing));
 
             String csv = "category,name\nBackend,Java";
             int count = service.importFromCsv(id, csvStream(csv));
@@ -93,8 +90,7 @@ class SkillCatalogServiceTest {
     @Test
     void importFromCsv_escoHeader_updatesExistingSkill() throws IOException {
         UUID id = UUID.randomUUID();
-        try (var catalogMock = mockStatic(SkillCatalog.class);
-             var skillMock = mockStatic(SkillDefinition.class)) {
+        try (var catalogMock = mockStatic(SkillCatalog.class)) {
 
             SkillCatalog catalog = new SkillCatalog();
             catalog.name = "test";
@@ -103,8 +99,7 @@ class SkillCatalogServiceTest {
             SkillDefinition existing = new SkillDefinition();
             existing.name = "industrial software";
             existing.category = "OldCategory";
-            skillMock.when(() -> SkillDefinition.findByCatalogAndName(id, "industrial software"))
-                    .thenReturn(Optional.of(existing));
+            when(skillDefinitionRepository.findByCatalog(id)).thenReturn(List.of(existing));
 
             String csv = """
                     uri,title,preferred_label_en,skill_type,reuse_level
@@ -121,8 +116,7 @@ class SkillCatalogServiceTest {
     @Test
     void importFromCsv_skillsBaseCategoryNameHeader_updatesExistingSkill() throws IOException {
         UUID id = UUID.randomUUID();
-        try (var catalogMock = mockStatic(SkillCatalog.class);
-             var skillMock = mockStatic(SkillDefinition.class)) {
+        try (var catalogMock = mockStatic(SkillCatalog.class)) {
 
             SkillCatalog catalog = new SkillCatalog();
             catalog.name = "test";
@@ -131,8 +125,7 @@ class SkillCatalogServiceTest {
             SkillDefinition existing = new SkillDefinition();
             existing.name = "Java";
             existing.category = "OldCategory";
-            skillMock.when(() -> SkillDefinition.findByCatalogAndName(id, "Java"))
-                    .thenReturn(Optional.of(existing));
+            when(skillDefinitionRepository.findByCatalog(id)).thenReturn(List.of(existing));
 
             String csv = """
                     "Category name",Name,"LXP Recommendation\t"
@@ -149,8 +142,7 @@ class SkillCatalogServiceTest {
     @Test
     void importFromCsv_skillsBaseCategoryNameHeaderWithBom_updatesExistingSkill() throws IOException {
         UUID id = UUID.randomUUID();
-        try (var catalogMock = mockStatic(SkillCatalog.class);
-             var skillMock = mockStatic(SkillDefinition.class)) {
+        try (var catalogMock = mockStatic(SkillCatalog.class)) {
 
             SkillCatalog catalog = new SkillCatalog();
             catalog.name = "test";
@@ -159,8 +151,7 @@ class SkillCatalogServiceTest {
             SkillDefinition existing = new SkillDefinition();
             existing.name = "Java";
             existing.category = "OldCategory";
-            skillMock.when(() -> SkillDefinition.findByCatalogAndName(id, "Java"))
-                    .thenReturn(Optional.of(existing));
+            when(skillDefinitionRepository.findByCatalog(id)).thenReturn(List.of(existing));
 
             String csv = """
                     \uFEFF"Category name",Name,"LXP Recommendation\t"
@@ -192,53 +183,49 @@ class SkillCatalogServiceTest {
     @Test
     void generateEmbeddings_skipsExisting() {
         UUID id = UUID.randomUUID();
-        try (var mocked = mockStatic(SkillDefinition.class)) {
-            SkillDefinition withEmb = new SkillDefinition();
-            withEmb.name = "Java"; withEmb.category = "Backend"; withEmb.embedding = new float[]{1f};
+        SkillDefinition withEmb = new SkillDefinition();
+        withEmb.id = UUID.randomUUID();
+        withEmb.name = "Java"; withEmb.category = "Backend"; withEmb.embedding = new float[]{1f};
 
-            SkillDefinition withoutEmb = new SkillDefinition();
-            withoutEmb.name = "Python"; withoutEmb.category = "Backend";
+        SkillDefinition withoutEmb = new SkillDefinition();
+        withoutEmb.id = UUID.randomUUID();
+        withoutEmb.name = "Python"; withoutEmb.category = "Backend";
 
-            mocked.when(() -> SkillDefinition.findByCatalog(id)).thenReturn(List.of(withEmb, withoutEmb));
-            when(embeddingService.generateEmbedding(anyString())).thenReturn(new float[]{0.5f});
+        when(skillDefinitionRepository.findByCatalog(id)).thenReturn(List.of(withEmb, withoutEmb));
+        when(embeddingService.generateEmbeddings(anyList())).thenReturn(List.of(new float[]{0.5f}));
 
-            service.generateEmbeddings(id);
+        service.generateEmbeddings(id);
 
-            verify(embeddingService, times(1)).generateEmbedding(anyString());
-            assertNotNull(withoutEmb.embedding);
-        }
+        verify(embeddingService, times(1)).generateEmbeddings(anyList());
+        verify(skillDefinitionRepository, atLeastOnce()).upsert(withoutEmb);
+        assertNotNull(withoutEmb.embedding);
     }
 
     @Test
     void generateEmbeddings_includesAliasesInText() {
         UUID id = UUID.randomUUID();
-        try (var mocked = mockStatic(SkillDefinition.class)) {
-            SkillDefinition sd = new SkillDefinition();
-            sd.name = "JavaScript"; sd.category = "Frontend"; sd.aliases = List.of("JS");
+        SkillDefinition sd = new SkillDefinition();
+        sd.id = UUID.randomUUID();
+        sd.name = "JavaScript"; sd.category = "Frontend"; sd.aliases = List.of("JS");
 
-            mocked.when(() -> SkillDefinition.findByCatalog(id)).thenReturn(List.of(sd));
-            when(embeddingService.generateEmbedding(contains("JS"))).thenReturn(new float[]{0.1f});
+        when(skillDefinitionRepository.findByCatalog(id)).thenReturn(List.of(sd));
+        when(embeddingService.generateEmbeddings(anyList())).thenAnswer(inv -> List.of(new float[]{0.1f}));
 
-            service.generateEmbeddings(id);
+        service.generateEmbeddings(id);
 
-            verify(embeddingService).generateEmbedding("Frontend: JavaScript (JS)");
-        }
+        verify(embeddingService).generateEmbeddings(argThat(list -> !list.isEmpty() && list.get(0).contains("JS")));
     }
 
     @Test
     void generateEmbeddings_failureDoesNotStop() {
         UUID id = UUID.randomUUID();
-        try (var mocked = mockStatic(SkillDefinition.class)) {
-            SkillDefinition sd1 = new SkillDefinition(); sd1.name = "A"; sd1.category = "Cat";
-            SkillDefinition sd2 = new SkillDefinition(); sd2.name = "B"; sd2.category = "Cat";
+        SkillDefinition sd1 = new SkillDefinition(); sd1.id = UUID.randomUUID(); sd1.name = "A"; sd1.category = "Cat";
+        SkillDefinition sd2 = new SkillDefinition(); sd2.id = UUID.randomUUID(); sd2.name = "B"; sd2.category = "Cat";
 
-            mocked.when(() -> SkillDefinition.findByCatalog(id)).thenReturn(List.of(sd1, sd2));
-            when(embeddingService.generateEmbedding(contains("A"))).thenThrow(new RuntimeException("fail"));
-            when(embeddingService.generateEmbedding(contains("B"))).thenReturn(new float[]{0.1f});
+        when(skillDefinitionRepository.findByCatalog(id)).thenReturn(List.of(sd1, sd2));
+        when(embeddingService.generateEmbeddings(anyList())).thenThrow(new RuntimeException("fail"));
 
-            assertDoesNotThrow(() -> service.generateEmbeddings(id));
-            assertNotNull(sd2.embedding);
-        }
+        assertDoesNotThrow(() -> service.generateEmbeddings(id));
     }
 
     @Test
@@ -273,35 +260,21 @@ class SkillCatalogServiceTest {
     @Test
     void listSkills_withCategory_filtersAndPaginates() {
         UUID id = UUID.randomUUID();
-        @SuppressWarnings("unchecked")
-        TypedQuery<SkillDefinition> query = mock(TypedQuery.class);
-        doReturn(query).when(em).createQuery(contains("category"), eq(SkillDefinition.class));
-        when(query.setParameter(anyInt(), any())).thenReturn(query);
-        when(query.setFirstResult(anyInt())).thenReturn(query);
-        when(query.setMaxResults(anyInt())).thenReturn(query);
-        when(query.getResultList()).thenReturn(Collections.emptyList());
+        when(skillDefinitionRepository.listSkills(id, "Backend", 0, 10)).thenReturn(Collections.emptyList());
 
         service.listSkills(id, "Backend", 0, 10);
 
-        verify(query).setParameter(2, "Backend");
-        verify(query).setFirstResult(0);
-        verify(query).setMaxResults(10);
+        verify(skillDefinitionRepository).listSkills(id, "Backend", 0, 10);
     }
 
     @Test
     void listSkills_noCategory_listsAll() {
         UUID id = UUID.randomUUID();
-        @SuppressWarnings("unchecked")
-        TypedQuery<SkillDefinition> query = mock(TypedQuery.class);
-        doReturn(query).when(em).createQuery(contains("ORDER BY"), eq(SkillDefinition.class));
-        when(query.setParameter(anyInt(), any())).thenReturn(query);
-        when(query.setFirstResult(anyInt())).thenReturn(query);
-        when(query.setMaxResults(anyInt())).thenReturn(query);
-        when(query.getResultList()).thenReturn(Collections.emptyList());
+        when(skillDefinitionRepository.listSkills(id, null, 1, 20)).thenReturn(Collections.emptyList());
 
         service.listSkills(id, null, 1, 20);
 
-        verify(query).setFirstResult(20);
+        verify(skillDefinitionRepository).listSkills(id, null, 1, 20);
     }
 
     private static ByteArrayInputStream csvStream(String content) {

@@ -11,6 +11,7 @@ import org.peoplemesh.domain.enums.Seniority;
 import org.peoplemesh.domain.enums.WorkMode;
 import org.peoplemesh.domain.enums.EmploymentType;
 import org.peoplemesh.domain.model.MeshNode;
+import org.peoplemesh.repository.NodeRepository;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -32,13 +33,16 @@ public class ProfileService {
     @Inject
     ConsentService consentService;
 
+    @Inject
+    NodeRepository nodeRepository;
+
     public Optional<ProfileSchema> getProfile(UUID userId) {
-        return MeshNode.findPublishedUserNode(userId)
+        return findPublishedUserNode(userId)
                 .map(this::toSchema);
     }
 
     public Optional<ProfileSchema> getPublicProfile(UUID nodeId) {
-        return MeshNode.<MeshNode>findByIdOptional(nodeId)
+        return findNodeById(nodeId)
                 .filter(n -> n.nodeType == NodeType.USER)
                 .map(this::toSchema);
     }
@@ -49,7 +53,7 @@ public class ProfileService {
         MeshNode node = getOrCreateUserNode(userId);
         applySchemaToNode(node, schema);
         applyEmbeddingIfConsented(node, userId);
-        node.persist();
+        persistNode(node);
 
         audit.log(userId, "PROFILE_UPDATED", "peoplemesh_upsert_profile");
         return node;
@@ -67,7 +71,7 @@ public class ProfileService {
             String locale,
             String company
     ) {
-        MeshNode node = MeshNode.<MeshNode>findByIdOptional(nodeId)
+        MeshNode node = findNodeById(nodeId)
                 .filter(n -> n.nodeType == NodeType.USER)
                 .orElseGet(() -> getOrCreateUserNode(nodeId));
 
@@ -125,7 +129,7 @@ public class ProfileService {
         sd.put("field_provenance", provenance);
 
         applyEmbeddingIfConsented(node, nodeId);
-        node.persist();
+        persistNode(node);
         return node;
     }
 
@@ -188,7 +192,7 @@ public class ProfileService {
         sd.put("field_provenance", provenance);
         node.structuredData = sd;
         applyEmbeddingIfConsented(node, userId);
-        node.persist();
+        persistNode(node);
 
         audit.log(userId, "PROFILE_SELECTIVE_IMPORT", "peoplemesh_selective_import_" + source);
     }
@@ -330,7 +334,7 @@ public class ProfileService {
     }
 
     private MeshNode getOrCreateUserNode(UUID nodeId) {
-        return MeshNode.findPublishedUserNode(nodeId)
+        return findPublishedUserNode(nodeId)
                 .orElseGet(() -> {
                     MeshNode n = new MeshNode();
                     n.id = nodeId;
@@ -340,9 +344,29 @@ public class ProfileService {
                     n.tags = new ArrayList<>();
                     n.structuredData = new LinkedHashMap<>();
                     n.searchable = true;
-                    n.persist();
+                    persistNode(n);
                     return n;
                 });
+    }
+
+    private Optional<MeshNode> findPublishedUserNode(UUID nodeId) {
+        return nodeRepository != null
+                ? nodeRepository.findPublishedUserNode(nodeId)
+                : MeshNode.findPublishedUserNode(nodeId);
+    }
+
+    private Optional<MeshNode> findNodeById(UUID nodeId) {
+        return nodeRepository != null
+                ? nodeRepository.findById(nodeId)
+                : MeshNode.findByIdOptional(nodeId);
+    }
+
+    private void persistNode(MeshNode node) {
+        if (nodeRepository != null) {
+            nodeRepository.persist(node);
+        } else {
+            node.persist();
+        }
     }
 
     String nodeToEmbeddingText(MeshNode node) {

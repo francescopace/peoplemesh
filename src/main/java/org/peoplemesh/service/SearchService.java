@@ -164,6 +164,7 @@ public class SearchService {
                 ? parsed.mustHave().skillsWithLevel() : null;
         List<SkillWithLevel> niceToHaveWithLevel = parsed.niceToHave() != null
                 ? parsed.niceToHave().skillsWithLevel() : null;
+        Map<UUID, Map<String, Short>> levelCacheByNode = loadSkillLevelCacheByNode(candidates, mustHaveWithLevel, niceToHaveWithLevel);
 
         List<ScoredCandidate> scored = new ArrayList<>();
 
@@ -171,7 +172,7 @@ public class SearchService {
             if (c.nodeType == NodeType.USER) {
                 scored.add(scoreUserNode(c, mustHaveSkills, niceToHaveSkills,
                         mustHaveLanguages, mustHaveIndustries, niceToHaveIndustries,
-                        mustHaveWithLevel, niceToHaveWithLevel));
+                        mustHaveWithLevel, niceToHaveWithLevel, levelCacheByNode.get(c.nodeId)));
             } else {
                 scored.add(scoreGenericNode(c, keywords, mustHaveSkills));
             }
@@ -186,7 +187,8 @@ public class SearchService {
                                            List<String> mustHaveLanguages,
                                            List<String> mustHaveIndustries, List<String> niceToHaveIndustries,
                                            List<SkillWithLevel> mustHaveWithLevel,
-                                           List<SkillWithLevel> niceToHaveWithLevel) {
+                                           List<SkillWithLevel> niceToHaveWithLevel,
+                                           Map<String, Short> cachedLevelsBySkillName) {
         List<String> candidateSkills = c.tags != null ? new ArrayList<>(c.tags) : new ArrayList<>();
         List<String> toolsAndTech = sdListOrEmpty(c.structuredData, "tools_and_tech");
         candidateSkills.addAll(toolsAndTech);
@@ -200,7 +202,7 @@ public class SearchService {
                 : (double) matchedMust.size() / mustHaveSkills.size();
 
         if (mustHaveWithLevel != null && !mustHaveWithLevel.isEmpty()) {
-            mustHaveCoverage = MatchingUtils.computeLevelAwareCoverage(c.nodeId, mustHaveWithLevel, candidateSkills);
+            mustHaveCoverage = MatchingUtils.computeLevelAwareCoverage(mustHaveWithLevel, candidateSkills, cachedLevelsBySkillName);
         }
 
         List<String> matchedNice = MatchingUtils.intersectCaseInsensitive(niceToHaveSkills, candidateSkills);
@@ -208,7 +210,7 @@ public class SearchService {
                 : (double) matchedNice.size() / niceToHaveSkills.size();
 
         if (niceToHaveWithLevel != null && !niceToHaveWithLevel.isEmpty()) {
-            double levelBonus = MatchingUtils.computeLevelAwareCoverage(c.nodeId, niceToHaveWithLevel, candidateSkills);
+            double levelBonus = MatchingUtils.computeLevelAwareCoverage(niceToHaveWithLevel, candidateSkills, cachedLevelsBySkillName);
             niceToHaveBonus = Math.max(niceToHaveBonus, levelBonus);
         }
 
@@ -457,6 +459,49 @@ public class SearchService {
             }
             if (!levels.isEmpty()) {
                 result.put(entry.getKey(), levels);
+            }
+        }
+        return result;
+    }
+
+    private Map<UUID, Map<String, Short>> loadSkillLevelCacheByNode(
+            List<RawNodeCandidate> candidates,
+            List<SkillWithLevel> mustHaveWithLevel,
+            List<SkillWithLevel> niceToHaveWithLevel
+    ) {
+        boolean needsLevelData = (mustHaveWithLevel != null && !mustHaveWithLevel.isEmpty())
+                || (niceToHaveWithLevel != null && !niceToHaveWithLevel.isEmpty());
+        if (!needsLevelData || candidates == null || candidates.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<UUID> nodeIds = candidates.stream()
+                .filter(c -> c.nodeType == NodeType.USER)
+                .map(c -> c.nodeId)
+                .toList();
+        if (nodeIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<UUID, List<SkillAssessment>> assessmentsByNode = skillAssessmentRepository.findByNodeIds(nodeIds);
+        if (assessmentsByNode.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Set<UUID> skillIds = assessmentsByNode.values().stream()
+                .flatMap(List::stream)
+                .map(a -> a.skillId)
+                .collect(Collectors.toSet());
+        Map<UUID, String> namesById = skillDefinitionRepository.findByIds(new ArrayList<>(skillIds)).stream()
+                .collect(Collectors.toMap(d -> d.id, d -> d.name));
+        Map<UUID, Map<String, Short>> result = new HashMap<>();
+        for (Map.Entry<UUID, List<SkillAssessment>> entry : assessmentsByNode.entrySet()) {
+            Map<String, Short> perNode = new HashMap<>();
+            for (SkillAssessment assessment : entry.getValue()) {
+                String name = namesById.get(assessment.skillId);
+                if (name != null) {
+                    perNode.put(name.toLowerCase(Locale.ROOT).trim(), assessment.level);
+                }
+            }
+            if (!perNode.isEmpty()) {
+                result.put(entry.getKey(), perNode);
             }
         }
         return result;

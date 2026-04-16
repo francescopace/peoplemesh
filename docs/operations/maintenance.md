@@ -45,6 +45,7 @@ Then run commands via executable (omit `--base-url` for local default):
 - `./pmc ldap-import`
 - `./pmc regenerate-embeddings --node-type USER --only-missing`
 - `./pmc regenerate-embeddings-status --job-id <uuid>`
+- `./pmc --raw --timeout-seconds 180 run-clustering`
 
 `regenerate-embeddings` defaults to `onlyMissing=true`.
 It also defaults to `batchSize=1`, and by default waits for completion through polling.
@@ -54,6 +55,7 @@ Defaults:
 - `--base-url` defaults to `http://localhost:8080` when omitted
 - local `localhost` targets can use dev default key automatically
 - non-local targets require `PEOPLEMESH_MAINTENANCE_KEY` (or `MAINTENANCE_API_KEY`)
+- timeout defaults to `120` seconds (`PEOPLEMESH_TIMEOUT_SECONDS` / `MAINTENANCE_TIMEOUT_SECONDS`)
 
 Custom remote target example:
 

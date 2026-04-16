@@ -7,6 +7,7 @@ import io.quarkus.narayana.jta.QuarkusTransaction;
 import org.jboss.logging.Logger;
 import org.peoplemesh.domain.enums.NodeType;
 import org.peoplemesh.domain.model.MeshNode;
+import org.peoplemesh.repository.NodeRepository;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -35,6 +36,9 @@ public class NodeEmbeddingMaintenanceService {
 
     @Inject
     AuditService auditService;
+
+    @Inject
+    NodeRepository nodeRepository;
 
     private final Map<UUID, MutableJobState> jobs = new ConcurrentHashMap<>();
     private final ExecutorService jobExecutor = Executors.newSingleThreadExecutor(r -> {
@@ -125,10 +129,7 @@ public class NodeEmbeddingMaintenanceService {
 
     private BatchData loadBatchData(List<UUID> batchIds) {
         return QuarkusTransaction.requiringNew().call(() -> {
-            List<MeshNode> nodes = MeshNode.getEntityManager()
-                    .createQuery("select n from MeshNode n where n.id in :ids", MeshNode.class)
-                    .setParameter("ids", batchIds)
-                    .getResultList();
+            List<MeshNode> nodes = nodeRepository.findByIds(batchIds);
             Map<UUID, MeshNode> byId = nodes.stream().collect(Collectors.toMap(n -> n.id, n -> n));
 
             List<BatchItem> items = new ArrayList<>(batchIds.size());
@@ -148,10 +149,7 @@ public class NodeEmbeddingMaintenanceService {
     private void persistBatchEmbeddings(List<BatchItem> items, List<float[]> embeddings) {
         QuarkusTransaction.requiringNew().run(() -> {
             List<UUID> ids = items.stream().map(BatchItem::nodeId).toList();
-            List<MeshNode> nodes = MeshNode.getEntityManager()
-                    .createQuery("select n from MeshNode n where n.id in :ids", MeshNode.class)
-                    .setParameter("ids", ids)
-                    .getResultList();
+            List<MeshNode> nodes = nodeRepository.findByIds(ids);
             Map<UUID, MeshNode> byId = nodes.stream().collect(Collectors.toMap(n -> n.id, n -> n));
 
             for (int i = 0; i < items.size(); i++) {
@@ -163,7 +161,7 @@ public class NodeEmbeddingMaintenanceService {
                 float[] embedding = embeddings.get(i);
                 node.embedding = embedding;
                 node.searchable = embedding != null;
-                node.persist();
+                nodeRepository.persist(node);
             }
         });
     }
@@ -236,31 +234,12 @@ public class NodeEmbeddingMaintenanceService {
     }
 
     List<UUID> findNodeIds(NodeType nodeType, boolean onlyMissing) {
-        if (nodeType == null) {
-            if (onlyMissing) {
-                return MeshNode.getEntityManager()
-                        .createQuery("select n.id from MeshNode n where n.embedding is null", UUID.class)
-                        .getResultList();
-            }
-            return MeshNode.getEntityManager()
-                    .createQuery("select n.id from MeshNode n", UUID.class)
-                    .getResultList();
-        }
-        if (onlyMissing) {
-            return MeshNode.getEntityManager()
-                    .createQuery("select n.id from MeshNode n where n.nodeType = :nodeType and n.embedding is null", UUID.class)
-                    .setParameter("nodeType", nodeType)
-                    .getResultList();
-        }
-        return MeshNode.getEntityManager()
-                .createQuery("select n.id from MeshNode n where n.nodeType = :nodeType", UUID.class)
-                .setParameter("nodeType", nodeType)
-                .getResultList();
+        return nodeRepository.findNodeIds(nodeType, onlyMissing);
     }
 
     void regenerateSingleNodeEmbedding(UUID nodeId) {
         QuarkusTransaction.requiringNew().run(() -> {
-            MeshNode node = MeshNode.<MeshNode>findByIdOptional(nodeId).orElse(null);
+            MeshNode node = nodeRepository.findById(nodeId).orElse(null);
             if (node == null) {
                 return;
             }
@@ -268,7 +247,7 @@ public class NodeEmbeddingMaintenanceService {
             float[] embedding = embeddingService.generateEmbedding(text);
             node.embedding = embedding;
             node.searchable = embedding != null;
-            node.persist();
+            nodeRepository.persist(node);
         });
     }
 

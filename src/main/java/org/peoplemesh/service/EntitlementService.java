@@ -1,12 +1,16 @@
 package org.peoplemesh.service;
 
 import jakarta.enterprise.context.ApplicationScoped;
-import org.peoplemesh.domain.model.UserIdentity;
+import jakarta.inject.Inject;
+import org.peoplemesh.repository.UserIdentityRepository;
 
 import java.util.UUID;
 
 @ApplicationScoped
 public class EntitlementService {
+
+    @Inject
+    UserIdentityRepository userIdentityRepository;
 
     public boolean canCreateJob(UUID nodeId) {
         return hasEntitlement(nodeId, "canCreateJob");
@@ -17,9 +21,7 @@ public class EntitlementService {
     }
 
     boolean hasEntitlement(UUID nodeId, String entitlementField) {
-        String query = "nodeId = ?1 and " + entitlementField + " = true";
-        return UserIdentity.find(query, nodeId)
-                .firstResultOptional().isPresent();
+        return userIdentityRepository.hasEntitlement(nodeId, entitlementField);
     }
 
 }

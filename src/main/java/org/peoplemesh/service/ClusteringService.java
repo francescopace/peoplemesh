@@ -2,9 +2,9 @@ package org.peoplemesh.service;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
 import org.jboss.logging.Logger;
 import org.peoplemesh.config.AppConfig;
+import org.peoplemesh.repository.ClusteringRepository;
 
 import java.util.*;
 
@@ -17,18 +17,14 @@ public class ClusteringService {
     AppConfig config;
 
     @Inject
-    EntityManager em;
+    ClusteringRepository clusteringRepository;
 
     public record EmbeddingRow(UUID userId, float[] embedding) {}
 
     public record ClusterResult(float[] centroid, List<UUID> memberUserIds) {}
 
     public List<EmbeddingRow> loadPublishedEmbeddings() {
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery(
-                "SELECT id, embedding::text FROM mesh.mesh_node " +
-                "WHERE node_type = 'USER' AND searchable = true AND embedding IS NOT NULL"
-        ).getResultList();
+        List<Object[]> rows = clusteringRepository.loadPublishedEmbeddings();
 
         List<EmbeddingRow> result = new ArrayList<>(rows.size());
         for (Object[] row : rows) {
@@ -98,13 +94,7 @@ public class ClusteringService {
                 ? memberUserIds
                 : memberUserIds.subList(0, sampleSize);
 
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery(
-                "SELECT tags, " +
-                "structured_data->'hobbies', structured_data->'sports', " +
-                "structured_data->'causes', structured_data->'topics_frequent', country " +
-                "FROM mesh.mesh_node WHERE node_type = 'USER' AND id IN :ids"
-        ).setParameter("ids", sample).getResultList();
+        List<Object[]> rows = clusteringRepository.loadClusterTraits(sample);
 
         Map<String, List<String>> traits = new LinkedHashMap<>();
         traits.put("skills", new ArrayList<>());

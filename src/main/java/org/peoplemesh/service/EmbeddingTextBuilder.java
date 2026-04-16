@@ -3,8 +3,6 @@ package org.peoplemesh.service;
 import org.peoplemesh.domain.dto.JobPostingDto;
 import org.peoplemesh.domain.dto.ProfileSchema;
 import org.peoplemesh.domain.model.MeshNode;
-import org.peoplemesh.domain.model.SkillAssessment;
-import org.peoplemesh.domain.model.SkillDefinition;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -82,31 +80,11 @@ public final class EmbeddingTextBuilder {
 
     private static String buildUserText(MeshNode node) {
         Map<String, Object> sd = node.structuredData != null ? node.structuredData : Collections.emptyMap();
-
-        List<String> skillNames = node.tags;
-        if (node.id != null) {
-            List<SkillAssessment> assessments = SkillAssessment.findByNode(node.id);
-            if (!assessments.isEmpty()) {
-                List<UUID> skillIds = assessments.stream().map(a -> a.skillId).toList();
-                Map<UUID, String> defNames = SkillDefinition.<SkillDefinition>list("id in ?1", skillIds)
-                        .stream()
-                        .collect(Collectors.toMap(d -> d.id, d -> d.name));
-                List<String> canonical = assessments.stream()
-                        .map(a -> defNames.get(a.skillId))
-                        .filter(Objects::nonNull)
-                        .toList();
-                if (!canonical.isEmpty()) {
-                    skillNames = canonical;
-                }
-            }
-        }
-
-        List<String> finalSkillNames = skillNames;
         return Stream.of(
                         field("Roles", node.description),
                         sdString(sd, "seniority") != null ? "Seniority: " + sdString(sd, "seniority") : null,
                         field("Industries", sdString(sd, "industries")),
-                        list("Technical Skills", finalSkillNames),
+                        list("Technical Skills", node.tags),
                         list("Soft Skills", sdList(sd, "skills_soft")),
                         list("Tools", sdList(sd, "tools_and_tech")),
                         list("Languages", sdList(sd, "languages_spoken")),

@@ -2,10 +2,10 @@ package org.peoplemesh.mcp;
 
 import io.quarkus.security.identity.SecurityIdentity;
 import jakarta.ws.rs.NotAuthorizedException;
-import org.peoplemesh.domain.model.MeshNode;
-import org.peoplemesh.domain.model.UserIdentity;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import org.peoplemesh.repository.NodeRepository;
+import org.peoplemesh.repository.UserIdentityRepository;
 
 import java.util.UUID;
 
@@ -18,10 +18,16 @@ public class UserResolver {
     @Inject
     SecurityIdentity identity;
 
+    @Inject
+    NodeRepository nodeRepository;
+
+    @Inject
+    UserIdentityRepository userIdentityRepository;
+
     public UUID resolveUserId() {
         UUID sessionUserId = identity.<UUID>getAttribute("pm.userId");
         if (sessionUserId != null) {
-            if (MeshNode.<MeshNode>findByIdOptional(sessionUserId).isEmpty()) {
+            if (nodeRepository.findById(sessionUserId).isEmpty()) {
                 throw new NotAuthorizedException("Session expired. Please log in again.");
             }
             return sessionUserId;
@@ -29,8 +35,7 @@ public class UserResolver {
 
         String subject = identity.getPrincipal().getName();
 
-        return UserIdentity.find("oauthSubject = ?1", subject)
-                .<UserIdentity>firstResultOptional()
+        return userIdentityRepository.findByOauthSubject(subject)
                 .map(u -> u.nodeId)
                 .orElseThrow(() -> new SecurityException(
                         "User not registered. Please log in via /api/v1/auth/login/{provider} first."));

@@ -49,19 +49,19 @@ public class SkillsService {
             levelScale = defaultLevelScale();
         }
         SkillCatalog catalog = catalogService.createCatalog(body.name(), body.description(), levelScale, body.source());
-        return skillCatalogMapper.toCatalogDto(catalog, SkillDefinition.countByCatalog(catalog.id));
+        return skillCatalogMapper.toCatalogDto(catalog, skillDefinitionRepository.countByCatalog(catalog.id));
     }
 
     public SkillCatalogDto updateCatalog(UUID userId, UUID catalogId, CatalogCreateRequest body) {
         ensureCanManageSkills(userId);
         SkillCatalog updated = catalogService.updateCatalog(
                 catalogId, body.name(), body.description(), body.levelScale(), body.source());
-        return skillCatalogMapper.toCatalogDto(updated, SkillDefinition.countByCatalog(updated.id));
+        return skillCatalogMapper.toCatalogDto(updated, skillDefinitionRepository.countByCatalog(updated.id));
     }
 
     public SkillCatalogDto getCatalog(UUID catalogId) {
         return catalogService.getCatalog(catalogId)
-                .map(c -> skillCatalogMapper.toCatalogDto(c, SkillDefinition.countByCatalog(c.id)))
+                .map(c -> skillCatalogMapper.toCatalogDto(c, skillDefinitionRepository.countByCatalog(c.id)))
                 .orElse(null);
     }
 
