@@ -24,8 +24,7 @@ CREATE TABLE identity.user_identity (
     oauth_provider    VARCHAR(50)  NOT NULL,
     oauth_subject     VARCHAR(255) NOT NULL,
     node_id           UUID         NOT NULL,
-    can_create_job    BOOLEAN      NOT NULL DEFAULT false,
-    can_manage_skills BOOLEAN      NOT NULL DEFAULT false,
+    is_admin          BOOLEAN      NOT NULL DEFAULT false,
     last_active_at    TIMESTAMPTZ,
     UNIQUE (oauth_provider, oauth_subject)
 );

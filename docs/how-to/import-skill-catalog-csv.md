@@ -8,7 +8,7 @@ Using a standard import path keeps skill definitions consistent and traceable ac
 
 ## Prerequisites
 
-- Authenticated user with `can_manage_skills`
+- Authenticated user with `is_admin`
 - A target catalog id (create one first if needed via `POST /api/v1/skills`)
 - A CSV file in one of the supported formats
 
@@ -40,5 +40,5 @@ curl -X POST \
 ## Troubleshooting
 
 - `400 Bad Request`: header not recognized or malformed CSV
-- `403 Forbidden`: missing `can_manage_skills`
+- `403 Forbidden`: missing `is_admin`
 - `404 Not Found`: catalog id does not exist

@@ -190,8 +190,7 @@ Values are comma-separated OAuth subject IDs.
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `peoplemesh.entitlements.can-create-job` | — | Subjects allowed to create jobs |
-| `peoplemesh.entitlements.can-manage-skills` | — | Subjects allowed to manage skill catalogs |
+| `peoplemesh.entitlements.is-admin` | — | Subjects granted admin access (`is_admin`) |
 
 ## LDAP Import
 

@@ -57,7 +57,7 @@ The matching system produces ranked suggestions but does not make legally bindin
 7. **Retention**: configurable automatic deletion of inactive profiles (inactivity determined from **`identity.user_identity.last_active_at`** relative to linked USER **`mesh_node`** rows); account deletion is immediate (hard delete, no grace period).
 8. **Monitoring**: (planned) AWS CloudWatch anomaly detection + SNS alerting for breach notification workflow.
 9. **Skill assessment data**: deleted on account erasure (**`ON DELETE CASCADE`** from **`mesh.mesh_node`** to **`skills.skill_assessment`**).
-10. **Skill catalog management**: write operations (create, import, delete catalogs) are restricted to users with the `can_manage_skills` entitlement, enforced at API level. Read access is available to all authenticated users. Catalog definitions contain no personal data.
+10. **Skill catalog management**: write operations (create, import, delete catalogs) are restricted to users with the `is_admin` entitlement, enforced at API level. Read access is available to all authenticated users. Catalog definitions contain no personal data.
 
 ## 5. Consultation
 

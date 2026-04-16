@@ -8,7 +8,7 @@ export async function renderAdmin(container) {
   container.innerHTML = "";
 
   const user = Auth.getUser() || {};
-  if (!user.entitlements?.can_manage_skills) {
+  if (!user.entitlements?.is_admin) {
     container.appendChild(emptyState("You do not have permission to access this page."));
     return;
   }

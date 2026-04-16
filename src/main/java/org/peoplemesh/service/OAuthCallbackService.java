@@ -126,13 +126,10 @@ public class OAuthCallbackService {
     }
 
     private void syncEntitlements(UserIdentity identity, String oauthSubject) {
-        boolean shouldCreateJob = appConfig.entitlements().canCreateJob()
+        boolean shouldBeAdmin = appConfig.entitlements().isAdmin()
                 .map(list -> list.contains(oauthSubject)).orElse(false);
-        boolean shouldManageSkills = appConfig.entitlements().canManageSkills()
-                .map(list -> list.contains(oauthSubject)).orElse(false);
-        if (identity.canCreateJob != shouldCreateJob || identity.canManageSkills != shouldManageSkills) {
-            identity.canCreateJob = shouldCreateJob;
-            identity.canManageSkills = shouldManageSkills;
+        if (identity.isAdmin != shouldBeAdmin) {
+            identity.isAdmin = shouldBeAdmin;
         }
     }
 

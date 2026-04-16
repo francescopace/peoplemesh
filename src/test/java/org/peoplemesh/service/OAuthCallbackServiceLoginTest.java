@@ -36,8 +36,7 @@ class OAuthCallbackServiceLoginTest {
         entitlements = mock(AppConfig.EntitlementsConfig.class);
         profileService = mock(ProfileService.class);
         when(appConfig.entitlements()).thenReturn(entitlements);
-        when(entitlements.canCreateJob()).thenReturn(Optional.empty());
-        when(entitlements.canManageSkills()).thenReturn(Optional.empty());
+        when(entitlements.isAdmin()).thenReturn(Optional.empty());
     }
 
     @Test
@@ -138,16 +137,14 @@ class OAuthCallbackServiceLoginTest {
         identity.oauthSubject = "sub-ent";
         service.identityByOauth = Optional.of(identity);
         service.nodeById = Optional.of(userNode(nodeId, "ent@example.com"));
-        when(entitlements.canCreateJob()).thenReturn(Optional.of(List.of("sub-ent")));
-        when(entitlements.canManageSkills()).thenReturn(Optional.of(List.of("sub-ent")));
+        when(entitlements.isAdmin()).thenReturn(Optional.of(List.of("sub-ent")));
 
         OidcSubject subject = new OidcSubject("sub-ent", "Ent User", "Ent", "User",
                 "ent@example.com", null, null, null, null, null);
 
         service.handleLogin("google", subject);
 
-        assertTrue(identity.canCreateJob);
-        assertTrue(identity.canManageSkills);
+        assertTrue(identity.isAdmin);
     }
 
     private TestableOAuthCallbackService baseService() {

@@ -32,8 +32,7 @@ class OAuthCallbackServiceTest {
     void setUp() {
         AppConfig.EntitlementsConfig ent = mock(AppConfig.EntitlementsConfig.class);
         lenient().when(appConfig.entitlements()).thenReturn(ent);
-        lenient().when(ent.canCreateJob()).thenReturn(Optional.empty());
-        lenient().when(ent.canManageSkills()).thenReturn(Optional.empty());
+        lenient().when(ent.isAdmin()).thenReturn(Optional.empty());
     }
 
     @Test

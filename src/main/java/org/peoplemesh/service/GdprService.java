@@ -71,8 +71,7 @@ public class GdprService {
                 ObjectNode identityNode = objectMapper.createObjectNode();
                 identityNode.put("id", identity.id.toString());
                 identityNode.put("oauth_provider", identity.oauthProvider);
-                identityNode.put("can_create_job", identity.canCreateJob);
-                identityNode.put("can_manage_skills", identity.canManageSkills);
+                identityNode.put("is_admin", identity.isAdmin);
                 if (identity.lastActiveAt != null) {
                     identityNode.put("last_active_at", identity.lastActiveAt.toString());
                 }

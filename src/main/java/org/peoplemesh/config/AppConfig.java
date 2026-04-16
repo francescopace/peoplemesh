@@ -34,9 +34,7 @@ public interface AppConfig {
     }
 
     interface EntitlementsConfig {
-        java.util.Optional<java.util.List<String>> canCreateJob();
-
-        java.util.Optional<java.util.List<String>> canManageSkills();
+        java.util.Optional<java.util.List<String>> isAdmin();
     }
 
     interface CvImportConfig {

@@ -33,8 +33,8 @@ public class SystemResource {
     @Path("/statistics")
     public Response getStatistics() {
         var userId = userResolver.resolveUserId();
-        if (!entitlementService.canManageSkills(userId)) {
-            throw new ForbiddenBusinessException("Missing entitlement can_manage_skills");
+        if (!entitlementService.isAdmin(userId)) {
+            throw new ForbiddenBusinessException("Missing entitlement is_admin");
         }
         SystemStatisticsDto statistics = systemStatisticsService.loadStatistics();
         return Response.ok(statistics).build();

@@ -33,9 +33,6 @@ public class NodeService {
     NodeRepository nodeRepository;
 
     @Inject
-    EntitlementService entitlementService;
-
-    @Inject
     NodeAccessPolicyService nodeAccessPolicyService;
 
     @Inject
@@ -43,7 +40,7 @@ public class NodeService {
 
     @Transactional
     public NodeDto createNode(UUID ownerUserId, NodePayload payload) {
-        enforceNodeCreationEntitlement(ownerUserId, payload.nodeType());
+        ensureNodeTypeCanBeManagedViaApi(payload.nodeType());
         MeshNode node = createEmptyNode();
         node.createdBy = ownerUserId;
         applyPayload(node, payload);
@@ -58,7 +55,7 @@ public class NodeService {
     public Optional<NodeDto> updateNode(UUID ownerUserId, UUID nodeId, NodePayload payload) {
         return findNodeByIdAndOwner(nodeId, ownerUserId)
                 .map(node -> {
-                    enforceNodeCreationEntitlement(ownerUserId, payload.nodeType());
+                    ensureNodeTypeCanBeManagedViaApi(payload.nodeType());
                     applyPayload(node, payload);
                     node.embedding = generateEmbedding(nodeToText(node));
                     persistNode(node);
@@ -165,9 +162,9 @@ public class NodeService {
         auditService.log(userId, action, toolName);
     }
 
-    private void enforceNodeCreationEntitlement(UUID ownerUserId, NodeType nodeType) {
-        if (nodeType == NodeType.JOB && !entitlementService.canCreateJob(ownerUserId)) {
-            throw new ForbiddenBusinessException("Insufficient entitlement to create job nodes");
+    private void ensureNodeTypeCanBeManagedViaApi(NodeType nodeType) {
+        if (nodeType == NodeType.JOB) {
+            throw new ForbiddenBusinessException("Job nodes can only be ingested via maintenance APIs");
         }
     }
 }

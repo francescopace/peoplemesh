@@ -100,7 +100,7 @@ export async function renderAppShell(container) {
 
   container.querySelector("#dropdown-logout-btn").addEventListener("click", () => Auth.logout());
 
-  if (user?.entitlements?.can_manage_skills) {
+  if (user?.entitlements?.is_admin) {
     const navCenter = container.querySelector(".app-header-center");
     if (navCenter) {
       const adminLink = document.createElement("a");

@@ -6,8 +6,8 @@ INSERT INTO mesh.mesh_node (id, created_by, node_type, title, description, searc
 VALUES ('d0000000-0000-0000-0000-000000000012', 'd0000000-0000-0000-0000-000000000012', 'USER', 'System: dev-seed-jobs', 'System owner for synthetic job seeds.', false, now(), now())
 ON CONFLICT (id) DO UPDATE SET searchable = false, updated_at = now();
 
-INSERT INTO identity.user_identity (id, oauth_provider, oauth_subject, node_id, can_create_job, can_manage_skills)
-VALUES ('d1000000-0000-0000-0000-000000000012', 'dev-seed', 'jobs-owner', 'd0000000-0000-0000-0000-000000000012', true, false)
+INSERT INTO identity.user_identity (id, oauth_provider, oauth_subject, node_id, is_admin)
+VALUES ('d1000000-0000-0000-0000-000000000012', 'dev-seed', 'jobs-owner', 'd0000000-0000-0000-0000-000000000012', false)
 ON CONFLICT (id) DO NOTHING;
 
 DELETE FROM mesh.mesh_node

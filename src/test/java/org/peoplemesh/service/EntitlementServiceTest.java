@@ -13,42 +13,22 @@ import static org.mockito.Mockito.verify;
 class EntitlementServiceTest {
 
     @Test
-    void canCreateJob_usesExpectedEntitlementField() {
+    void isAdmin_usesExpectedEntitlementField() {
         UUID nodeId = UUID.randomUUID();
         EntitlementService service = spy(new EntitlementService());
-        doReturn(true).when(service).hasEntitlement(nodeId, "canCreateJob");
+        doReturn(true).when(service).hasEntitlement(nodeId, "isAdmin");
 
-        assertTrue(service.canCreateJob(nodeId));
-        verify(service).hasEntitlement(nodeId, "canCreateJob");
+        assertTrue(service.isAdmin(nodeId));
+        verify(service).hasEntitlement(nodeId, "isAdmin");
     }
 
     @Test
-    void canCreateJob_returnsFalseWhenHelperReturnsFalse() {
+    void isAdmin_returnsFalseWhenHelperReturnsFalse() {
         UUID nodeId = UUID.randomUUID();
         EntitlementService service = spy(new EntitlementService());
-        doReturn(false).when(service).hasEntitlement(nodeId, "canCreateJob");
+        doReturn(false).when(service).hasEntitlement(nodeId, "isAdmin");
 
-        assertFalse(service.canCreateJob(nodeId));
-        verify(service).hasEntitlement(nodeId, "canCreateJob");
-    }
-
-    @Test
-    void canManageSkills_usesExpectedEntitlementField() {
-        UUID nodeId = UUID.randomUUID();
-        EntitlementService service = spy(new EntitlementService());
-        doReturn(true).when(service).hasEntitlement(nodeId, "canManageSkills");
-
-        assertTrue(service.canManageSkills(nodeId));
-        verify(service).hasEntitlement(nodeId, "canManageSkills");
-    }
-
-    @Test
-    void canManageSkills_returnsFalseWhenHelperReturnsFalse() {
-        UUID nodeId = UUID.randomUUID();
-        EntitlementService service = spy(new EntitlementService());
-        doReturn(false).when(service).hasEntitlement(nodeId, "canManageSkills");
-
-        assertFalse(service.canManageSkills(nodeId));
-        verify(service).hasEntitlement(nodeId, "canManageSkills");
+        assertFalse(service.isAdmin(nodeId));
+        verify(service).hasEntitlement(nodeId, "isAdmin");
     }
 }

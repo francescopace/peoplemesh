@@ -7,7 +7,6 @@ import org.peoplemesh.domain.dto.AtsIngestRequestDto;
 import org.peoplemesh.domain.dto.AtsIngestResultDto;
 import org.peoplemesh.domain.dto.AtsJobEntryDto;
 import org.peoplemesh.domain.dto.JobPostingDto;
-import org.peoplemesh.domain.exception.ForbiddenBusinessException;
 import org.peoplemesh.domain.exception.ValidationBusinessException;
 import org.peoplemesh.service.JobService.AtsJobPayload;
 
@@ -23,9 +22,6 @@ public class AtsIngestService {
 
     @Inject
     JobService jobService;
-
-    @Inject
-    EntitlementService entitlementService;
 
     public AtsIngestResultDto ingestJobs(AtsIngestRequestDto request) {
         validateRequest(request);
@@ -70,9 +66,6 @@ public class AtsIngestService {
         }
         if (request.ownerUserId == null) {
             throw new ValidationBusinessException("owner_user_id is required");
-        }
-        if (!entitlementService.canCreateJob(request.ownerUserId)) {
-            throw new ForbiddenBusinessException("owner_user_id cannot create job nodes");
         }
     }
 }

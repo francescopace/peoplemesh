@@ -12,12 +12,8 @@ public class EntitlementService {
     @Inject
     UserIdentityRepository userIdentityRepository;
 
-    public boolean canCreateJob(UUID nodeId) {
-        return hasEntitlement(nodeId, "canCreateJob");
-    }
-
-    public boolean canManageSkills(UUID nodeId) {
-        return hasEntitlement(nodeId, "canManageSkills");
+    public boolean isAdmin(UUID nodeId) {
+        return hasEntitlement(nodeId, "isAdmin");
     }
 
     boolean hasEntitlement(UUID nodeId, String entitlementField) {

@@ -94,8 +94,7 @@ public class MeService {
             payload.put("display_name", displayName);
         }
         Map<String, Boolean> entitlements = new LinkedHashMap<>();
-        entitlements.put("can_create_job", entitlementService.canCreateJob(nodeId));
-        entitlements.put("can_manage_skills", entitlementService.canManageSkills(nodeId));
+        entitlements.put("is_admin", entitlementService.isAdmin(nodeId));
         payload.put("entitlements", entitlements);
         return payload;
     }

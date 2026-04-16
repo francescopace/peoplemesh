@@ -16,7 +16,7 @@ export async function renderSkillsCatalog(container, options = {}) {
   }
 
   const user = Auth.getUser() || {};
-  const canManage = user.entitlements?.can_manage_skills === true;
+  const canManage = user.entitlements?.is_admin === true;
   let openCreateCatalogModal = () => {};
 
   const actions = [];

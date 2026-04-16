@@ -27,16 +27,16 @@ Goal: Have a working end-to-end matching system for a small team.
 - [x] **Improved Ranking** — Hybrid scoring tuning in `MatchingService` (embedding similarity + skill-level weighting + metadata). Skill Catalog adds proficiency-aware matching.
 - [x] **Basic profile enrichment (LLM from CV)** — CV import via Docling + LLM structuring (`LlmProfileStructuring`), GitHub import with repo language/topic enrichment.
 - [x] **Privacy dashboard** — GDPR export (Art. 15/20), account deletion (Art. 17, hard delete), processing restriction (Art. 18), granular per-scope consent management (`MeshNodeConsent`). Two-column layout. Retention enforcement via `GdprService`.
-- [x] **Skill Catalog** — Importable taxonomies (ESCO, O*NET, custom CSV), self-assessment (0–5 scale), reconciliation with free-text tags (`SkillReconciliationService`), multi-catalog. Write ops gated by `can_manage_skills` entitlement.
+- [x] **Skill Catalog** — Importable taxonomies (ESCO, O*NET, custom CSV), self-assessment (0–5 scale), reconciliation with free-text tags (`SkillReconciliationService`), multi-catalog. Write ops gated by `is_admin` entitlement.
 - [x] **Skill Catalog web UI** — Catalog management page, skill self-assessment in profile with catalog selector, level bars, interest indicators, reconciliation suggestions. Level badges on search result skill tags.
 - [x] **Public profiles** — Read-only view (`#/people/:id`) for published users, accessible from search results, My Mesh, job candidate lists. Displays identity, professional info, skill assessments, interests, location, contact actions.
-- [x] **Job ingestion** — JOB mesh nodes ingested from external ATS via `POST /api/v1/maintenance/ingest/jobs` with idempotent `external_id`-based upsert (`JobService`). Entitlement-gated manual creation (`can_create_job`).
+- [x] **Job ingestion** — JOB mesh nodes ingested from external ATS via `POST /api/v1/maintenance/ingest/jobs` with idempotent `external_id`-based upsert (`JobService`). Manual JOB creation via user APIs is blocked.
 - [x] **Auto-discovered communities** — K-means clustering on profile embeddings (`ClusteringService` / `ClusteringScheduler`) with LLM-generated names (`ClusterNamingLlm`, heuristic fallback). Feature-flagged, disabled by default.
 - [x] **Unified My Mesh view** — Status filters (All/Discover/Joined) for discovering and managing mesh nodes.
 - [x] **Static SPA web UI** — Vanilla JS + CSS SPA with views for landing, profile, search, explore, jobs, events, skills, privacy, public profile, terms, privacy policy. Event-driven notification hooks (dry-run mode).
 - [x] **OAuth multi-provider auth** — Google, Microsoft, GitHub via `OAuthLoginResource` + `OAuthTokenExchangeService`. HMAC-signed session cookies (`SessionService`). OIDC bearer for MCP.
 - [x] **LDAP directory import** — `LdapImportService` with configurable URL/bind/base/filter/paging, preview endpoint, import with audit, batch embedding generation. Exposed via maintenance endpoints (`X-Maintenance-Key`) and operator CLI (`./pmc` Bash script).
-- [x] **Access Control (Light)** — Entitlement-based access via `EntitlementService` (`can_create_job`, `can_manage_skills` flags on `UserIdentity`), configured per environment.
+- [x] **Access Control (Light)** — Entitlement-based access via `EntitlementService` (`is_admin` flag on `UserIdentity`), configured per environment.
 - [x] **Security hardening** — CSRF header filter, security headers (HSTS, CSP, etc.), bot blocking filter, CORS allowlist, maintenance API key + CIDR restriction.
 - [x] **Audit trail** — Pseudonymised audit logging (`AuditLogEntry`) with SHA-256 hashed mesh node ID and IP. No profile content in logs.
 - [x] **DPIA** — Data Protection Impact Assessment drafted, covering GDPR Art. 22, data minimisation, retention, encryption, consent, and sub-processor risks.
@@ -84,7 +84,7 @@ Goal: Replicate success in multiple teams / orgs.
   - ATS ingest scoped via `X-Tenant-Id` or API key mapping
   - Skill Catalog bound to tenants (already multi-catalog)
   - Clustering and GDPR scoped per tenant
-- [ ] **Access Control (Extended)** — Email domain restriction, broader role model beyond the two current entitlement flags.
+- [ ] **Access Control (Extended)** — Email domain restriction, broader role model beyond the current `is_admin` entitlement.
 - [ ] **Metrics Dashboard** — Time-to-find, match quality (manual feedback), adoption rate. *Not implemented.*
 - [ ] **Better Matching** — Multi-embedding weighting, reranker, diversity in results. *Not implemented beyond current hybrid scoring.*
 
@@ -108,7 +108,7 @@ Goal: Turn into an enterprise-ready product.
 
 - [ ] **Integrations** — HRIS (read-only first), Slack (official app).
   - **Workday ATS connector**: pull Job Requisitions via RaaS or REST API, map to `AtsJobPayload`, feed into `JobService.upsertFromAts()`. Options: `@Scheduled` Quarkus service or external bridge calling `POST /api/v1/maintenance/ingest/jobs`. Auth: Workday OAuth 2.0 or RaaS Basic Auth.
-- [ ] **Enterprise Features** — Full role-based access (beyond two entitlement flags), admin console UI. *Partial:* SSO via OIDC and audit logs already implemented in Phase 0.
+- [ ] **Enterprise Features** — Full role-based access (beyond the current `is_admin` entitlement), admin console UI. *Partial:* SSO via OIDC and audit logs already implemented in Phase 0.
 - [ ] **Matching Engine v2** — Domain-specific embeddings, advanced reranking. *Not started.*
 - [ ] **Deployment Options** — SaaS, private cloud, on-prem (OpenShift). *Partial:* `Dockerfile.jvm` (UBI OpenJDK 21) available; native profile in `pom.xml`. No Helm chart, no Operator, no multi-env deployment pipeline yet.
 

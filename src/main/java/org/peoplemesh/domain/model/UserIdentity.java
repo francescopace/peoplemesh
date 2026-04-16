@@ -24,11 +24,8 @@ public class UserIdentity extends PanacheEntityBase {
     @Column(name = "oauth_subject", nullable = false)
     public String oauthSubject;
 
-    @Column(name = "can_create_job", nullable = false)
-    public boolean canCreateJob;
-
-    @Column(name = "can_manage_skills", nullable = false)
-    public boolean canManageSkills;
+    @Column(name = "is_admin", nullable = false)
+    public boolean isAdmin;
 
     @Column(name = "last_active_at")
     public Instant lastActiveAt;

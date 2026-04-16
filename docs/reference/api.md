@@ -37,7 +37,7 @@ This reference follows PeopleMesh's security- and GDPR-first posture by design (
 | GET | `/api/v1/me/consents` | List consents |
 | POST/DELETE | `/api/v1/me/consents/{scope}` | Grant/revoke consent |
 | GET | `/api/v1/me/activity` | Activity feed |
-| | | **System** (`can_manage_skills`) |
+| | | **System** (`is_admin`) |
 | GET | `/api/v1/system/statistics` | Overview counters and runtime timing stats (LLM, embedding, HNSW) |
 | | | **Matches** |
 | POST | `/api/v1/matches/prompt` | Natural-language search |
@@ -49,7 +49,7 @@ This reference follows PeopleMesh's security- and GDPR-first posture by design (
 | GET/PUT | `/api/v1/nodes/{nodeId}` | Get / update a node |
 | GET | `/api/v1/nodes/{nodeId}/skills` | Node skill assessments |
 | GET | `/api/v1/nodes/{nodeId}/profile` | Public profile (read-only) |
-| | | **Skills** (`can_manage_skills`) |
+| | | **Skills** (`is_admin`) |
 | GET/POST | `/api/v1/skills` | List / create catalogs |
 | GET/DELETE | `/api/v1/skills/{catalogId}` | Get / delete catalog |
 | POST | `/api/v1/skills/{catalogId}/import` | Import definitions (CSV) |
@@ -74,7 +74,8 @@ This reference follows PeopleMesh's security- and GDPR-first posture by design (
 ## Notes
 
 - Endpoint authorization depends on OIDC/session state and configured entitlements.
-- `GET /api/v1/system/statistics` requires entitlement `can_manage_skills`.
+- `GET /api/v1/system/statistics` requires entitlement `is_admin`.
+- `POST /api/v1/nodes` cannot create `JOB` nodes; jobs are managed via `POST /api/v1/maintenance/ingest/jobs`.
 - Maintenance endpoints require `X-Maintenance-Key` and may also enforce IP/CIDR restrictions.
 - MCP integration is read-only by design.
 - API implementation layering:

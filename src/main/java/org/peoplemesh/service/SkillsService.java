@@ -43,7 +43,7 @@ public class SkillsService {
     }
 
     public SkillCatalogDto createCatalog(UUID userId, CatalogCreateRequest body) {
-        ensureCanManageSkills(userId);
+        ensureIsAdmin(userId);
         Map<String, Object> levelScale = body.levelScale();
         if (levelScale == null || levelScale.isEmpty()) {
             levelScale = defaultLevelScale();
@@ -53,7 +53,7 @@ public class SkillsService {
     }
 
     public SkillCatalogDto updateCatalog(UUID userId, UUID catalogId, CatalogCreateRequest body) {
-        ensureCanManageSkills(userId);
+        ensureIsAdmin(userId);
         SkillCatalog updated = catalogService.updateCatalog(
                 catalogId, body.name(), body.description(), body.levelScale(), body.source());
         return skillCatalogMapper.toCatalogDto(updated, skillDefinitionRepository.countByCatalog(updated.id));
@@ -66,7 +66,7 @@ public class SkillsService {
     }
 
     public int importCsv(UUID userId, UUID catalogId, InputStream csvStream) throws IOException {
-        ensureCanManageSkills(userId);
+        ensureIsAdmin(userId);
         int count = catalogService.importFromCsv(catalogId, csvStream);
         catalogService.generateEmbeddings(catalogId);
         return count;
@@ -83,13 +83,13 @@ public class SkillsService {
     }
 
     public void deleteCatalog(UUID userId, UUID catalogId) {
-        ensureCanManageSkills(userId);
+        ensureIsAdmin(userId);
         catalogService.deleteCatalog(catalogId);
     }
 
-    private void ensureCanManageSkills(UUID userId) {
-        if (!entitlementService.canManageSkills(userId)) {
-            throw new ForbiddenBusinessException("Skill catalog management requires can_manage_skills entitlement");
+    private void ensureIsAdmin(UUID userId) {
+        if (!entitlementService.isAdmin(userId)) {
+            throw new ForbiddenBusinessException("Skill catalog management requires is_admin entitlement");
         }
     }
 

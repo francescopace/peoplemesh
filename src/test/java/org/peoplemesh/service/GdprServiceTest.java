@@ -133,8 +133,7 @@ class GdprServiceTest {
         UserIdentity identity = new UserIdentity();
         identity.id = UUID.randomUUID();
         identity.oauthProvider = "google";
-        identity.canCreateJob = true;
-        identity.canManageSkills = false;
+        identity.isAdmin = false;
         identity.lastActiveAt = Instant.parse("2026-01-03T00:00:00Z");
 
         MeshNodeConsent consent = new MeshNodeConsent();
