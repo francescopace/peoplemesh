@@ -41,10 +41,14 @@ public class MeshNodeConsent extends PanacheEntityBase {
     }
 
     public static List<String> findActiveScopesByNodeId(UUID nodeId) {
-        return findActiveByNodeId(nodeId).stream()
-                .map(c -> c.scope)
-                .distinct()
-                .toList();
+        return getEntityManager()
+                .createQuery(
+                        "SELECT DISTINCT c.scope FROM MeshNodeConsent c " +
+                                "WHERE c.nodeId = :nodeId AND c.revokedAt IS NULL " +
+                                "ORDER BY c.scope",
+                        String.class)
+                .setParameter("nodeId", nodeId)
+                .getResultList();
     }
 
     public static long revokeByNodeAndScope(UUID nodeId, String scope) {

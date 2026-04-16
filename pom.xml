@@ -112,11 +112,6 @@
             <artifactId>quarkus-oidc</artifactId>
         </dependency>
 
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-cache</artifactId>
-        </dependency>
-
         <!-- Health -->
         <dependency>
             <groupId>io.quarkus</groupId>

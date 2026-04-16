@@ -124,8 +124,8 @@ CREATE TABLE mesh.mesh_node_consent (
     revoked_at     TIMESTAMPTZ
 );
 
-CREATE INDEX idx_mesh_node_consent_node
-    ON mesh.mesh_node_consent (node_id) WHERE revoked_at IS NULL;
+CREATE INDEX idx_mesh_node_consent_node_scope_active
+    ON mesh.mesh_node_consent (node_id, scope) WHERE revoked_at IS NULL;
 
 -- ============================================================================
 -- Skills
@@ -141,6 +141,9 @@ CREATE TABLE skills.skill_catalog (
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE INDEX idx_skill_catalog_name
+    ON skills.skill_catalog (name);
+
 CREATE TABLE skills.skill_definition (
     id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     catalog_id         UUID NOT NULL REFERENCES skills.skill_catalog(id) ON DELETE CASCADE,
@@ -154,7 +157,8 @@ CREATE TABLE skills.skill_definition (
 );
 
 CREATE INDEX idx_skill_def_catalog  ON skills.skill_definition (catalog_id);
-CREATE INDEX idx_skill_def_category ON skills.skill_definition (catalog_id, category);
+CREATE INDEX idx_skill_def_catalog_category_name
+    ON skills.skill_definition (catalog_id, category, name);
 CREATE INDEX idx_skill_def_aliases  ON skills.skill_definition USING gin (aliases);
 
 CREATE TABLE skills.skill_assessment (

@@ -1,7 +1,5 @@
 package org.peoplemesh.service;
 
-import io.quarkus.cache.CacheInvalidateAll;
-import io.quarkus.cache.CacheResult;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -37,7 +35,6 @@ public class SkillCatalogService {
     SkillDefinitionRepository skillDefinitionRepository;
 
     @Transactional
-    @CacheInvalidateAll(cacheName = "skill-catalogs")
     public SkillCatalog createCatalog(String name, String description,
                                        Map<String, Object> levelScale, String source) {
         SkillCatalog catalog = new SkillCatalog();
@@ -50,7 +47,6 @@ public class SkillCatalogService {
     }
 
     @Transactional
-    @CacheInvalidateAll(cacheName = "skill-catalogs")
     public SkillCatalog updateCatalog(UUID catalogId, String name, String description,
                                       Map<String, Object> levelScale, String source) {
         SkillCatalog catalog = SkillCatalog.findByIdOptional(catalogId)
@@ -65,7 +61,6 @@ public class SkillCatalogService {
     }
 
     @Transactional
-    @CacheInvalidateAll(cacheName = "skill-definitions")
     public int importFromCsv(UUID catalogId, InputStream csvStream) throws IOException {
         SkillCatalog catalog = SkillCatalog.findByIdOptional(catalogId)
                 .orElseThrow(() -> new NotFoundException("Catalog not found"));
@@ -153,15 +148,12 @@ public class SkillCatalogService {
     }
 
     @Transactional
-    @CacheInvalidateAll(cacheName = "skill-catalogs")
-    @CacheInvalidateAll(cacheName = "skill-definitions")
     public void deleteCatalog(UUID catalogId) {
         SkillCatalog catalog = SkillCatalog.findByIdOptional(catalogId)
                 .orElseThrow(() -> new NotFoundException("Catalog not found"));
         catalog.delete();
     }
 
-    @CacheResult(cacheName = "skill-catalogs")
     public List<SkillCatalog> listCatalogs() {
         return SkillCatalog.findAllSorted();
     }
@@ -170,7 +162,6 @@ public class SkillCatalogService {
         return SkillCatalog.findByIdOptional(catalogId);
     }
 
-    @CacheResult(cacheName = "skill-definitions")
     public List<SkillDefinition> listSkills(UUID catalogId, String category, int page, int size) {
         return skillDefinitionRepository.listSkills(catalogId, category, page, size);
     }

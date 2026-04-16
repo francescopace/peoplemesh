@@ -1,7 +1,5 @@
 package org.peoplemesh.service;
 
-import io.quarkus.cache.CacheInvalidateAll;
-import io.quarkus.cache.CacheResult;
 import org.peoplemesh.config.AppConfig;
 import org.peoplemesh.util.HashUtils;
 import org.peoplemesh.util.HmacSigner;
@@ -97,8 +95,6 @@ public class ConsentService {
     }
 
     @Transactional
-    @CacheInvalidateAll(cacheName = "consent-by-scope")
-    @CacheInvalidateAll(cacheName = "consent-scopes")
     public void recordConsent(UUID nodeId, String scope, String ipHash) {
         MeshNodeConsent consent = new MeshNodeConsent();
         consent.nodeId = nodeId;
@@ -110,18 +106,14 @@ public class ConsentService {
     }
 
     @Transactional
-    @CacheInvalidateAll(cacheName = "consent-by-scope")
-    @CacheInvalidateAll(cacheName = "consent-scopes")
     public void revokeConsent(UUID nodeId, String scope) {
         meshNodeConsentRepository.revokeByNodeAndScope(nodeId, scope);
     }
 
-    @CacheResult(cacheName = "consent-by-scope")
     public boolean hasActiveConsent(UUID nodeId, String scope) {
         return meshNodeConsentRepository.hasActiveConsent(nodeId, scope);
     }
 
-    @CacheResult(cacheName = "consent-scopes")
     public java.util.List<String> getActiveScopes(UUID nodeId) {
         return meshNodeConsentRepository.findActiveScopes(nodeId);
     }

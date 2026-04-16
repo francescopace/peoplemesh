@@ -34,8 +34,11 @@ public class SkillsService {
     SkillCatalogMapper skillCatalogMapper;
 
     public List<SkillCatalogDto> listCatalogs() {
-        return catalogService.listCatalogs().stream()
-                .map(c -> skillCatalogMapper.toCatalogDto(c, SkillDefinition.countByCatalog(c.id)))
+        List<SkillCatalog> catalogs = catalogService.listCatalogs();
+        Map<UUID, Long> skillCountsByCatalog = skillDefinitionRepository.countByCatalogIds(
+                catalogs.stream().map(c -> c.id).toList());
+        return catalogs.stream()
+                .map(c -> skillCatalogMapper.toCatalogDto(c, skillCountsByCatalog.getOrDefault(c.id, 0L)))
                 .toList();
     }
 

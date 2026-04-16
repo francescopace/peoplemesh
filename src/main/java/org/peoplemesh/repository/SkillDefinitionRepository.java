@@ -6,6 +6,7 @@ import jakarta.persistence.EntityManager;
 import org.peoplemesh.domain.model.SkillDefinition;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -35,6 +36,25 @@ public class SkillDefinitionRepository {
 
     public Map<UUID, SkillDefinition> findMapByIds(List<UUID> ids) {
         return findByIds(ids).stream().collect(Collectors.toMap(sd -> sd.id, sd -> sd));
+    }
+
+    public Map<UUID, Long> countByCatalogIds(List<UUID> catalogIds) {
+        if (catalogIds == null || catalogIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<Object[]> rows = em.createQuery(
+                        "SELECT d.catalogId, COUNT(d) " +
+                                "FROM SkillDefinition d " +
+                                "WHERE d.catalogId IN ?1 " +
+                                "GROUP BY d.catalogId",
+                        Object[].class)
+                .setParameter(1, catalogIds)
+                .getResultList();
+        Map<UUID, Long> countsByCatalog = new HashMap<>();
+        for (Object[] row : rows) {
+            countsByCatalog.put((UUID) row[0], (Long) row[1]);
+        }
+        return countsByCatalog;
     }
 
     public List<String> listCategories(UUID catalogId) {
