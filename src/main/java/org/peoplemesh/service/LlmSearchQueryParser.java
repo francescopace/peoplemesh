@@ -19,46 +19,19 @@ public class LlmSearchQueryParser implements SearchQueryParser {
     private static final Logger LOG = Logger.getLogger(LlmSearchQueryParser.class);
 
     private static final String SYSTEM_PROMPT = """
-            Convert ONE user search query into ONE JSON object for candidate matching.
-
-            Return ONLY JSON. No markdown, no explanations, no code fences.
-
-            Use this exact schema and keep all keys:
-            {
-              "must_have": {
-                "skills": [],
-                "skills_with_level": [],
-                "roles": [],
-                "languages": [],
-                "location": [],
-                "industries": []
-              },
-              "nice_to_have": {
-                "skills": [],
-                "skills_with_level": [],
-                "industries": [],
-                "experience": []
-              },
-              "seniority": "junior|mid|senior|lead|unknown",
-              "negative_filters": {
-                "seniority": null,
-                "skills": [],
-                "location": []
-              },
-              "keywords": [],
-              "embedding_text": ""
-            }
-
+            Extract search criteria from the query into JSON with this schema:
+            {"must_have":{"skills":[],"skills_with_level":[],"languages":[],"industries":[]},\
+            "nice_to_have":{"skills":[],"skills_with_level":[],"industries":[]},\
+            "seniority":"junior|mid|senior|lead|unknown",\
+            "keywords":[],"embedding_text":""}
             Rules:
-            - Be conservative: do not invent facts.
-            - Put strict requirements in must_have, optional preferences in nice_to_have.
-            - Normalize known aliases (k8s->Kubernetes, js->JavaScript, ts->TypeScript).
-            - Infer seniority only if clearly implied; otherwise "unknown".
-            - If a field is missing, return empty array (or null only for negative_filters.seniority).
-            - skills_with_level items format: {"name":"<skill>","level":1-5}. Use only if explicit level signal exists.
-            - keywords: short deduplicated terms from query intent.
-            - embedding_text: one short English sentence describing the ideal candidate profile.
-            - Keep output compact and valid JSON only.""";
+            - Do not invent facts absent from the query.
+            - must_have = strict requirements; nice_to_have = preferences.
+            - Normalize aliases (k8s->Kubernetes, js->JavaScript, ts->TypeScript).
+            - seniority: only if clearly implied, else "unknown".
+            - skills_with_level format: {"name":"X","level":1-5}. Use only when explicit level signal exists.
+            - keywords: short deduplicated intent terms.
+            - embedding_text: max 10-word English phrase describing the ideal candidate.""";
 
     @Inject
     ChatModel chatModel;

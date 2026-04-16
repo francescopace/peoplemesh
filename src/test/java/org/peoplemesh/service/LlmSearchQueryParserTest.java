@@ -44,10 +44,9 @@ class LlmSearchQueryParserTest {
     void parse_validLlmResponse_returnsParsed() {
         String json = """
                 {
-                  "must_have": {"skills": ["Java"], "roles": [], "languages": [], "location": [], "industries": []},
-                  "nice_to_have": {"skills": [], "industries": [], "experience": []},
+                  "must_have": {"skills": ["Java"], "languages": [], "industries": []},
+                  "nice_to_have": {"skills": [], "industries": []},
                   "seniority": "senior",
-                  "negative_filters": {"seniority": null, "skills": [], "location": null},
                   "keywords": ["backend"],
                   "embedding_text": "Senior Java developer"
                 }
@@ -65,10 +64,9 @@ class LlmSearchQueryParserTest {
         String json = """
                 ```json
                 {
-                  "must_have": {"skills": ["Python"], "roles": [], "languages": [], "location": [], "industries": []},
-                  "nice_to_have": {"skills": [], "industries": [], "experience": []},
+                  "must_have": {"skills": ["Python"], "languages": [], "industries": []},
+                  "nice_to_have": {"skills": [], "industries": []},
                   "seniority": "mid",
-                  "negative_filters": {"seniority": null, "skills": [], "location": null},
                   "keywords": [],
                   "embedding_text": "Mid Python developer"
                 }
