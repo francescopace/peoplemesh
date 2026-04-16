@@ -15,7 +15,7 @@ export async function renderAdmin(container) {
 
   let openCreateCatalogModal = null;
   const createCatalogBtn = el("button", {
-    className: "btn btn-primary",
+    className: "btn btn-ghost btn-sm",
     disabled: "true",
     onClick: () => {
       if (openCreateCatalogModal) {
@@ -24,16 +24,19 @@ export async function renderAdmin(container) {
     },
   },
     el("span", { className: "material-symbols-outlined", style: "font-size:18px" }, "add"),
-    el("span", {}, "Create Catalog")
+    el("span", {}, "Create")
   );
 
-  container.appendChild(pageHeader("Administration", "Manage skill catalogs", [createCatalogBtn]));
+  container.appendChild(pageHeader("Administration", "System overview, statistics, and skill catalogs"));
 
   const overviewSection = el("section", { className: "stack-4" });
   container.appendChild(overviewSection);
 
   const catalogsSection = el("section", { className: "stack-4", style: "margin-top:var(--space-8)" });
-  catalogsSection.appendChild(el("h2", { className: "page-title", style: "font-size:1.1rem" }, "Skill Catalogs"));
+  const catalogsHeader = el("div", { style: "display:flex;align-items:center;gap:var(--space-2)" });
+  catalogsHeader.appendChild(el("h2", { className: "page-title", style: "font-size:1.1rem;margin:0" }, "Skill Catalogs"));
+  catalogsHeader.appendChild(createCatalogBtn);
+  catalogsSection.appendChild(catalogsHeader);
   container.appendChild(catalogsSection);
 
   const overviewPromise = renderAdminOverview(overviewSection);

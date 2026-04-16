@@ -139,9 +139,10 @@ export async function renderAppShell(container) {
 }
 
 export function updateNavActive(currentPath) {
+  const basePath = currentPath.split("?")[0];
   document.querySelectorAll(".header-nav-link, .mobile-bottom-nav-item").forEach((link) => {
     const linkPath = link.dataset.path;
-    let isActive = currentPath === linkPath || currentPath.startsWith(linkPath + "/");
+    let isActive = basePath === linkPath || basePath.startsWith(linkPath + "/");
     if (linkPath === "/my-mesh" && (currentPath.startsWith("/jobs/") || currentPath === "/explore")) {
       isActive = true;
     }

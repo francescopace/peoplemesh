@@ -2,7 +2,7 @@
 set -euo pipefail
 
 DEFAULT_BASE_URL="http://localhost:8080"
-DEFAULT_TIMEOUT_SECONDS="60"
+DEFAULT_TIMEOUT_SECONDS="120"
 DEV_LOCAL_MAINTENANCE_KEY="dev-local-maintenance-key"
 
 NODE_TYPE_OPTIONS=(USER JOB COMMUNITY EVENT PROJECT INTEREST_GROUP)
@@ -21,7 +21,7 @@ Run operational maintenance tasks for PeopleMesh
 
 Environment variables:
   PEOPLEMESH_MAINTENANCE_KEY    Maintenance key for non-local targets
-  PEOPLEMESH_TIMEOUT_SECONDS    HTTP timeout in seconds (default: 60)
+  PEOPLEMESH_TIMEOUT_SECONDS    HTTP timeout in seconds (default: 120)
 
 Commands:
   purge-consent-tokens   Remove expired consent tokens
