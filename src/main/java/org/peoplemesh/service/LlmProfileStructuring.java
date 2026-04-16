@@ -10,6 +10,9 @@ import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
 import org.peoplemesh.domain.dto.ProfileSchema;
 
+import java.time.Instant;
+import java.util.LinkedHashSet;
+import java.util.Locale;
 import java.util.Optional;
 
 @ApplicationScoped
@@ -54,9 +57,23 @@ public class LlmProfileStructuring implements ProfileStructuringLlm {
             Rules:
             - Output ONLY raw JSON, no markdown fences.
             - Never return {} if CV has meaningful text.
-            - Fill as many fields as possible from evidence in CV.
+            - Use evidence from CV text only. Do not infer facts that are not explicitly supported by the CV.
+            - Prefer precision over recall: if uncertain, omit and use null.
             - If a field is unknown, use null (not empty strings).
-            - "roles" must contain exactly ONE string: the candidate's current/most-recent job title.
+            - "roles" must contain exactly ONE string and it must be a real job title from EXPERIENCE.
+            - Resolve current role deterministically:
+              1) If any role has Present/Current/Now in date range, use that role title.
+              2) Otherwise use the role with the most recent end date.
+              3) Never use summary headlines/descriptors as role values.
+            - generated_at must be copied exactly from the input line "Extraction UTC timestamp: ...".
+            - work_mode_preference must be null unless CV explicitly states remote/hybrid/office preference.
+            - skills_technical must contain atomic technologies (e.g., Kafka, Kubernetes), not section labels (e.g., "Cloud & Infrastructure").
+            - skills_soft must contain explicit behavioral capabilities (e.g., public speaking, technical storytelling, team leadership) and must NOT contain business functions (e.g., pre-sales, account management).
+            - tools_and_tech must contain only concrete technical tools/platforms/frameworks explicitly named in CV.
+            - Exclude from tools_and_tech non-tool entities such as publication channels, events, communities, employers, and role titles.
+            - Exclude certifications and credential names from tools_and_tech (e.g., phrases containing "certified" or "certification").
+            - learning_areas must include only explicit learning goals/focus areas from CV text; if none are explicit, set learning_areas to null.
+            - Keep arrays concise, deduplicated, and free of near-duplicates.
             """;
 
     @Inject
@@ -79,9 +96,10 @@ public class LlmProfileStructuring implements ProfileStructuringLlm {
 
         String content;
         try {
+            String extractionTimestamp = Instant.now().toString();
             content = chatModel.chat(
                     SystemMessage.from(SYSTEM_PROMPT),
-                    UserMessage.from("CV Content:\n" + cvContent)
+                    UserMessage.from("Extraction UTC timestamp: " + extractionTimestamp + "\nCV Content:\n" + cvContent)
             ).aiMessage().text();
         } catch (Exception e) {
             LOG.errorf(e, "LLM call failed for CV extraction");
@@ -95,12 +113,76 @@ public class LlmProfileStructuring implements ProfileStructuringLlm {
         try {
             LOG.debugf("Profile structuring LLM response: responseLength=%d", content.length());
             ProfileSchema extracted = objectMapper.readValue(MatchingUtils.stripMarkdownFences(content), ProfileSchema.class);
-            logExtractionSummary(extracted);
-            return Optional.ofNullable(extracted);
+            ProfileSchema sanitized = sanitizeSchema(extracted);
+            logExtractionSummary(sanitized);
+            return Optional.ofNullable(sanitized);
         } catch (Exception e) {
             LOG.errorf(e, "Failed to parse LLM response for CV extraction");
             return Optional.empty();
         }
+    }
+
+    private ProfileSchema sanitizeSchema(ProfileSchema schema) {
+        if (schema == null || schema.professional() == null) {
+            return schema;
+        }
+        var p = schema.professional();
+        var sanitizedTools = sanitizeToolsAndTech(p.toolsAndTech());
+        var sanitizedProfessional = new ProfileSchema.ProfessionalInfo(
+                p.roles(),
+                p.seniority(),
+                p.industries(),
+                p.skillsTechnical(),
+                p.skillsSoft(),
+                sanitizedTools,
+                p.languagesSpoken(),
+                p.workModePreference(),
+                p.employmentType(),
+                p.slackHandle()
+        );
+        return new ProfileSchema(
+                schema.profileVersion(),
+                schema.generatedAt(),
+                schema.consent(),
+                sanitizedProfessional,
+                schema.interestsProfessional(),
+                schema.personal(),
+                schema.geography(),
+                schema.fieldProvenance(),
+                schema.identity()
+        );
+    }
+
+    private java.util.List<String> sanitizeToolsAndTech(java.util.List<String> tools) {
+        if (tools == null || tools.isEmpty()) {
+            return tools;
+        }
+        var deduped = new LinkedHashSet<String>();
+        for (String tool : tools) {
+            if (tool == null || tool.isBlank()) {
+                continue;
+            }
+            if (isNonToolEntity(tool)) {
+                continue;
+            }
+            deduped.add(tool.trim());
+        }
+        if (deduped.isEmpty()) {
+            return null;
+        }
+        return java.util.List.copyOf(deduped);
+    }
+
+    private boolean isNonToolEntity(String value) {
+        String lower = value.toLowerCase(Locale.ROOT).trim();
+        return lower.contains("summit")
+                || lower.contains("conference")
+                || lower.contains("event")
+                || lower.contains("webinar")
+                || lower.contains("publication")
+                || lower.contains("article")
+                || lower.contains("certified")
+                || lower.contains("certification");
     }
 
     private void logExtractionSummary(ProfileSchema schema) {

@@ -109,6 +109,26 @@ class LlmProfileStructuringTest {
     }
 
     @Test
+    void extractProfile_filtersNonToolEntitiesFromToolsAndTech() {
+        String json = """
+                {
+                  "profile_version": "1.0",
+                  "professional": {
+                    "roles": ["Commercial Account Executive"],
+                    "tools_and_tech": ["GitLab", "Red Hat Summit", "Global Tech Conference", "AWS Certified Solutions Architect", "Kubernetes"]
+                  }
+                }
+                """;
+        mockChatResponse(json);
+
+        Optional<ProfileSchema> result = structuring.extractProfile("cv");
+
+        assertTrue(result.isPresent());
+        assertNotNull(result.get().professional());
+        assertEquals(java.util.List.of("GitLab", "Kubernetes"), result.get().professional().toolsAndTech());
+    }
+
+    @Test
     void extractProfile_nullContent_handlesGracefully() {
         String json = """
                 {
