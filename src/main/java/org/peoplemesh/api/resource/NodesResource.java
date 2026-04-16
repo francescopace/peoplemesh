@@ -17,14 +17,9 @@ import org.peoplemesh.api.error.ProblemDetail;
 import org.peoplemesh.domain.dto.NodeDto;
 import org.peoplemesh.domain.dto.NodePayload;
 import org.peoplemesh.domain.dto.SkillAssessmentDto;
-import org.peoplemesh.domain.enums.NodeType;
-import org.peoplemesh.domain.model.MeshNode;
 import org.peoplemesh.mcp.UserResolver;
-import org.peoplemesh.repository.NodeRepository;
-import org.peoplemesh.service.NodeAccessPolicyService;
 import org.peoplemesh.service.NodeService;
 import org.peoplemesh.service.ProfileService;
-import org.peoplemesh.service.SkillAssessmentService;
 
 import java.util.List;
 import java.util.UUID;
@@ -43,31 +38,10 @@ public class NodesResource {
     @Inject
     ProfileService profileService;
 
-    @Inject
-    NodeRepository nodeRepository;
-
-    @Inject
-    NodeAccessPolicyService nodeAccessPolicyService;
-
-    @Inject
-    SkillAssessmentService skillAssessmentService;
-
     @GET
     public Response listMyNodes(@QueryParam("type") String type) {
         UUID userId = userResolver.resolveUserId();
-        List<NodeDto> nodes;
-        if (type != null && !type.isBlank()) {
-            try {
-                NodeType nodeType = NodeType.valueOf(type.toUpperCase());
-                nodes = nodeService.listByCreatorAndType(userId, nodeType);
-            } catch (IllegalArgumentException e) {
-                return Response.status(400)
-                        .entity(ProblemDetail.of(400, "Bad Request", "Invalid node type: " + type))
-                        .build();
-            }
-        } else {
-            nodes = nodeService.listByCreator(userId);
-        }
+        List<NodeDto> nodes = nodeService.listByCreatorFiltered(userId, type);
         return Response.ok(nodes).build();
     }
 
@@ -96,19 +70,7 @@ public class NodesResource {
     public Response getNodeSkills(@PathParam("nodeId") UUID nodeId,
                                   @QueryParam("catalog_id") UUID catalogId) {
         UUID userId = userResolver.resolveUserId();
-        MeshNode node = nodeRepository.findById(nodeId).orElse(null);
-        if (node == null) {
-            return Response.status(404)
-                    .entity(ProblemDetail.of(404, "Not Found", "Node not found"))
-                    .build();
-        }
-        if (!nodeAccessPolicyService.canReadNode(userId, node)) {
-            return Response.status(403)
-                    .entity(ProblemDetail.of(403, "Forbidden", "You do not have access to this node"))
-                    .build();
-        }
-
-        List<SkillAssessmentDto> result = skillAssessmentService.listAssessments(node.id, catalogId);
+        List<SkillAssessmentDto> result = nodeService.getNodeSkillsForUser(userId, nodeId, catalogId);
         return Response.ok(result).build();
     }
 

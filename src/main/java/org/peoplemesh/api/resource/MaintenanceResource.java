@@ -18,16 +18,13 @@ import org.jboss.logging.Logger;
 import org.peoplemesh.api.MaintenanceAuthHelper;
 import org.peoplemesh.api.error.ProblemDetail;
 import org.peoplemesh.config.AppConfig;
-import org.peoplemesh.domain.dto.LdapImportResult;
-import org.peoplemesh.domain.dto.LdapUserPreview;
-import org.peoplemesh.domain.enums.NodeType;
 import org.peoplemesh.service.ClusteringScheduler;
 import org.peoplemesh.service.GdprService;
 import org.peoplemesh.service.JdbcConsentTokenStore;
 import org.peoplemesh.service.LdapImportService;
+import org.peoplemesh.service.MaintenanceService;
 import org.peoplemesh.service.NodeEmbeddingMaintenanceService;
 
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -42,7 +39,6 @@ import java.util.UUID;
 public class MaintenanceResource {
 
     private static final Logger LOG = Logger.getLogger(MaintenanceResource.class);
-    private static final UUID MAINTENANCE_ACTOR_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
 
     @Inject
     AppConfig config;
@@ -55,6 +51,9 @@ public class MaintenanceResource {
 
     @Inject
     ClusteringScheduler clusteringScheduler;
+
+    @Inject
+    MaintenanceService maintenanceService;
 
     @Inject
     LdapImportService ldapImportService;
@@ -97,11 +96,13 @@ public class MaintenanceResource {
                                 @QueryParam("limit") @DefaultValue("20") int limit) {
         assertAuthorized(key);
         try {
-            List<LdapUserPreview> previews = ldapImportService.preview(Math.min(limit, 200));
-            return Response.ok(previews).build();
+            if (maintenanceService != null) {
+                return Response.ok(maintenanceService.previewLdapUsers(limit)).build();
+            }
+            return Response.ok(ldapImportService.preview(Math.min(limit, 200))).build();
         } catch (IllegalStateException e) {
             return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(ProblemDetail.of(400, "Configuration Error", e.getMessage()))
+                    .entity(ProblemDetail.of(400, "Configuration Error", "LDAP configuration is invalid"))
                     .build();
         }
     }
@@ -111,11 +112,14 @@ public class MaintenanceResource {
     public Response ldapImport(@HeaderParam("X-Maintenance-Key") String key) {
         assertAuthorized(key);
         try {
-            LdapImportResult result = ldapImportService.importFromLdap(MAINTENANCE_ACTOR_ID);
-            return Response.ok(result).build();
+            if (maintenanceService != null) {
+                return Response.ok(maintenanceService.importFromLdap()).build();
+            }
+            UUID actorId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+            return Response.ok(ldapImportService.importFromLdap(actorId)).build();
         } catch (IllegalStateException e) {
             return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(ProblemDetail.of(400, "Configuration Error", e.getMessage()))
+                    .entity(ProblemDetail.of(400, "Configuration Error", "LDAP configuration is invalid"))
                     .build();
         }
     }
@@ -128,22 +132,21 @@ public class MaintenanceResource {
                                          @QueryParam("batchSize") @DefaultValue("1") int batchSize) {
         assertAuthorized(key);
         try {
-            NodeType nodeType = parseNodeType(nodeTypeParam);
-            NodeEmbeddingMaintenanceService.EmbeddingRegenerationJobStatus status =
-                    nodeEmbeddingMaintenanceService.startRegenerationEmbeddings(
-                            MAINTENANCE_ACTOR_ID,
-                            nodeType,
-                            onlyMissing,
-                            batchSize
-                    );
+            if (maintenanceService != null) {
+                var status = maintenanceService.startEmbeddingRegeneration(nodeTypeParam, onlyMissing, batchSize);
+                return Response.accepted(status).build();
+            }
+            UUID actorId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+            var status = nodeEmbeddingMaintenanceService.startRegenerationEmbeddings(
+                    actorId,
+                    parseNodeType(nodeTypeParam),
+                    onlyMissing,
+                    batchSize
+            );
             return Response.accepted(status).build();
         } catch (IllegalArgumentException e) {
             return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(ProblemDetail.of(400, "Validation Error", e.getMessage()))
-                    .build();
-        } catch (Exception e) {
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                    .entity(ProblemDetail.of(500, "Embedding Error", "Embedding regeneration failed"))
+                    .entity(ProblemDetail.of(400, "Validation Error", "Invalid maintenance request"))
                     .build();
         }
     }
@@ -154,27 +157,34 @@ public class MaintenanceResource {
                                                @PathParam("jobId") String jobIdParam) {
         assertAuthorized(key);
         try {
+            if (maintenanceService != null) {
+                return maintenanceService.getEmbeddingRegenerationStatus(jobIdParam)
+                        .<Response>map(status -> Response.ok(status).build())
+                        .orElseGet(() -> Response.status(Response.Status.NOT_FOUND)
+                                .entity(ProblemDetail.of(404, "Not Found", "Embedding job not found"))
+                                .build());
+            }
             UUID jobId = UUID.fromString(jobIdParam);
             return nodeEmbeddingMaintenanceService.getRegenerationJobStatus(jobId)
                     .<Response>map(status -> Response.ok(status).build())
                     .orElseGet(() -> Response.status(Response.Status.NOT_FOUND)
-                            .entity(ProblemDetail.of(404, "Not Found", "Embedding job not found: " + jobIdParam))
+                            .entity(ProblemDetail.of(404, "Not Found", "Embedding job not found"))
                             .build());
         } catch (IllegalArgumentException e) {
             return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(ProblemDetail.of(400, "Validation Error", "Invalid jobId: " + jobIdParam))
+                    .entity(ProblemDetail.of(400, "Validation Error", "Invalid jobId format"))
                     .build();
         }
     }
 
-    private NodeType parseNodeType(String nodeTypeParam) {
+    private org.peoplemesh.domain.enums.NodeType parseNodeType(String nodeTypeParam) {
         if (nodeTypeParam == null || nodeTypeParam.isBlank()) {
             return null;
         }
         try {
-            return NodeType.valueOf(nodeTypeParam.trim().toUpperCase());
-        } catch (IllegalArgumentException ex) {
-            throw new IllegalArgumentException("Invalid nodeType: " + nodeTypeParam);
+            return org.peoplemesh.domain.enums.NodeType.valueOf(nodeTypeParam.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Invalid nodeType");
         }
     }
 

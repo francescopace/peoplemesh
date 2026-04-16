@@ -8,7 +8,6 @@ import org.peoplemesh.util.StringUtils;
 import org.peoplemesh.domain.model.MeshNode;
 import org.peoplemesh.repository.NodeRepository;
 
-import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -47,11 +46,10 @@ public class NotificationService {
         String email = node.externalId;
 
         String subject = buildSubject(action);
-        String body = buildBody(userId, action, toolName, metadataJson);
 
         if (appConfig.notification().dryRun()) {
-            LOG.infof("Notification dry-run: to=%s subject=%s body=%s",
-                    maskEmail(email), subject, StringUtils.abbreviate(body, 500));
+            LOG.infof("Notification dry-run: to=%s subject=%s action=%s tool=%s",
+                    maskEmail(email), subject, action, toolName != null ? toolName : "-");
             return;
         }
 
@@ -60,22 +58,6 @@ public class NotificationService {
 
     private String buildSubject(String action) {
         return StringUtils.buildNotificationSubject(appConfig.notification().subjectPrefix(), action);
-    }
-
-    private static String buildBody(UUID userId, String action, String toolName, String metadataJson) {
-        return """
-                Event: %s
-                Tool: %s
-                Time: %s
-                User: %s
-                Metadata: %s
-                """.formatted(
-                action,
-                toolName != null ? toolName : "-",
-                Instant.now(),
-                userId,
-                metadataJson != null ? metadataJson : "-"
-        );
     }
 
     private static String maskEmail(String email) {

@@ -194,9 +194,11 @@ public class SearchService {
         candidateSkills.addAll(toolsAndTech);
 
         List<String> matchedMust = MatchingUtils.intersectCaseInsensitive(mustHaveSkills, candidateSkills);
+        Set<String> matchedMustNormalized = matchedMust.stream()
+                .map(SearchService::normalizeTerm)
+                .collect(Collectors.toSet());
         List<String> missingMust = mustHaveSkills.stream()
-                .filter(s -> matchedMust.stream().noneMatch(m ->
-                        MatchingUtils.termsMatch(m, s)))
+                .filter(s -> !matchedMustNormalized.contains(normalizeTerm(s)))
                 .toList();
         double mustHaveCoverage = mustHaveSkills.isEmpty() ? 1.0
                 : (double) matchedMust.size() / mustHaveSkills.size();
@@ -394,6 +396,13 @@ public class SearchService {
 
     private static List<String> splitCommaSeparated(String plain) {
         return MatchingUtils.splitCommaSeparated(plain);
+    }
+
+    private static String normalizeTerm(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        return raw.toLowerCase(Locale.ROOT).trim();
     }
 
     private static final Set<String> STOP_WORDS = Set.of(

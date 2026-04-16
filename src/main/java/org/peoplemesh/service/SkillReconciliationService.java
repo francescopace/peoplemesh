@@ -106,7 +106,7 @@ public class SkillReconciliationService {
                             "FUZZY", Math.round(bestSim * 1000.0) / 1000.0));
                 }
             } catch (Exception e) {
-                LOG.debugf("Failed to generate embedding for tag value");
+                LOG.debugf(e, "Failed to generate embedding for nodeId=%s", nodeId);
             }
         }
 

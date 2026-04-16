@@ -20,13 +20,15 @@ public class MeshNodeConsentRepository {
     }
 
     public boolean hasActiveConsent(UUID nodeId, String scope) {
-        Long count = em.createQuery(
-                        "SELECT COUNT(c) FROM MeshNodeConsent c WHERE c.nodeId = :nodeId AND c.scope = :scope AND c.revokedAt IS NULL",
-                        Long.class)
+        return !em.createQuery(
+                        "SELECT c.id FROM MeshNodeConsent c " +
+                                "WHERE c.nodeId = :nodeId AND c.scope = :scope AND c.revokedAt IS NULL",
+                        UUID.class)
                 .setParameter("nodeId", nodeId)
                 .setParameter("scope", scope)
-                .getSingleResult();
-        return count != null && count > 0;
+                .setMaxResults(1)
+                .getResultList()
+                .isEmpty();
     }
 
     public List<MeshNodeConsent> findActiveByNodeId(UUID nodeId) {

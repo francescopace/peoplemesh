@@ -400,7 +400,7 @@ public class MatchingService {
         all.sort(Comparator.comparingDouble(MeshMatchResult::score).reversed());
         int limit = config.matching().resultLimit();
         List<MeshMatchResult> result = all.size() > limit ? all.subList(0, limit) : all;
-        LOG.infof("action=matchAll userId=%s type=%s candidates=%d results=%d elapsedMs=%d",
+        LOG.debugf("action=matchAll userId=%s type=%s candidates=%d results=%d elapsedMs=%d",
                 excludeUserId, typeFilter, all.size(), result.size(), System.currentTimeMillis() - start);
         return result;
     }

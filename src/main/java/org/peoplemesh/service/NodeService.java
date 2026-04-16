@@ -2,7 +2,11 @@ package org.peoplemesh.service;
 
 import org.peoplemesh.domain.dto.NodeDto;
 import org.peoplemesh.domain.dto.NodePayload;
+import org.peoplemesh.domain.dto.SkillAssessmentDto;
 import org.peoplemesh.domain.enums.NodeType;
+import org.peoplemesh.domain.exception.ForbiddenBusinessException;
+import org.peoplemesh.domain.exception.NotFoundBusinessException;
+import org.peoplemesh.domain.exception.ValidationBusinessException;
 import org.peoplemesh.domain.model.MeshNode;
 import org.peoplemesh.repository.NodeRepository;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -28,8 +32,18 @@ public class NodeService {
     @Inject
     NodeRepository nodeRepository;
 
+    @Inject
+    EntitlementService entitlementService;
+
+    @Inject
+    NodeAccessPolicyService nodeAccessPolicyService;
+
+    @Inject
+    SkillAssessmentService skillAssessmentService;
+
     @Transactional
     public NodeDto createNode(UUID ownerUserId, NodePayload payload) {
+        enforceNodeCreationEntitlement(ownerUserId, payload.nodeType());
         MeshNode node = createEmptyNode();
         node.createdBy = ownerUserId;
         applyPayload(node, payload);
@@ -44,6 +58,7 @@ public class NodeService {
     public Optional<NodeDto> updateNode(UUID ownerUserId, UUID nodeId, NodePayload payload) {
         return findNodeByIdAndOwner(nodeId, ownerUserId)
                 .map(node -> {
+                    enforceNodeCreationEntitlement(ownerUserId, payload.nodeType());
                     applyPayload(node, payload);
                     node.embedding = generateEmbedding(nodeToText(node));
                     persistNode(node);
@@ -68,6 +83,27 @@ public class NodeService {
 
     public List<NodeDto> listByCreatorAndType(UUID ownerUserId, NodeType type) {
         return findNodesByOwnerAndType(ownerUserId, type).stream().map(this::toDto).toList();
+    }
+
+    public List<NodeDto> listByCreatorFiltered(UUID ownerUserId, String type) {
+        if (type == null || type.isBlank()) {
+            return listByCreator(ownerUserId);
+        }
+        NodeType parsedType;
+        try {
+            parsedType = NodeType.valueOf(type.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new ValidationBusinessException("Invalid node type: " + type);
+        }
+        return listByCreatorAndType(ownerUserId, parsedType);
+    }
+
+    public List<SkillAssessmentDto> getNodeSkillsForUser(UUID requesterUserId, UUID nodeId, UUID catalogId) {
+        MeshNode node = findNodeById(nodeId).orElseThrow(() -> new NotFoundBusinessException("Node not found"));
+        if (!nodeAccessPolicyService.canReadNode(requesterUserId, node)) {
+            throw new ForbiddenBusinessException("You do not have access to this node");
+        }
+        return skillAssessmentService.listAssessments(node.id, catalogId);
     }
 
     private void applyPayload(MeshNode node, NodePayload payload) {
@@ -127,5 +163,11 @@ public class NodeService {
 
     void logAudit(UUID userId, String action, String toolName) {
         auditService.log(userId, action, toolName);
+    }
+
+    private void enforceNodeCreationEntitlement(UUID ownerUserId, NodeType nodeType) {
+        if (nodeType == NodeType.JOB && !entitlementService.canCreateJob(ownerUserId)) {
+            throw new ForbiddenBusinessException("Insufficient entitlement to create job nodes");
+        }
     }
 }

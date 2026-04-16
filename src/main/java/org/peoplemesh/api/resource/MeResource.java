@@ -6,7 +6,12 @@ import io.smallrye.common.annotation.Blocking;
 import jakarta.annotation.security.PermitAll;
 import jakarta.inject.Inject;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
@@ -39,8 +44,6 @@ import org.peoplemesh.service.MeService;
 import org.peoplemesh.service.OAuthCallbackService;
 import org.peoplemesh.service.ProfileService;
 import org.peoplemesh.service.SessionService;
-import org.peoplemesh.service.SkillAssessmentService;
-import org.peoplemesh.service.SkillReconciliationService;
 import org.peoplemesh.service.UserNotificationService;
 import org.peoplemesh.util.HashUtils;
 
@@ -76,9 +79,6 @@ public class MeResource {
     UserNotificationService userNotificationService;
 
     @Inject
-    SkillReconciliationService reconciliationService;
-
-    @Inject
     CvImportService cvImportService;
 
     @Inject
@@ -92,9 +92,6 @@ public class MeResource {
 
     @Inject
     MeService meService;
-
-    @Inject
-    SkillAssessmentService skillAssessmentService;
 
     @Context
     UriInfo uriInfo;
@@ -181,7 +178,7 @@ public class MeResource {
     @GET
     @Authenticated
     @Path("/notifications")
-    public Response getNotifications(@QueryParam("limit") Integer limit) {
+    public Response getNotifications(@QueryParam("limit") @DefaultValue("20") @Min(1) @Max(100) Integer limit) {
         UUID userId = userResolver.resolveUserId();
         List<UserNotificationDto> notifications = userNotificationService.getRecentNotifications(userId, limit);
         return Response.ok(notifications).build();
@@ -192,17 +189,10 @@ public class MeResource {
     @Path("/skills")
     public Response getSkillAssessments(@QueryParam("catalog_id") UUID catalogId) {
         UUID userId = userResolver.resolveUserId();
-        var node = meService.findCurrentUserNode(userId);
-        if (node == null) {
+        List<SkillAssessmentDto> result = meService.listCurrentUserSkillAssessments(userId, catalogId);
+        if (result.isEmpty()) {
             return Response.noContent().build();
         }
-
-        List<SkillAssessmentDto> result = new java.util.ArrayList<>(
-                skillAssessmentService.listAssessments(node.id, catalogId));
-
-        List<SkillAssessmentDto> suggestions = reconciliationService.reconcile(node.id, catalogId);
-        result.addAll(suggestions);
-
         return Response.ok(result).build();
     }
 
@@ -210,17 +200,11 @@ public class MeResource {
     @Authenticated
     @Path("/skills")
     @Consumes(MediaType.APPLICATION_JSON)
-    public Response updateSkillAssessments(List<@Valid SkillAssessmentDto> assessments) {
+    public Response updateSkillAssessments(
+            @NotNull @Size(max = 500) List<@Valid SkillAssessmentDto> assessments) {
         UUID userId = userResolver.resolveUserId();
-        var node = meService.findCurrentUserNode(userId);
-        if (node == null) {
-            return Response.status(404)
-                    .entity(ProblemDetail.of(404, "Not Found", "No published profile found"))
-                    .build();
-        }
-
-        reconciliationService.applyReconciliation(node.id, userId, assessments);
-        return Response.ok(Map.of("updated", assessments.size())).build();
+        int updated = meService.updateCurrentUserSkillAssessments(userId, assessments);
+        return Response.ok(Map.of("updated", updated)).build();
     }
 
     @POST

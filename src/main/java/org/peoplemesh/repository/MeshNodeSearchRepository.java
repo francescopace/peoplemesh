@@ -41,7 +41,7 @@ public class MeshNodeSearchRepository {
 
     @SuppressWarnings("unchecked")
     @Timed(
-            value = "peoplemesh.hnsw.search",
+            value = "peoplemesh.hnsw.search.user",
             description = "HNSW vector search latency",
             percentiles = {0.95},
             histogram = true
@@ -61,7 +61,7 @@ public class MeshNodeSearchRepository {
 
     @SuppressWarnings("unchecked")
     @Timed(
-            value = "peoplemesh.hnsw.search",
+            value = "peoplemesh.hnsw.search.node",
             description = "HNSW vector search latency",
             percentiles = {0.95},
             histogram = true
@@ -92,7 +92,7 @@ public class MeshNodeSearchRepository {
 
     @SuppressWarnings("unchecked")
     @Timed(
-            value = "peoplemesh.hnsw.search",
+            value = "peoplemesh.hnsw.search.unified",
             description = "HNSW vector search latency",
             percentiles = {0.95},
             histogram = true

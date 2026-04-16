@@ -4,12 +4,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkiverse.mcp.server.TextContent;
 import io.quarkiverse.mcp.server.Tool;
 import io.quarkus.security.Authenticated;
+import org.peoplemesh.domain.exception.BusinessException;
 import org.peoplemesh.domain.dto.MeshMatchResult;
 import org.peoplemesh.domain.dto.ProfileSchema;
 import org.peoplemesh.domain.model.MeshNode;
 import org.peoplemesh.repository.NodeRepository;
 import org.peoplemesh.service.EmbeddingService;
-import org.peoplemesh.service.EmbeddingTextBuilder;
+import org.peoplemesh.service.MatchesService;
 import org.peoplemesh.service.MatchingService;
 import org.peoplemesh.service.NodeAccessPolicyService;
 import org.peoplemesh.service.ProfileService;
@@ -29,15 +30,17 @@ public class McpReadTools {
     @Inject
     ProfileService profileService;
     @Inject
+    MatchesService matchesService;
+    @Inject
     MatchingService matchingService;
     @Inject
     EmbeddingService embeddingService;
     @Inject
-    ObjectMapper objectMapper;
-    @Inject
     NodeRepository nodeRepository;
     @Inject
     NodeAccessPolicyService nodeAccessPolicyService;
+    @Inject
+    ObjectMapper objectMapper;
 
     @Tool(name = "peoplemesh_get_my_profile",
           description = "Retrieve your current PeopleMesh profile including professional, personal, and interest data.")
@@ -78,19 +81,23 @@ public class McpReadTools {
             }
             ProfileSchema schema = McpToolHelper.parsePayload(
                     profileJson, ProfileSchema.class, MAX_PAYLOAD_SIZE, objectMapper);
-            String text = EmbeddingTextBuilder.buildFromSchema(schema);
-            float[] embedding = embeddingService.generateEmbedding(text);
+            float[] embedding = embeddingService.generateEmbedding(
+                    org.peoplemesh.service.EmbeddingTextBuilder.buildFromSchema(schema));
             if (embedding == null) {
                 return new TextContent("Error: Embedding input was empty.");
             }
             UUID userId = userResolver.resolveUserId();
-            List<MeshMatchResult> results = matchingService.findAllMatches(userId, embedding, type, country);
+            List<MeshMatchResult> results = matchesService != null
+                    ? matchesService.matchFromSchema(userId, schema, type, country)
+                    : matchingService.findAllMatches(userId, embedding, type, country);
             String json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(results);
             return new TextContent(json);
         } catch (SecurityException e) {
             return new TextContent("Error: " + e.getMessage());
         } catch (IllegalArgumentException e) {
-            return new TextContent("Error: " + e.getMessage());
+            return new TextContent("Error: invalid profile payload.");
+        } catch (BusinessException e) {
+            return new TextContent("Error: " + e.publicDetail());
         } catch (Exception e) {
             LOG.errorf(e, "Error running match from profile schema");
             return McpToolHelper.error("match from profile");
@@ -103,11 +110,15 @@ public class McpReadTools {
     public TextContent matchMe(String type, String country) {
         try {
             UUID userId = userResolver.resolveUserId();
-            List<MeshMatchResult> results = matchingService.findAllMatches(userId, type, country);
+            List<MeshMatchResult> results = matchesService != null
+                    ? matchesService.matchMyProfile(userId, type, country)
+                    : matchingService.findAllMatches(userId, type, country);
             String json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(results);
             return new TextContent(json);
         } catch (SecurityException e) {
             return new TextContent("Error: " + e.getMessage());
+        } catch (BusinessException e) {
+            return new TextContent("Error: " + e.publicDetail());
         } catch (Exception e) {
             LOG.errorf(e, "Error finding matches for your profile");
             return McpToolHelper.error("find matches for your profile");
@@ -128,19 +139,26 @@ public class McpReadTools {
             } catch (IllegalArgumentException e) {
                 return new TextContent("Error: Invalid nodeId format.");
             }
-            MeshNode node = nodeRepository.findById(id).orElse(null);
-            if (node == null || node.embedding == null) {
-                return new TextContent("Node not found or has no embedding.");
-            }
             UUID userId = userResolver.resolveUserId();
-            if (!nodeAccessPolicyService.canReadNode(userId, node)) {
-                return new TextContent("Error: You do not have access to this node.");
+            List<MeshMatchResult> results;
+            if (matchesService != null) {
+                results = matchesService.matchFromNode(userId, id, type, country);
+            } else {
+                MeshNode node = nodeRepository.findById(id).orElse(null);
+                if (node == null || node.embedding == null) {
+                    return new TextContent("Node not found or has no embedding.");
+                }
+                if (!nodeAccessPolicyService.canReadNode(userId, node)) {
+                    return new TextContent("Error: You do not have access to this node.");
+                }
+                results = matchingService.findAllMatches(userId, node.embedding, type, country);
             }
-            List<MeshMatchResult> results = matchingService.findAllMatches(userId, node.embedding, type, country);
             String json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(results);
             return new TextContent(json);
         } catch (SecurityException e) {
             return new TextContent("Error: " + e.getMessage());
+        } catch (BusinessException e) {
+            return new TextContent("Error: " + e.publicDetail());
         } catch (Exception e) {
             LOG.errorf(e, "Error matching from node");
             return McpToolHelper.error("match from node");

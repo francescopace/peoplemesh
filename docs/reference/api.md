@@ -38,7 +38,7 @@ This reference follows PeopleMesh's security- and GDPR-first posture by design (
 | POST/DELETE | `/api/v1/me/consents/{scope}` | Grant/revoke consent |
 | GET | `/api/v1/me/activity` | Activity feed |
 | | | **System** (`can_manage_skills`) |
-| GET | `/api/v1/system/statistics` | Admin overview counters and runtime timing stats (LLM, embedding, HNSW) |
+| GET | `/api/v1/system/statistics` | Overview counters and runtime timing stats (LLM, embedding, HNSW) |
 | | | **Matches** |
 | POST | `/api/v1/matches/prompt` | Natural-language search |
 | POST | `/api/v1/matches` | Structured match |
@@ -74,11 +74,14 @@ This reference follows PeopleMesh's security- and GDPR-first posture by design (
 ## Notes
 
 - Endpoint authorization depends on OIDC/session state and configured entitlements.
+- `GET /api/v1/system/statistics` requires entitlement `can_manage_skills`.
 - Maintenance endpoints require `X-Maintenance-Key` and may also enforce IP/CIDR restrictions.
 - MCP integration is read-only by design.
 - API implementation layering:
   - REST endpoints live under `org.peoplemesh.api.resource`
   - API error contracts and exception mapping live under `org.peoplemesh.api.error`
+- Input validation is enforced with Jakarta Validation on DTO and endpoint payloads (for example node creation/update, ATS ingest payloads, and skill assessments).
+- API errors are normalized through `ProblemDetail` responses; internal exception details are not returned in response bodies.
 - `GET /api/v1/system/statistics` includes timing summaries for:
   - `timings.llmInference`
   - `timings.embeddingInference`
