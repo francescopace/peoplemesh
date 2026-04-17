@@ -1,4 +1,4 @@
-package org.peoplemesh.api;
+package org.peoplemesh.security;
 
 import jakarta.ws.rs.ForbiddenException;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -13,9 +13,9 @@ import java.util.Arrays;
 /**
  * Shared authentication/authorization logic for machine-to-machine maintenance endpoints.
  */
-public final class MaintenanceAuthHelper {
+public final class MaintenanceAccessGuard {
 
-    private MaintenanceAuthHelper() {}
+    private MaintenanceAccessGuard() {}
 
     public static void assertAuthorized(String key, AppConfig config, HttpHeaders httpHeaders) {
         String expected = config.maintenance().apiKey().orElse(null);

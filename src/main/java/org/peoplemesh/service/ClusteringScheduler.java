@@ -147,11 +147,7 @@ public class ClusteringScheduler {
     }
 
     void persistNode(MeshNode node) {
-        if (nodeRepository != null) {
-            nodeRepository.persist(node);
-        } else {
-            node.persist();
-        }
+        nodeRepository.persist(node);
     }
 
     Instant now() {
@@ -159,9 +155,6 @@ public class ClusteringScheduler {
     }
 
     List<MeshNode> loadCommunityNodes() {
-        if (nodeRepository != null) {
-            return new ArrayList<>(nodeRepository.listCommunities());
-        }
-        return MeshNode.list("nodeType = ?1", NodeType.COMMUNITY);
+        return new ArrayList<>(nodeRepository.listCommunities());
     }
 }

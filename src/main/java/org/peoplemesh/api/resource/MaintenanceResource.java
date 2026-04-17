@@ -17,11 +17,12 @@ import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
-import org.peoplemesh.api.MaintenanceAuthHelper;
-import org.peoplemesh.api.error.ProblemDetail;
-import org.peoplemesh.application.MaintenanceApplicationService;
+import org.peoplemesh.domain.exception.BusinessException;
 import org.peoplemesh.config.AppConfig;
 import org.peoplemesh.domain.exception.NotFoundBusinessException;
+import org.peoplemesh.domain.exception.ValidationBusinessException;
+import org.peoplemesh.security.MaintenanceAccessGuard;
+import org.peoplemesh.service.MaintenanceService;
 
 @Path("/api/v1/maintenance")
 @Produces(MediaType.APPLICATION_JSON)
@@ -32,7 +33,7 @@ public class MaintenanceResource {
     AppConfig config;
 
     @Inject
-    MaintenanceApplicationService maintenanceApplicationService;
+    MaintenanceService maintenanceService;
 
     @Context
     HttpHeaders httpHeaders;
@@ -41,21 +42,21 @@ public class MaintenanceResource {
     @Path("/purge-consent-tokens")
     public Response purgeConsentTokens(@HeaderParam("X-Maintenance-Key") String key) {
         assertAuthorized(key);
-        return Response.ok(maintenanceApplicationService.purgeConsentTokens()).build();
+        return Response.ok(maintenanceService.purgeConsentTokens()).build();
     }
 
     @POST
     @Path("/enforce-retention")
     public Response enforceRetention(@HeaderParam("X-Maintenance-Key") String key) {
         assertAuthorized(key);
-        return Response.ok(maintenanceApplicationService.enforceRetention()).build();
+        return Response.ok(maintenanceService.enforceRetention()).build();
     }
 
     @POST
     @Path("/run-clustering")
     public Response runClustering(@HeaderParam("X-Maintenance-Key") String key) {
         assertAuthorized(key);
-        return Response.ok(maintenanceApplicationService.runClustering()).build();
+        return Response.ok(maintenanceService.runClustering()).build();
     }
 
     @POST
@@ -64,11 +65,9 @@ public class MaintenanceResource {
                                 @QueryParam("limit") @DefaultValue("20") @Min(1) @Max(200) int limit) {
         assertAuthorized(key);
         try {
-            return Response.ok(maintenanceApplicationService.previewLdapUsers(limit)).build();
-        } catch (IllegalStateException e) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(ProblemDetail.of(400, "Configuration Error", "LDAP configuration is invalid"))
-                    .build();
+            return Response.ok(maintenanceService.previewLdapUsers(limit)).build();
+        } catch (ValidationBusinessException e) {
+            throw new BusinessException(400, "Configuration Error", "LDAP configuration is invalid");
         }
     }
 
@@ -77,11 +76,9 @@ public class MaintenanceResource {
     public Response ldapImport(@HeaderParam("X-Maintenance-Key") String key) {
         assertAuthorized(key);
         try {
-            return Response.ok(maintenanceApplicationService.importFromLdap()).build();
-        } catch (IllegalStateException e) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(ProblemDetail.of(400, "Configuration Error", "LDAP configuration is invalid"))
-                    .build();
+            return Response.ok(maintenanceService.importFromLdap()).build();
+        } catch (ValidationBusinessException e) {
+            throw new BusinessException(400, "Configuration Error", "LDAP configuration is invalid");
         }
     }
 
@@ -95,13 +92,11 @@ public class MaintenanceResource {
                                          @QueryParam("batchSize") @DefaultValue("1") @Min(1) @Max(1000) int batchSize) {
         assertAuthorized(key);
         try {
-            return Response.accepted(maintenanceApplicationService.regenerateEmbeddings(
+            return Response.accepted(maintenanceService.startEmbeddingRegeneration(
                     nodeTypeParam, onlyMissing, batchSize
             )).build();
-        } catch (IllegalArgumentException e) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(ProblemDetail.of(400, "Validation Error", "Invalid maintenance request"))
-                    .build();
+        } catch (ValidationBusinessException e) {
+            throw new BusinessException(400, "Validation Error", "Invalid maintenance request");
         }
     }
 
@@ -113,21 +108,15 @@ public class MaintenanceResource {
                                                String jobIdParam) {
         assertAuthorized(key);
         try {
-            var status = maintenanceApplicationService.embeddingRegenerationStatus(jobIdParam)
+            var status = maintenanceService.getEmbeddingRegenerationStatus(jobIdParam)
                     .orElseThrow(() -> new NotFoundBusinessException("Embedding job not found"));
             return Response.ok(status).build();
-        } catch (NotFoundBusinessException e) {
-            return Response.status(Response.Status.NOT_FOUND)
-                    .entity(ProblemDetail.of(404, "Not Found", e.publicDetail()))
-                    .build();
-        } catch (IllegalArgumentException e) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(ProblemDetail.of(400, "Validation Error", "Invalid jobId format"))
-                    .build();
+        } catch (ValidationBusinessException e) {
+            throw new BusinessException(400, "Validation Error", "Invalid jobId format");
         }
     }
 
     private void assertAuthorized(String key) {
-        MaintenanceAuthHelper.assertAuthorized(key, config, httpHeaders);
+        MaintenanceAccessGuard.assertAuthorized(key, config, httpHeaders);
     }
 }

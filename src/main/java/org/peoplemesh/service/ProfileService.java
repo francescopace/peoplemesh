@@ -12,6 +12,7 @@ import org.peoplemesh.domain.enums.WorkMode;
 import org.peoplemesh.domain.enums.EmploymentType;
 import org.peoplemesh.domain.model.MeshNode;
 import org.peoplemesh.repository.NodeRepository;
+import org.peoplemesh.util.EmbeddingTextBuilder;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -49,7 +50,7 @@ public class ProfileService {
 
     @Transactional
     public MeshNode upsertProfile(UUID userId, ProfileSchema schema) {
-        LOG.infof("action=upsertProfile userId=%s", userId);
+        LOG.debugf("action=upsertProfile userId=%s", userId);
         MeshNode node = getOrCreateUserNode(userId);
         applySchemaToNode(node, schema);
         applyEmbeddingIfConsented(node, userId);
@@ -350,23 +351,15 @@ public class ProfileService {
     }
 
     private Optional<MeshNode> findPublishedUserNode(UUID nodeId) {
-        return nodeRepository != null
-                ? nodeRepository.findPublishedUserNode(nodeId)
-                : MeshNode.findPublishedUserNode(nodeId);
+        return nodeRepository.findPublishedUserNode(nodeId);
     }
 
     private Optional<MeshNode> findNodeById(UUID nodeId) {
-        return nodeRepository != null
-                ? nodeRepository.findById(nodeId)
-                : MeshNode.findByIdOptional(nodeId);
+        return nodeRepository.findById(nodeId);
     }
 
     private void persistNode(MeshNode node) {
-        if (nodeRepository != null) {
-            nodeRepository.persist(node);
-        } else {
-            node.persist();
-        }
+        nodeRepository.persist(node);
     }
 
     String nodeToEmbeddingText(MeshNode node) {

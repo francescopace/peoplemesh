@@ -8,7 +8,6 @@ import org.peoplemesh.domain.dto.SkillDefinitionDto;
 import org.peoplemesh.domain.exception.ForbiddenBusinessException;
 import org.peoplemesh.domain.model.SkillCatalog;
 import org.peoplemesh.domain.model.SkillDefinition;
-import org.peoplemesh.mapper.SkillCatalogMapper;
 import org.peoplemesh.repository.SkillDefinitionRepository;
 
 import java.io.IOException;
@@ -30,15 +29,12 @@ public class SkillsService {
     @Inject
     EntitlementService entitlementService;
 
-    @Inject
-    SkillCatalogMapper skillCatalogMapper;
-
     public List<SkillCatalogDto> listCatalogs() {
         List<SkillCatalog> catalogs = catalogService.listCatalogs();
         Map<UUID, Long> skillCountsByCatalog = skillDefinitionRepository.countByCatalogIds(
                 catalogs.stream().map(c -> c.id).toList());
         return catalogs.stream()
-                .map(c -> skillCatalogMapper.toCatalogDto(c, skillCountsByCatalog.getOrDefault(c.id, 0L)))
+                .map(c -> toCatalogDto(c, skillCountsByCatalog.getOrDefault(c.id, 0L)))
                 .toList();
     }
 
@@ -49,19 +45,19 @@ public class SkillsService {
             levelScale = defaultLevelScale();
         }
         SkillCatalog catalog = catalogService.createCatalog(body.name(), body.description(), levelScale, body.source());
-        return skillCatalogMapper.toCatalogDto(catalog, skillDefinitionRepository.countByCatalog(catalog.id));
+        return toCatalogDto(catalog, skillDefinitionRepository.countByCatalog(catalog.id));
     }
 
     public SkillCatalogDto updateCatalog(UUID userId, UUID catalogId, CatalogCreateRequest body) {
         ensureIsAdmin(userId);
         SkillCatalog updated = catalogService.updateCatalog(
                 catalogId, body.name(), body.description(), body.levelScale(), body.source());
-        return skillCatalogMapper.toCatalogDto(updated, skillDefinitionRepository.countByCatalog(updated.id));
+        return toCatalogDto(updated, skillDefinitionRepository.countByCatalog(updated.id));
     }
 
     public SkillCatalogDto getCatalog(UUID catalogId) {
         return catalogService.getCatalog(catalogId)
-                .map(c -> skillCatalogMapper.toCatalogDto(c, skillDefinitionRepository.countByCatalog(c.id)))
+                .map(c -> toCatalogDto(c, skillDefinitionRepository.countByCatalog(c.id)))
                 .orElse(null);
     }
 
@@ -75,7 +71,7 @@ public class SkillsService {
     public List<SkillDefinitionDto> listSkills(UUID catalogId, String category, int page, int size) {
         int sanitizedSize = Math.min(size, 200);
         List<SkillDefinition> skills = catalogService.listSkills(catalogId, category, page, sanitizedSize);
-        return skills.stream().map(skillCatalogMapper::toDefinitionDto).toList();
+        return skills.stream().map(this::toDefinitionDto).toList();
     }
 
     public List<String> listCategories(UUID catalogId) {
@@ -102,5 +98,29 @@ public class SkillsService {
         scale.put("4", "Advanced");
         scale.put("5", "Expert");
         return scale;
+    }
+
+    private SkillCatalogDto toCatalogDto(SkillCatalog catalog, long skillCount) {
+        return new SkillCatalogDto(
+                catalog.id,
+                catalog.name,
+                catalog.description,
+                catalog.levelScale,
+                catalog.source,
+                skillCount,
+                catalog.createdAt != null ? catalog.createdAt.toString() : null,
+                catalog.updatedAt != null ? catalog.updatedAt.toString() : null
+        );
+    }
+
+    private SkillDefinitionDto toDefinitionDto(SkillDefinition definition) {
+        return new SkillDefinitionDto(
+                definition.id,
+                definition.category,
+                definition.name,
+                definition.aliases,
+                definition.lxpRecommendation,
+                definition.embedding != null
+        );
     }
 }

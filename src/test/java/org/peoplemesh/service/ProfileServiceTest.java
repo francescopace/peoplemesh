@@ -1,6 +1,5 @@
 package org.peoplemesh.service;
 
-import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -10,6 +9,7 @@ import org.peoplemesh.domain.dto.ProfileSchema;
 import org.peoplemesh.domain.enums.NodeType;
 import org.peoplemesh.domain.model.MeshNode;
 import org.peoplemesh.domain.model.SkillAssessment;
+import org.peoplemesh.repository.NodeRepository;
 
 import java.time.Instant;
 import java.util.*;
@@ -24,6 +24,7 @@ class ProfileServiceTest {
     @Mock EmbeddingService embeddingService;
     @Mock AuditService audit;
     @Mock ConsentService consentService;
+    @Mock NodeRepository nodeRepository;
 
     @InjectMocks
     ProfileService profileService;
@@ -32,67 +33,53 @@ class ProfileServiceTest {
 
     @Test
     void getProfile_noNode_returnsEmpty() {
-        try (var mocked = mockStatic(MeshNode.class)) {
-            mocked.when(() -> MeshNode.findPublishedUserNode(userId)).thenReturn(Optional.empty());
-
-            assertTrue(profileService.getProfile(userId).isEmpty());
-        }
+        when(nodeRepository.findPublishedUserNode(userId)).thenReturn(Optional.empty());
+        assertTrue(profileService.getProfile(userId).isEmpty());
     }
 
     @Test
     void getProfile_withNode_returnsSchema() {
-        try (var mocked = mockStatic(MeshNode.class)) {
-            MeshNode node = createMockNode(userId);
-            node.structuredData = new LinkedHashMap<>();
-            mocked.when(() -> MeshNode.findPublishedUserNode(userId)).thenReturn(Optional.of(node));
+        MeshNode node = createMockNode(userId);
+        node.structuredData = new LinkedHashMap<>();
+        when(nodeRepository.findPublishedUserNode(userId)).thenReturn(Optional.of(node));
 
-            Optional<ProfileSchema> result = profileService.getProfile(userId);
+        Optional<ProfileSchema> result = profileService.getProfile(userId);
 
-            assertTrue(result.isPresent());
-        }
+        assertTrue(result.isPresent());
     }
 
     @Test
     void getPublicProfile_userNode_returnsSchema() {
         MeshNode node = createMockNode(userId);
-        try (var panacheMock = mockStatic(PanacheEntityBase.class)) {
-            panacheMock.when(() -> PanacheEntityBase.findByIdOptional(userId))
-                    .thenReturn(Optional.of(node));
+        when(nodeRepository.findById(userId)).thenReturn(Optional.of(node));
 
-            Optional<ProfileSchema> result = profileService.getPublicProfile(userId);
+        Optional<ProfileSchema> result = profileService.getPublicProfile(userId);
 
-            assertTrue(result.isPresent());
-        }
+        assertTrue(result.isPresent());
     }
 
     @Test
     void getPublicProfile_nonUserNode_returnsEmpty() {
         MeshNode node = createMockNode(userId);
         node.nodeType = NodeType.PROJECT;
-        try (var panacheMock = mockStatic(PanacheEntityBase.class)) {
-            panacheMock.when(() -> PanacheEntityBase.findByIdOptional(userId))
-                    .thenReturn(Optional.of(node));
+        when(nodeRepository.findById(userId)).thenReturn(Optional.of(node));
 
-            Optional<ProfileSchema> result = profileService.getPublicProfile(userId);
+        Optional<ProfileSchema> result = profileService.getPublicProfile(userId);
 
-            assertTrue(result.isEmpty());
-        }
+        assertTrue(result.isEmpty());
     }
 
     @Test
     void upsertProfile_createsOrUpdatesNode() {
         when(consentService.hasActiveConsent(eq(userId), anyString())).thenReturn(false);
+        MeshNode node = createMockNode(userId);
+        when(nodeRepository.findPublishedUserNode(userId)).thenReturn(Optional.of(node));
 
-        try (var mocked = mockStatic(MeshNode.class)) {
-            MeshNode node = createMockNode(userId);
-            mocked.when(() -> MeshNode.findPublishedUserNode(userId)).thenReturn(Optional.of(node));
-            doNothing().when(node).persist();
+        MeshNode result = profileService.upsertProfile(userId, minimalSchema());
 
-            MeshNode result = profileService.upsertProfile(userId, minimalSchema());
-
-            assertNotNull(result);
-            verify(audit).log(userId, "PROFILE_UPDATED", "peoplemesh_upsert_profile");
-        }
+        assertNotNull(result);
+        verify(nodeRepository).persist(node);
+        verify(audit).log(userId, "PROFILE_UPDATED", "peoplemesh_upsert_profile");
     }
 
     @Test
@@ -100,59 +87,44 @@ class ProfileServiceTest {
         MeshNode node = createMockNode(userId);
         node.structuredData = new LinkedHashMap<>();
         node.structuredData.put("avatar_url", "existing-url");
-        // MeshNode.findByIdOptional is not stubbable via mockStatic(MeshNode.class); without Quarkus
-        // bytecode enhancement the call resolves here, so stub the Panache base implementation.
-        try (var panacheMock = mockStatic(PanacheEntityBase.class)) {
-            panacheMock.when(() -> PanacheEntityBase.findByIdOptional(userId))
-                    .thenReturn(Optional.of(node));
-            when(consentService.hasActiveConsent(eq(userId), anyString())).thenReturn(false);
-            doNothing().when(node).persist();
+        when(nodeRepository.findById(userId)).thenReturn(Optional.of(node));
+        when(consentService.hasActiveConsent(eq(userId), anyString())).thenReturn(false);
 
-            profileService.upsertProfileFromProvider(
-                    userId, "google", "Test", null, null,
-                    null, "http://new-photo.url", null, null);
+        profileService.upsertProfileFromProvider(
+                userId, "google", "Test", null, null,
+                null, "http://new-photo.url", null, null);
 
-            assertEquals("existing-url", node.structuredData.get("avatar_url"));
-        }
+        assertEquals("existing-url", node.structuredData.get("avatar_url"));
     }
 
     @Test
     void upsertProfileFromProvider_existingNode_setsDisplayName() {
         MeshNode node = createMockNode(userId);
-        // MeshNode.findByIdOptional: stub PanacheEntityBase (see upsertProfileFromProvider_existingNode_avatarOnlySetIfNull).
-        try (var panacheMock = mockStatic(PanacheEntityBase.class)) {
-            panacheMock.when(() -> PanacheEntityBase.findByIdOptional(userId))
-                    .thenReturn(Optional.of(node));
-            when(consentService.hasActiveConsent(eq(userId), anyString())).thenReturn(false);
-            doNothing().when(node).persist();
+        when(nodeRepository.findById(userId)).thenReturn(Optional.of(node));
+        when(consentService.hasActiveConsent(eq(userId), anyString())).thenReturn(false);
 
-            profileService.upsertProfileFromProvider(
-                    userId, "github", "Jane Smith", "Jane", "Smith",
-                    "jane@test.com", null, null, null);
+        profileService.upsertProfileFromProvider(
+                userId, "github", "Jane Smith", "Jane", "Smith",
+                "jane@test.com", null, null, null);
 
-            assertEquals("Jane Smith", node.title);
-            assertEquals("jane@test.com", node.structuredData.get("email"));
-        }
+        assertEquals("Jane Smith", node.title);
+        assertEquals("jane@test.com", node.structuredData.get("email"));
     }
 
     @Test
     void upsertProfileFromProvider_joinsNamesAndKeepsExistingExternalId() {
         MeshNode node = createMockNode(userId);
         node.externalId = "already@set.com";
-        try (var panacheMock = mockStatic(PanacheEntityBase.class)) {
-            panacheMock.when(() -> PanacheEntityBase.findByIdOptional(userId))
-                    .thenReturn(Optional.of(node));
-            when(consentService.hasActiveConsent(eq(userId), anyString())).thenReturn(false);
-            doNothing().when(node).persist();
+        when(nodeRepository.findById(userId)).thenReturn(Optional.of(node));
+        when(consentService.hasActiveConsent(eq(userId), anyString())).thenReturn(false);
 
-            profileService.upsertProfileFromProvider(
-                    userId, "google", null, "Jane", "Doe",
-                    "new@example.com", null, null, null);
+        profileService.upsertProfileFromProvider(
+                userId, "google", null, "Jane", "Doe",
+                "new@example.com", null, null, null);
 
-            assertEquals("Jane Doe", node.title);
-            assertEquals("already@set.com", node.externalId);
-            assertEquals("new@example.com", node.structuredData.get("email"));
-        }
+        assertEquals("Jane Doe", node.title);
+        assertEquals("already@set.com", node.externalId);
+        assertEquals("new@example.com", node.structuredData.get("email"));
     }
 
     @Test
@@ -174,17 +146,14 @@ class ProfileServiceTest {
         );
 
         when(consentService.hasActiveConsent(eq(userId), anyString())).thenReturn(false);
-        try (var meshMock = mockStatic(MeshNode.class)) {
-            meshMock.when(() -> MeshNode.findPublishedUserNode(userId)).thenReturn(Optional.of(node));
-            doNothing().when(node).persist();
+        when(nodeRepository.findPublishedUserNode(userId)).thenReturn(Optional.of(node));
 
-            profileService.applySelectiveImport(userId, selected, "github");
+        profileService.applySelectiveImport(userId, selected, "github");
 
-            assertEquals("Google Name", node.title);
-            assertNull(node.structuredData.get("first_name"));
-            assertEquals("Engineer", node.description);
-            verify(audit).log(userId, "PROFILE_SELECTIVE_IMPORT", "peoplemesh_selective_import_github");
-        }
+        assertEquals("Google Name", node.title);
+        assertNull(node.structuredData.get("first_name"));
+        assertEquals("Engineer", node.description);
+        verify(audit).log(userId, "PROFILE_SELECTIVE_IMPORT", "peoplemesh_selective_import_github");
     }
 
     @Test
@@ -201,11 +170,9 @@ class ProfileServiceTest {
 
         when(consentService.hasActiveConsent(eq(userId), anyString())).thenReturn(true);
         when(embeddingService.generateEmbedding(anyString())).thenReturn(new float[]{0.1f, 0.2f});
-        try (var meshMock = mockStatic(MeshNode.class);
-             var skillsMock = mockStatic(SkillAssessment.class)) {
-            meshMock.when(() -> MeshNode.findPublishedUserNode(userId)).thenReturn(Optional.of(node));
+        when(nodeRepository.findPublishedUserNode(userId)).thenReturn(Optional.of(node));
+        try (var skillsMock = mockStatic(SkillAssessment.class)) {
             skillsMock.when(() -> SkillAssessment.findByNode(userId)).thenReturn(List.of());
-            doNothing().when(node).persist();
 
             profileService.applySelectiveImport(userId, selected, "manual");
 

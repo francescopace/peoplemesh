@@ -10,7 +10,6 @@ import org.peoplemesh.repository.NodeRepository;
 import org.peoplemesh.repository.UserIdentityRepository;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
@@ -51,9 +50,6 @@ public class GdprService {
 
     @Inject
     GdprRepository gdprRepository;
-
-    @Inject
-    EntityManager em;
 
     /**
      * GDPR Art. 15 + Art. 20: full data export in JSON.
@@ -138,10 +134,7 @@ public class GdprService {
     }
 
     List<AuditLogEntry> loadAuditEntries(String userIdHash) {
-        if (auditLogRepository != null) {
-            return auditLogRepository.findByUserHash(userIdHash, MAX_AUDIT_EXPORT_ROWS);
-        }
-        return AuditLogEntry.list("userIdHash", userIdHash);
+        return auditLogRepository.findByUserHash(userIdHash, MAX_AUDIT_EXPORT_ROWS);
     }
 
     /**
@@ -154,15 +147,9 @@ public class GdprService {
         LOG.infof("action=deleteAllData userId=%s", userId);
         audit.log(userId, "ACCOUNT_DELETED", "gdpr_delete");
 
-        if (gdprRepository != null) {
-            gdprRepository.deleteNonUserNodesByOwner(userId);
-            gdprRepository.deleteConsentsByNodeId(userId);
-            gdprRepository.deleteUserNode(userId);
-            return;
-        }
-        MeshNode.delete("createdBy = ?1 and nodeType != ?2", userId, org.peoplemesh.domain.enums.NodeType.USER);
-        MeshNodeConsent.delete("nodeId", userId);
-        MeshNode.delete("id = ?1 and nodeType = ?2", userId, org.peoplemesh.domain.enums.NodeType.USER);
+        gdprRepository.deleteNonUserNodesByOwner(userId);
+        gdprRepository.deleteConsentsByNodeId(userId);
+        gdprRepository.deleteUserNode(userId);
     }
 
     public PrivacyDashboard getPrivacyDashboard(UUID userId) {
@@ -186,49 +173,23 @@ public class GdprService {
         return inactiveUsers.size();
     }
 
-    @SuppressWarnings("unchecked")
     private List<UUID> findInactiveUserIds(Instant threshold) {
-        if (gdprRepository != null) {
-            return gdprRepository.findInactiveUserIds(threshold, 10_000);
-        }
-        if (em != null) {
-            return em.createNativeQuery(
-                            "SELECT mn.id FROM mesh.mesh_node mn " +
-                                    "WHERE mn.node_type = 'USER' " +
-                                    "AND NOT EXISTS (SELECT 1 FROM identity.user_identity ui " +
-                                    "WHERE ui.node_id = mn.id AND ui.last_active_at >= :threshold)",
-                            UUID.class)
-                    .setParameter("threshold", threshold)
-                    .getResultList();
-        }
-        return List.of();
+        return gdprRepository.findInactiveUserIds(threshold, 10_000);
     }
 
     private MeshNode findPublishedUserNode(UUID userId) {
-        if (nodeRepository != null) {
-            return nodeRepository.findPublishedUserNode(userId).orElse(null);
-        }
-        return MeshNode.findPublishedUserNode(userId).orElse(null);
+        return nodeRepository.findPublishedUserNode(userId).orElse(null);
     }
 
     private List<UserIdentity> findUserIdentities(UUID userId) {
-        if (userIdentityRepository != null) {
-            return userIdentityRepository.findByNodeId(userId);
-        }
-        return UserIdentity.findByNodeId(userId);
+        return userIdentityRepository.findByNodeId(userId);
     }
 
     private List<MeshNodeConsent> findActiveConsents(UUID userId) {
-        if (meshNodeConsentRepository != null) {
-            return meshNodeConsentRepository.findActiveByNodeId(userId);
-        }
-        return MeshNodeConsent.findActiveByNodeId(userId);
+        return meshNodeConsentRepository.findActiveByNodeId(userId);
     }
 
     private List<MeshNode> findOwnedNodes(UUID userId) {
-        if (nodeRepository != null) {
-            return nodeRepository.findByOwner(userId, 500);
-        }
-        return MeshNode.findByOwner(userId);
+        return nodeRepository.findByOwner(userId, 500);
     }
 }

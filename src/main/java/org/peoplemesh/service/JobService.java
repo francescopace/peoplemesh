@@ -4,6 +4,7 @@ import org.peoplemesh.domain.dto.JobPostingDto;
 import org.peoplemesh.domain.enums.NodeType;
 import org.peoplemesh.domain.model.MeshNode;
 import org.peoplemesh.repository.NodeRepository;
+import org.peoplemesh.util.EmbeddingTextBuilder;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;

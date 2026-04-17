@@ -27,6 +27,7 @@ Unauthenticated calls are rejected by HTTP authorization rules.
 ## Available tools
 
 All tools are read-only and use the `peoplemesh_` prefix.
+MCP handlers delegate to service-layer use cases and do not access repositories directly.
 
 | Tool | Purpose |
 |------|---------|

@@ -1,10 +1,12 @@
-package org.peoplemesh.service;
+package org.peoplemesh.util;
+
+import org.peoplemesh.service.ClusterNamingLlm;
 
 import java.util.*;
 
 /**
  * Shared heuristic naming logic for cluster communities,
- * used as fallback by {@link LlmClusterNaming} when LLM parsing fails.
+ * used as fallback by {@link org.peoplemesh.service.LlmClusterNaming} when LLM parsing fails.
  */
 public final class ClusterNamingHeuristics {
 

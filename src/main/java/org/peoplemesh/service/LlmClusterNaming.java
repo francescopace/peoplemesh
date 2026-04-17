@@ -9,6 +9,7 @@ import io.micrometer.core.annotation.Timed;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
+import org.peoplemesh.util.ClusterNamingHeuristics;
 
 import java.util.*;
 

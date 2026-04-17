@@ -1,4 +1,4 @@
-package org.peoplemesh.api;
+package org.peoplemesh.security;
 
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.http.HttpServerResponse;

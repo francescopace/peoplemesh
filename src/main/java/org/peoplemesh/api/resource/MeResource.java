@@ -31,19 +31,23 @@ import org.jboss.logging.Logger;
 import org.jboss.resteasy.reactive.RestForm;
 import org.jboss.resteasy.reactive.multipart.FileUpload;
 import org.peoplemesh.api.error.ProblemDetail;
-import org.peoplemesh.application.MeApplicationService;
-import org.peoplemesh.domain.dto.PrivacyDashboard;
+import org.peoplemesh.config.AppConfig;
 import org.peoplemesh.domain.dto.ProfileSchema;
 import org.peoplemesh.domain.dto.SkillAssessmentDto;
 import org.peoplemesh.domain.dto.UserNotificationDto;
-import org.peoplemesh.mcp.UserResolver;
+import org.peoplemesh.domain.exception.BusinessException;
+import org.peoplemesh.domain.exception.ValidationBusinessException;
+import org.peoplemesh.service.CurrentUserService;
 import org.peoplemesh.service.CvImportService;
 import org.peoplemesh.service.GdprService;
 import org.peoplemesh.service.MeService;
 import org.peoplemesh.service.OAuthCallbackService;
+import org.peoplemesh.service.ProfileService;
 import org.peoplemesh.service.SessionService;
 import org.peoplemesh.service.UserNotificationService;
 
+import java.io.InputStream;
+import java.nio.file.Files;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -59,22 +63,28 @@ public class MeResource {
     SecurityIdentity identity;
 
     @Inject
-    UserResolver userResolver;
+    CurrentUserService currentUserService;
 
     @Inject
-    GdprService gdprService;
-
-    @Inject
-    SessionService sessionService;
-
-    @Inject
-    UserNotificationService userNotificationService;
+    ProfileService profileService;
 
     @Inject
     MeService meService;
 
     @Inject
-    MeApplicationService meApplicationService;
+    GdprService gdprService;
+
+    @Inject
+    UserNotificationService userNotificationService;
+
+    @Inject
+    SessionService sessionService;
+
+    @Inject
+    CvImportService cvImportService;
+
+    @Inject
+    AppConfig appConfig;
 
     @Context
     UriInfo uriInfo;
@@ -86,7 +96,11 @@ public class MeResource {
             return identityPayload();
         }
         try {
-            return meApplicationService.getCurrentProfile(identity)
+            if (identity.isAnonymous()) {
+                return Response.noContent().build();
+            }
+            UUID userId = currentUserService.resolveUserId();
+            return profileService.getProfile(userId)
                     .map(schema -> Response.ok(schema).build())
                     .orElse(Response.noContent().build());
         } catch (jakarta.ws.rs.NotAuthorizedException | SecurityException e) {
@@ -95,7 +109,7 @@ public class MeResource {
     }
 
     private Response identityPayload() {
-        return meApplicationService.getIdentityPayload(identity)
+        return meService.resolveIdentityPayload(identity)
                 .map(payload -> Response.ok(payload).build())
                 .orElseGet(() -> identity.isAnonymous()
                         ? Response.noContent().build()
@@ -108,15 +122,22 @@ public class MeResource {
     @Authenticated
     @Consumes(MediaType.APPLICATION_JSON)
     public Response updateProfile(@Valid ProfileSchema updates) {
-        return Response.ok(meApplicationService.upsertCurrentProfile(updates)).build();
+        UUID userId = currentUserService.resolveUserId();
+        profileService.upsertProfile(userId, updates);
+        ProfileSchema profile = profileService.getProfile(userId).orElse(updates);
+        return Response.ok(profile).build();
     }
 
     @POST
     @Authenticated
     @Path("/import-apply")
     @Consumes(MediaType.APPLICATION_JSON)
-    public Response applyImport(@Valid ProfileSchema selectedFields, @QueryParam("source") String source) {
-        return meApplicationService.applyImport(selectedFields, source)
+    public Response applyImport(
+            @Valid ProfileSchema selectedFields,
+            @QueryParam("source") @Size(max = 50) @Pattern(regexp = "^[a-zA-Z0-9_-]*$") String source) {
+        UUID userId = currentUserService.resolveUserId();
+        meService.applySelectiveImport(userId, selectedFields, source);
+        return profileService.getProfile(userId)
                 .map(schema -> Response.ok(schema).build())
                 .orElse(Response.noContent().build());
     }
@@ -124,7 +145,7 @@ public class MeResource {
     @DELETE
     @Authenticated
     public Response deleteAccount() {
-        UUID userId = userResolver.resolveUserId();
+        UUID userId = currentUserService.resolveUserId();
         gdprService.deleteAllData(userId);
         boolean secure = uriInfo.getRequestUri().getScheme().equalsIgnoreCase("https");
         NewCookie clearCookie = sessionService.buildClearCookie(secure);
@@ -136,7 +157,7 @@ public class MeResource {
     @Path("/export")
     @Produces(MediaType.APPLICATION_JSON)
     public Response exportData() {
-        UUID userId = userResolver.resolveUserId();
+        UUID userId = currentUserService.resolveUserId();
         String json = gdprService.exportAllData(userId);
         return Response.ok(json)
                 .header("Content-Disposition", "attachment; filename=\"peoplemesh-data-export.json\"")
@@ -147,7 +168,7 @@ public class MeResource {
     @Authenticated
     @Path("/notifications")
     public Response getNotifications(@QueryParam("limit") @DefaultValue("20") @Min(1) @Max(100) Integer limit) {
-        UUID userId = userResolver.resolveUserId();
+        UUID userId = currentUserService.resolveUserId();
         List<UserNotificationDto> notifications = userNotificationService.getRecentNotifications(userId, limit);
         return Response.ok(notifications).build();
     }
@@ -156,7 +177,7 @@ public class MeResource {
     @Authenticated
     @Path("/skills")
     public Response getSkillAssessments(@QueryParam("catalog_id") UUID catalogId) {
-        UUID userId = userResolver.resolveUserId();
+        UUID userId = currentUserService.resolveUserId();
         List<SkillAssessmentDto> result = meService.listCurrentUserSkillAssessments(userId, catalogId);
         if (result.isEmpty()) {
             return Response.noContent().build();
@@ -170,7 +191,7 @@ public class MeResource {
     @Consumes(MediaType.APPLICATION_JSON)
     public Response updateSkillAssessments(
             @NotNull @Size(max = 500) List<@Valid SkillAssessmentDto> assessments) {
-        UUID userId = userResolver.resolveUserId();
+        UUID userId = currentUserService.resolveUserId();
         int updated = meService.updateCurrentUserSkillAssessments(userId, assessments);
         return Response.ok(Map.of("updated", updated)).build();
     }
@@ -181,27 +202,31 @@ public class MeResource {
     @Consumes(MediaType.MULTIPART_FORM_DATA)
     public Response uploadCv(@RestForm("file") FileUpload file) {
         try {
-            CvImportService.CvImportResult result = meApplicationService.parseCv(file);
-            return Response.ok(Map.of("imported", result.schema(), "source", result.source())).build();
-        } catch (org.peoplemesh.domain.exception.ValidationBusinessException e) {
-            if ("File exceeds maximum size".equals(e.publicDetail())) {
-                return Response.status(Response.Status.REQUEST_ENTITY_TOO_LARGE)
-                        .entity(ProblemDetail.of(413, "Payload Too Large", e.publicDetail()))
-                        .build();
+            if (file == null) {
+                throw new ValidationBusinessException("Missing file");
             }
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(ProblemDetail.of(400, "Bad Request", e.publicDetail()))
-                    .build();
+            if (file.size() > appConfig.cvImport().maxFileSize()) {
+                throw new ValidationBusinessException("File exceeds maximum size");
+            }
+            UUID userId = currentUserService.resolveUserId();
+            try (InputStream stream = Files.newInputStream(file.filePath())) {
+                CvImportService.CvImportResult result = cvImportService.parseCv(
+                        stream,
+                        file.fileName(),
+                        file.size(),
+                        userId);
+                return Response.ok(Map.of("imported", result.schema(), "source", result.source())).build();
+            }
+        } catch (ValidationBusinessException e) {
+            if ("File exceeds maximum size".equals(e.publicDetail())) {
+                throw new BusinessException(413, "Payload Too Large", e.publicDetail());
+            }
+            throw e;
         } catch (IllegalStateException e) {
-            return Response.status(Response.Status.BAD_GATEWAY)
-                    .entity(ProblemDetail.of(502, "Bad Gateway", "CV processing failed"))
-                    .build();
+            throw new BusinessException(502, "Bad Gateway", "CV processing failed");
         } catch (Exception e) {
-            UUID userId = userResolver.resolveUserId();
-            LOG.errorf(e, "CV upload processing failed for userId=%s", userId);
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                    .entity(ProblemDetail.of(500, "Internal Server Error", "Error processing file"))
-                    .build();
+            LOG.error("CV upload processing failed", e);
+            throw new BusinessException(500, "Internal Server Error", "Error processing file");
         }
     }
 
@@ -209,7 +234,7 @@ public class MeResource {
     @Authenticated
     @Path("/consents")
     public Response getConsents() {
-        UUID userId = userResolver.resolveUserId();
+        UUID userId = currentUserService.resolveUserId();
         List<String> active = meService.getActiveConsentScopes(userId);
         return Response.ok(Map.of("scopes", OAuthCallbackService.DEFAULT_CONSENT_SCOPES, "active", active)).build();
     }
@@ -224,7 +249,7 @@ public class MeResource {
             String scope,
             @Context HttpHeaders headers
     ) {
-        UUID userId = userResolver.resolveUserId();
+        UUID userId = currentUserService.resolveUserId();
         meService.grantConsent(userId, scope, OAuthCallbackService.DEFAULT_CONSENT_SCOPES, headers);
         return Response.ok(Map.of("scope", scope, "status", "granted")).build();
     }
@@ -237,7 +262,7 @@ public class MeResource {
             @Pattern(regexp = "^[a-z_]+$", message = "scope format is invalid")
             String scope
     ) {
-        UUID userId = userResolver.resolveUserId();
+        UUID userId = currentUserService.resolveUserId();
         meService.revokeConsent(userId, scope, OAuthCallbackService.DEFAULT_CONSENT_SCOPES);
         return Response.ok(Map.of("scope", scope, "status", "revoked")).build();
     }
@@ -246,8 +271,7 @@ public class MeResource {
     @Authenticated
     @Path("/activity")
     public Response getPrivacyDashboard() {
-        UUID userId = userResolver.resolveUserId();
-        PrivacyDashboard dashboard = gdprService.getPrivacyDashboard(userId);
-        return Response.ok(dashboard).build();
+        UUID userId = currentUserService.resolveUserId();
+        return Response.ok(gdprService.getPrivacyDashboard(userId)).build();
     }
 }

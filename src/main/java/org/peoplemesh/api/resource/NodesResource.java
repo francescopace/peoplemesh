@@ -18,7 +18,7 @@ import org.peoplemesh.api.error.ProblemDetail;
 import org.peoplemesh.domain.dto.NodeDto;
 import org.peoplemesh.domain.dto.NodePayload;
 import org.peoplemesh.domain.dto.SkillAssessmentDto;
-import org.peoplemesh.mcp.UserResolver;
+import org.peoplemesh.service.CurrentUserService;
 import org.peoplemesh.service.NodeService;
 import org.peoplemesh.service.ProfileService;
 
@@ -31,7 +31,7 @@ import java.util.UUID;
 public class NodesResource {
 
     @Inject
-    UserResolver userResolver;
+    CurrentUserService currentUserService;
 
     @Inject
     NodeService nodeService;
@@ -45,7 +45,7 @@ public class NodesResource {
             @Pattern(regexp = "^[A-Za-z_]*$", message = "type must be alphabetic")
             String type
     ) {
-        UUID userId = userResolver.resolveUserId();
+        UUID userId = currentUserService.resolveUserId();
         List<NodeDto> nodes = nodeService.listByCreatorFiltered(userId, type);
         return Response.ok(nodes).build();
     }
@@ -53,7 +53,7 @@ public class NodesResource {
     @POST
     @Consumes(MediaType.APPLICATION_JSON)
     public Response createNode(@Valid NodePayload payload) {
-        UUID userId = userResolver.resolveUserId();
+        UUID userId = currentUserService.resolveUserId();
         NodeDto created = nodeService.createNode(userId, payload);
         return Response.status(Response.Status.CREATED).entity(created).build();
     }
@@ -61,7 +61,7 @@ public class NodesResource {
     @GET
     @Path("/{nodeId}")
     public Response getNode(@PathParam("nodeId") UUID nodeId) {
-        UUID userId = userResolver.resolveUserId();
+        UUID userId = currentUserService.resolveUserId();
         return nodeService.getNode(nodeId)
                 .or(() -> nodeService.getNodeForCreator(nodeId, userId))
                 .map(Response::ok)
@@ -74,7 +74,7 @@ public class NodesResource {
     @Path("/{nodeId}/skills")
     public Response getNodeSkills(@PathParam("nodeId") UUID nodeId,
                                   @QueryParam("catalog_id") UUID catalogId) {
-        UUID userId = userResolver.resolveUserId();
+        UUID userId = currentUserService.resolveUserId();
         List<SkillAssessmentDto> result = nodeService.getNodeSkillsForUser(userId, nodeId, catalogId);
         return Response.ok(result).build();
     }
@@ -93,7 +93,7 @@ public class NodesResource {
     @Path("/{nodeId}")
     @Consumes(MediaType.APPLICATION_JSON)
     public Response updateNode(@PathParam("nodeId") UUID nodeId, @Valid NodePayload payload) {
-        UUID userId = userResolver.resolveUserId();
+        UUID userId = currentUserService.resolveUserId();
         return nodeService.updateNode(userId, nodeId, payload)
                 .map(Response::ok)
                 .orElseGet(() -> Response.status(404)

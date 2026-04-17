@@ -11,6 +11,7 @@ import org.peoplemesh.domain.exception.NotFoundBusinessException;
 import org.peoplemesh.domain.exception.ValidationBusinessException;
 import org.peoplemesh.domain.model.MeshNode;
 import org.peoplemesh.repository.NodeRepository;
+import org.peoplemesh.util.EmbeddingTextBuilder;
 
 import java.util.List;
 import java.util.UUID;

@@ -1,6 +1,7 @@
-package org.peoplemesh.service;
+package org.peoplemesh.util;
 
 import org.junit.jupiter.api.Test;
+import org.peoplemesh.service.ClusterNamingLlm;
 
 import java.util.LinkedHashMap;
 import java.util.List;

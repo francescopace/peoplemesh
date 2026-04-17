@@ -16,6 +16,7 @@ import org.peoplemesh.domain.model.MeshNode;
 import org.peoplemesh.domain.model.UserIdentity;
 import org.peoplemesh.repository.NodeRepository;
 import org.peoplemesh.repository.UserIdentityRepository;
+import org.peoplemesh.util.EmbeddingTextBuilder;
 
 import javax.net.ssl.SSLSocketFactory;
 import java.security.GeneralSecurityException;

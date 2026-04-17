@@ -8,6 +8,7 @@ import org.jboss.logging.Logger;
 import org.peoplemesh.domain.enums.NodeType;
 import org.peoplemesh.domain.model.MeshNode;
 import org.peoplemesh.repository.NodeRepository;
+import org.peoplemesh.util.EmbeddingTextBuilder;
 
 import java.time.Duration;
 import java.time.Instant;

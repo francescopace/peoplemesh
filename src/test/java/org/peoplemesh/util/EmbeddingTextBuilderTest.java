@@ -1,4 +1,4 @@
-package org.peoplemesh.service;
+package org.peoplemesh.util;
 
 import org.junit.jupiter.api.Test;
 import org.peoplemesh.domain.dto.ProfileSchema;

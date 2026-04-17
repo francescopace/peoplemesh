@@ -9,7 +9,6 @@ src/main/java/org/peoplemesh/
 ├── api/
 │   ├── error/      API error payload and exception mapping
 │   └── resource/   REST resources (JAX-RS endpoints)
-├── application/    Use-case orchestration layer (when needed)
 ├── config/         Application and security configuration
 ├── domain/
 │   ├── dto/        Data transfer objects
@@ -54,11 +53,12 @@ src/main/web/
 - Keep changes small and focused by topic.
 - Add or update tests for behavioral changes.
 - Keep layers separated by responsibility and dependency direction:
-  - preferred flow: `api -> application -> service -> repository`
-  - if `application` is skipped, keep feature flow consistently `api -> service -> repository`
+  - Api flow: `api/resource -> service -> repository`
+  - MCP flow: `mcp -> service -> repository` (no direct repository access from MCP handlers)
   - `api/resource` handles HTTP boundary only (request/response, status, validation)
   - `service` contains business logic
   - `repository` handles persistence and query logic
+- Avoid introducing `application` layer classes unless explicitly requested for a specific use case.
 - Do not access repositories directly from `api` or `mcp` entrypoints.
 - Do not import API-layer types/utilities inside `service`.
 - Avoid mixing repository and active-record persistence styles in the same service flow.

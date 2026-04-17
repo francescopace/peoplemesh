@@ -7,9 +7,8 @@ import io.quarkus.security.Authenticated;
 import org.peoplemesh.domain.exception.BusinessException;
 import org.peoplemesh.domain.dto.MeshMatchResult;
 import org.peoplemesh.domain.dto.ProfileSchema;
-import org.peoplemesh.service.EmbeddingService;
 import org.peoplemesh.service.MatchesService;
-import org.peoplemesh.service.MatchingService;
+import org.peoplemesh.service.CurrentUserService;
 import org.peoplemesh.service.ProfileService;
 import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
@@ -23,15 +22,11 @@ public class McpReadTools {
     private static final int MAX_PAYLOAD_SIZE = 64 * 1024;
 
     @Inject
-    UserResolver userResolver;
+    CurrentUserService currentUserService;
     @Inject
     ProfileService profileService;
     @Inject
     MatchesService matchesService;
-    @Inject
-    MatchingService matchingService;
-    @Inject
-    EmbeddingService embeddingService;
     @Inject
     ObjectMapper objectMapper;
 
@@ -41,7 +36,7 @@ public class McpReadTools {
     @SuppressWarnings("null")
     public TextContent getMyProfile() {
         try {
-            UUID userId = userResolver.resolveUserId();
+            UUID userId = currentUserService.resolveUserId();
             return profileService.getProfile(userId)
                     .map(schema -> {
                         try {
@@ -74,18 +69,8 @@ public class McpReadTools {
             }
             ProfileSchema schema = McpToolHelper.parsePayload(
                     profileJson, ProfileSchema.class, MAX_PAYLOAD_SIZE, objectMapper);
-            UUID userId = userResolver.resolveUserId();
-            List<MeshMatchResult> results;
-            if (matchesService != null) {
-                results = matchesService.matchFromSchema(userId, schema, type, country);
-            } else {
-                float[] embedding = embeddingService.generateEmbedding(
-                        org.peoplemesh.service.EmbeddingTextBuilder.buildFromSchema(schema));
-                if (embedding == null) {
-                    return new TextContent("Error: Embedding input was empty.");
-                }
-                results = matchingService.findAllMatches(userId, embedding, type, country);
-            }
+            UUID userId = currentUserService.resolveUserId();
+            List<MeshMatchResult> results = matchesService.matchFromSchema(userId, schema, type, country);
             String json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(results);
             return new TextContent(json);
         } catch (SecurityException e) {
@@ -105,10 +90,8 @@ public class McpReadTools {
     @Authenticated
     public TextContent matchMe(String type, String country) {
         try {
-            UUID userId = userResolver.resolveUserId();
-            List<MeshMatchResult> results = matchesService != null
-                    ? matchesService.matchMyProfile(userId, type, country)
-                    : matchingService.findAllMatches(userId, type, country);
+            UUID userId = currentUserService.resolveUserId();
+            List<MeshMatchResult> results = matchesService.matchMyProfile(userId, type, country);
             String json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(results);
             return new TextContent(json);
         } catch (SecurityException e) {
@@ -135,10 +118,7 @@ public class McpReadTools {
             } catch (IllegalArgumentException e) {
                 return new TextContent("Error: Invalid nodeId format.");
             }
-            UUID userId = userResolver.resolveUserId();
-            if (matchesService == null) {
-                return new TextContent("Error: match service unavailable.");
-            }
+            UUID userId = currentUserService.resolveUserId();
             List<MeshMatchResult> results = matchesService.matchFromNode(userId, id, type, country);
             String json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(results);
             return new TextContent(json);

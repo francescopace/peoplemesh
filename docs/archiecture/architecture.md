@@ -78,7 +78,8 @@ Main schema responsibilities:
 
 The backend follows this dependency direction:
 
-`api/resource` and `mcp` -> `application` -> `service` -> `repository` -> database.
+- Preferred REST flow: `api/resource -> service -> repository -> database`.
+- MCP flow: `mcp -> service -> repository -> database` (MCP remains a transport entrypoint and does not access repositories directly).
 
 Rules:
 
@@ -86,8 +87,7 @@ Rules:
 - `repository` owns query shape decisions (JPQL, native SQL, batching, pagination).
 - Entity classes are persistence models and should not contain query entry points used by services.
 - `api.resource` classes stay transport-focused (HTTP request/response mapping) and delegate business logic to services.
-- `application` classes orchestrate multi-step use cases shared by one or more transports (REST or MCP) and keep resources thin.
-- `mcp` tool handlers delegate matching/search use cases to services and avoid duplicating domain workflows.
+- `mcp` tool handlers delegate matching/search use cases to services, avoid duplicating domain workflows, and avoid direct repository access.
 - API error rendering is centralized in `api.error` (`ProblemDetail` + exception mapper), not spread across resources.
 
 ## Architectural trade-offs

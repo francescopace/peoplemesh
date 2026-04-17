@@ -29,17 +29,7 @@ public class AtsIngestService {
         List<Map<String, String>> errors = new ArrayList<>();
         for (AtsJobEntryDto entry : request.jobs) {
             try {
-                AtsJobPayload payload = new AtsJobPayload(
-                        entry.title,
-                        entry.description,
-                        entry.requirementsText,
-                        entry.skillsRequired,
-                        entry.workMode,
-                        entry.employmentType,
-                        entry.country,
-                        entry.status,
-                        entry.externalUrl
-                );
+                AtsJobPayload payload = toPayload(entry);
                 JobPostingDto result = jobService.upsertFromAts(request.ownerUserId, entry.externalId, payload);
                 upserted.add(result);
             } catch (Exception e) {
@@ -67,5 +57,19 @@ public class AtsIngestService {
         if (request.ownerUserId == null) {
             throw new ValidationBusinessException("owner_user_id is required");
         }
+    }
+
+    private static AtsJobPayload toPayload(AtsJobEntryDto entry) {
+        return new AtsJobPayload(
+                entry.title,
+                entry.description,
+                entry.requirementsText,
+                entry.skillsRequired,
+                entry.workMode,
+                entry.employmentType,
+                entry.country,
+                entry.status,
+                entry.externalUrl
+        );
     }
 }

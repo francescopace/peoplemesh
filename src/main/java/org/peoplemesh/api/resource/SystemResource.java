@@ -10,7 +10,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.peoplemesh.domain.dto.SystemStatisticsDto;
 import org.peoplemesh.domain.exception.ForbiddenBusinessException;
-import org.peoplemesh.mcp.UserResolver;
+import org.peoplemesh.service.CurrentUserService;
 import org.peoplemesh.service.EntitlementService;
 import org.peoplemesh.service.SystemStatisticsService;
 
@@ -23,7 +23,7 @@ public class SystemResource {
     SystemStatisticsService systemStatisticsService;
 
     @Inject
-    UserResolver userResolver;
+    CurrentUserService currentUserService;
 
     @Inject
     EntitlementService entitlementService;
@@ -32,7 +32,7 @@ public class SystemResource {
     @Authenticated
     @Path("/statistics")
     public Response getStatistics() {
-        var userId = userResolver.resolveUserId();
+        var userId = currentUserService.resolveUserId();
         if (!entitlementService.isAdmin(userId)) {
             throw new ForbiddenBusinessException("Missing entitlement is_admin");
         }

@@ -1,4 +1,4 @@
-package org.peoplemesh.api;
+package org.peoplemesh.security;
 
 import java.util.Set;
 import java.util.regex.Pattern;

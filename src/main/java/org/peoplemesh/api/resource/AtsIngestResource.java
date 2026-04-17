@@ -11,11 +11,11 @@ import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
-import org.peoplemesh.api.MaintenanceAuthHelper;
-import org.peoplemesh.application.AtsIngestApplicationService;
 import org.peoplemesh.config.AppConfig;
 import org.peoplemesh.domain.dto.AtsIngestRequestDto;
 import org.peoplemesh.domain.dto.AtsIngestResultDto;
+import org.peoplemesh.security.MaintenanceAccessGuard;
+import org.peoplemesh.service.AtsIngestService;
 
 /**
  * Ingest endpoint for ATS (Applicant Tracking System) job feeds.
@@ -34,7 +34,7 @@ public class AtsIngestResource {
     AppConfig config;
 
     @Inject
-    AtsIngestApplicationService atsIngestApplicationService;
+    AtsIngestService atsIngestService;
 
     @Context
     HttpHeaders httpHeaders;
@@ -74,11 +74,11 @@ public class AtsIngestResource {
         if (request == null) {
             return Response.status(Response.Status.BAD_REQUEST).build();
         }
-        AtsIngestResultDto result = atsIngestApplicationService.ingestJobs(request);
+        AtsIngestResultDto result = atsIngestService.ingestJobs(request);
         return Response.ok(result).build();
     }
 
     private void assertAuthorized(String key) {
-        MaintenanceAuthHelper.assertAuthorized(key, config, httpHeaders);
+        MaintenanceAccessGuard.assertAuthorized(key, config, httpHeaders);
     }
 }

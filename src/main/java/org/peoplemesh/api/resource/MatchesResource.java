@@ -18,7 +18,7 @@ import org.peoplemesh.domain.dto.MeshMatchResult;
 import org.peoplemesh.domain.dto.ProfileSchema;
 import org.peoplemesh.domain.dto.SearchRequest;
 import org.peoplemesh.domain.dto.SearchResponse;
-import org.peoplemesh.mcp.UserResolver;
+import org.peoplemesh.service.CurrentUserService;
 import org.peoplemesh.service.MatchesService;
 
 import java.util.List;
@@ -30,7 +30,7 @@ import java.util.UUID;
 public class MatchesResource {
 
     @Inject
-    UserResolver userResolver;
+    CurrentUserService currentUserService;
 
     @Inject
     MatchesService matchesService;
@@ -41,7 +41,7 @@ public class MatchesResource {
             @Valid ProfileSchema profile,
             @QueryParam("type") @Size(max = 40) @Pattern(regexp = "^[A-Za-z_]*$") String type,
             @QueryParam("country") @Pattern(regexp = "^[A-Za-z]{2}$|^$") String country) {
-        UUID userId = userResolver.resolveUserId();
+        UUID userId = currentUserService.resolveUserId();
         List<MeshMatchResult> matches = matchesService.matchFromSchema(userId, profile, type, country);
         return Response.ok(matches).build();
     }
@@ -50,7 +50,7 @@ public class MatchesResource {
     @Path("prompt")
     @Consumes(MediaType.APPLICATION_JSON)
     public Response matchFromPrompt(@Valid SearchRequest request) {
-        UUID userId = userResolver.resolveUserId();
+        UUID userId = currentUserService.resolveUserId();
         SearchResponse result = matchesService.matchFromPrompt(userId, request);
         return Response.ok(result).build();
     }
@@ -60,7 +60,7 @@ public class MatchesResource {
     public Response matchMyProfile(
             @QueryParam("type") @Size(max = 40) @Pattern(regexp = "^[A-Za-z_]*$") String type,
             @QueryParam("country") @Pattern(regexp = "^[A-Za-z]{2}$|^$") String country) {
-        UUID userId = userResolver.resolveUserId();
+        UUID userId = currentUserService.resolveUserId();
         List<MeshMatchResult> matches = matchesService.matchMyProfile(userId, type, country);
         return Response.ok(matches).build();
     }
@@ -71,7 +71,7 @@ public class MatchesResource {
             @PathParam("nodeId") UUID nodeId,
             @QueryParam("type") @Size(max = 40) @Pattern(regexp = "^[A-Za-z_]*$") String type,
             @QueryParam("country") @Pattern(regexp = "^[A-Za-z]{2}$|^$") String country) {
-        UUID userId = userResolver.resolveUserId();
+        UUID userId = currentUserService.resolveUserId();
         List<MeshMatchResult> matches = matchesService.matchFromNode(userId, nodeId, type, country);
         return Response.ok(matches).build();
     }

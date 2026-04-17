@@ -8,6 +8,7 @@ import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.NotAuthorizedException;
 import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.Test;
+import org.peoplemesh.api.error.BusinessExceptionMapper;
 import org.peoplemesh.api.error.IllegalArgumentExceptionMapper;
 import org.peoplemesh.api.error.IllegalStateExceptionMapper;
 import org.peoplemesh.api.error.ProblemDetail;
@@ -17,6 +18,7 @@ import org.peoplemesh.api.error.UnauthorizedExceptionMapper;
 import org.peoplemesh.api.error.UnhandledExceptionMapper;
 import org.peoplemesh.api.error.ValidationExceptionMapper;
 import org.peoplemesh.api.error.WebApplicationExceptionMapper;
+import org.peoplemesh.domain.exception.BusinessException;
 import org.peoplemesh.domain.exception.RateLimitException;
 
 import java.util.Set;
@@ -32,6 +34,7 @@ class GlobalExceptionMapperTest {
     private final SecurityExceptionMapper securityMapper = new SecurityExceptionMapper();
     private final RateLimitExceptionMapper rateLimitMapper = new RateLimitExceptionMapper();
     private final ValidationExceptionMapper validationMapper = new ValidationExceptionMapper();
+    private final BusinessExceptionMapper businessMapper = new BusinessExceptionMapper();
     private final IllegalArgumentExceptionMapper illegalArgumentMapper = new IllegalArgumentExceptionMapper();
     private final IllegalStateExceptionMapper illegalStateMapper = new IllegalStateExceptionMapper();
     private final UnhandledExceptionMapper unhandledMapper = new UnhandledExceptionMapper();
@@ -104,5 +107,14 @@ class GlobalExceptionMapperTest {
         assertEquals(500, response.getStatus());
         ProblemDetail pd = (ProblemDetail) response.getEntity();
         assertTrue(pd.detail().contains("unexpected"));
+    }
+
+    @Test
+    void businessException_mapperUsesExceptionShape() {
+        Response response = businessMapper.toResponse(new BusinessException(418, "Teapot", "Short and stout"));
+        assertEquals(418, response.getStatus());
+        ProblemDetail pd = (ProblemDetail) response.getEntity();
+        assertEquals("Teapot", pd.title());
+        assertEquals("Short and stout", pd.detail());
     }
 }

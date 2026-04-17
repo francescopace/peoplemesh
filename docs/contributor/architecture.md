@@ -4,13 +4,12 @@ This repository follows a pragmatic layered architecture aimed at simplicity.
 
 ## Default Flow
 
-- Preferred flow: `api -> application -> service -> repository`.
-- When `application` is not used in a feature, keep the flow consistently `api -> service -> repository` for that feature.
+- Api flow: `api/resource -> service -> repository`.
+- MCP flow: `mcp -> service -> repository`.
 
 ## Package Boundaries
 
 - `api` and `mcp`: transport entrypoints and protocol concerns.
-- `application`: use-case orchestration.
 - `service`: business logic.
 - `repository`: persistence access.
 - `domain`: entities, enums, exceptions, and DTO contracts.

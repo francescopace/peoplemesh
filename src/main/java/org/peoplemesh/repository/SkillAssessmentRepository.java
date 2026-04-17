@@ -8,6 +8,7 @@ import org.peoplemesh.domain.model.SkillAssessment;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -39,15 +40,14 @@ public class SkillAssessmentRepository {
                 .collect(Collectors.toMap(a -> a.skillId, Function.identity(), (a, b) -> a));
     }
 
-    public SkillAssessment findByNodeAndSkill(UUID nodeId, UUID skillId) {
+    public Optional<SkillAssessment> findByNodeAndSkill(UUID nodeId, UUID skillId) {
         return em.createQuery(
                         "FROM SkillAssessment a WHERE a.nodeId = :nodeId AND a.skillId = :skillId",
                         SkillAssessment.class)
                 .setParameter("nodeId", nodeId)
                 .setParameter("skillId", skillId)
                 .getResultStream()
-                .findFirst()
-                .orElse(null);
+                .findFirst();
     }
 
     public void persist(SkillAssessment assessment) {

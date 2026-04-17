@@ -21,7 +21,7 @@ import org.peoplemesh.api.error.ProblemDetail;
 import org.peoplemesh.domain.dto.CatalogCreateRequest;
 import org.peoplemesh.domain.dto.SkillCatalogDto;
 import org.peoplemesh.domain.dto.SkillDefinitionDto;
-import org.peoplemesh.mcp.UserResolver;
+import org.peoplemesh.service.CurrentUserService;
 import org.peoplemesh.service.SkillsService;
 
 import java.io.IOException;
@@ -39,7 +39,7 @@ public class SkillsResource {
     SkillsService skillsService;
 
     @Inject
-    UserResolver userResolver;
+    CurrentUserService currentUserService;
 
     @GET
     public Response listCatalogs() {
@@ -50,7 +50,7 @@ public class SkillsResource {
     @POST
     @Consumes(MediaType.APPLICATION_JSON)
     public Response createCatalog(@Valid CatalogCreateRequest body) {
-        UUID userId = userResolver.resolveUserId();
+        UUID userId = currentUserService.resolveUserId();
         SkillCatalogDto catalog = skillsService.createCatalog(userId, body);
         return Response.status(Response.Status.CREATED).entity(catalog).build();
     }
@@ -59,7 +59,7 @@ public class SkillsResource {
     @Path("/{catalogId}")
     @Consumes(MediaType.APPLICATION_JSON)
     public Response updateCatalog(@PathParam("catalogId") UUID catalogId, @Valid CatalogCreateRequest body) {
-        UUID userId = userResolver.resolveUserId();
+        UUID userId = currentUserService.resolveUserId();
         SkillCatalogDto updated = skillsService.updateCatalog(userId, catalogId, body);
         return Response.ok(updated).build();
     }
@@ -85,7 +85,7 @@ public class SkillsResource {
                     .entity(ProblemDetail.of(400, "Bad Request", "Missing CSV payload"))
                     .build();
         }
-        UUID userId = userResolver.resolveUserId();
+        UUID userId = currentUserService.resolveUserId();
         int count = skillsService.importCsv(userId, catalogId, csvStream);
         return Response.ok(Map.of("imported", count)).build();
     }
@@ -110,7 +110,7 @@ public class SkillsResource {
     @DELETE
     @Path("/{catalogId}")
     public Response deleteCatalog(@PathParam("catalogId") UUID catalogId) {
-        UUID userId = userResolver.resolveUserId();
+        UUID userId = currentUserService.resolveUserId();
         skillsService.deleteCatalog(userId, catalogId);
         return Response.noContent().build();
     }

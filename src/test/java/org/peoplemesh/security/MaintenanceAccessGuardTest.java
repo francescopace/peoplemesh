@@ -1,4 +1,4 @@
-package org.peoplemesh.api;
+package org.peoplemesh.security;
 
 import jakarta.ws.rs.ForbiddenException;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -10,11 +10,12 @@ import org.peoplemesh.config.AppConfig;
 
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class MaintenanceAuthHelperTest {
+class MaintenanceAccessGuardTest {
 
     @Mock AppConfig config;
     @Mock AppConfig.MaintenanceConfig maintenanceConfig;
@@ -26,7 +27,7 @@ class MaintenanceAuthHelperTest {
         when(maintenanceConfig.apiKey()).thenReturn(Optional.empty());
 
         assertThrows(ForbiddenException.class,
-                () -> MaintenanceAuthHelper.assertAuthorized("some-key", config, httpHeaders));
+                () -> MaintenanceAccessGuard.assertAuthorized("some-key", config, httpHeaders));
     }
 
     @Test
@@ -35,7 +36,7 @@ class MaintenanceAuthHelperTest {
         when(maintenanceConfig.apiKey()).thenReturn(Optional.of("  "));
 
         assertThrows(ForbiddenException.class,
-                () -> MaintenanceAuthHelper.assertAuthorized("some-key", config, httpHeaders));
+                () -> MaintenanceAccessGuard.assertAuthorized("some-key", config, httpHeaders));
     }
 
     @Test
@@ -44,7 +45,7 @@ class MaintenanceAuthHelperTest {
         when(maintenanceConfig.apiKey()).thenReturn(Optional.of("correct-key"));
 
         assertThrows(ForbiddenException.class,
-                () -> MaintenanceAuthHelper.assertAuthorized("wrong-key", config, httpHeaders));
+                () -> MaintenanceAccessGuard.assertAuthorized("wrong-key", config, httpHeaders));
     }
 
     @Test
@@ -53,7 +54,7 @@ class MaintenanceAuthHelperTest {
         when(maintenanceConfig.apiKey()).thenReturn(Optional.of("correct-key"));
 
         assertThrows(ForbiddenException.class,
-                () -> MaintenanceAuthHelper.assertAuthorized(null, config, httpHeaders));
+                () -> MaintenanceAccessGuard.assertAuthorized(null, config, httpHeaders));
     }
 
     @Test
@@ -62,7 +63,7 @@ class MaintenanceAuthHelperTest {
         when(maintenanceConfig.apiKey()).thenReturn(Optional.of("correct-key"));
         when(maintenanceConfig.allowedCidrs()).thenReturn(Optional.empty());
 
-        assertDoesNotThrow(() -> MaintenanceAuthHelper.assertAuthorized("correct-key", config, httpHeaders));
+        assertDoesNotThrow(() -> MaintenanceAccessGuard.assertAuthorized("correct-key", config, httpHeaders));
     }
 
     @Test
@@ -71,7 +72,7 @@ class MaintenanceAuthHelperTest {
         when(maintenanceConfig.apiKey()).thenReturn(Optional.of("correct-key"));
         when(maintenanceConfig.allowedCidrs()).thenReturn(Optional.of("  "));
 
-        assertDoesNotThrow(() -> MaintenanceAuthHelper.assertAuthorized("correct-key", config, httpHeaders));
+        assertDoesNotThrow(() -> MaintenanceAccessGuard.assertAuthorized("correct-key", config, httpHeaders));
     }
 
     @Test
@@ -81,7 +82,7 @@ class MaintenanceAuthHelperTest {
         when(maintenanceConfig.allowedCidrs()).thenReturn(Optional.of("10.0.0.0/24"));
         when(httpHeaders.getHeaderString("X-Forwarded-For")).thenReturn("10.0.0.5");
 
-        assertDoesNotThrow(() -> MaintenanceAuthHelper.assertAuthorized("key", config, httpHeaders));
+        assertDoesNotThrow(() -> MaintenanceAccessGuard.assertAuthorized("key", config, httpHeaders));
     }
 
     @Test
@@ -92,7 +93,7 @@ class MaintenanceAuthHelperTest {
         when(httpHeaders.getHeaderString("X-Forwarded-For")).thenReturn("192.168.1.1");
 
         assertThrows(ForbiddenException.class,
-                () -> MaintenanceAuthHelper.assertAuthorized("key", config, httpHeaders));
+                () -> MaintenanceAccessGuard.assertAuthorized("key", config, httpHeaders));
     }
 
     @Test
@@ -103,7 +104,7 @@ class MaintenanceAuthHelperTest {
         when(httpHeaders.getHeaderString("X-Forwarded-For")).thenReturn(null);
 
         assertThrows(ForbiddenException.class,
-                () -> MaintenanceAuthHelper.assertAuthorized("key", config, httpHeaders));
+                () -> MaintenanceAccessGuard.assertAuthorized("key", config, httpHeaders));
     }
 
     @Test
@@ -113,6 +114,6 @@ class MaintenanceAuthHelperTest {
         when(maintenanceConfig.allowedCidrs()).thenReturn(Optional.of("10.0.0.0/24"));
         when(httpHeaders.getHeaderString("X-Forwarded-For")).thenReturn("10.0.0.5, 192.168.1.1");
 
-        assertDoesNotThrow(() -> MaintenanceAuthHelper.assertAuthorized("key", config, httpHeaders));
+        assertDoesNotThrow(() -> MaintenanceAccessGuard.assertAuthorized("key", config, httpHeaders));
     }
 }
