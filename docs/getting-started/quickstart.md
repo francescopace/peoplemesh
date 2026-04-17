@@ -39,6 +39,18 @@ Once the app is running:
 - Check the health endpoint: `GET /q/health`
 - Optional (dev mode only): `GET /q/dev-ui`
 
+## Build and run the container image
+
+```bash
+make image
+docker run --rm -p 8080:8080 peoplemesh:local
+```
+
+Notes:
+
+- The image uses `src/main/docker/Dockerfile.jvm`.
+- Override the image name if needed: `make image IMAGE_NAME=peoplemesh:dev`.
+
 ## First useful endpoints
 
 - `GET /api/v1/auth/providers`

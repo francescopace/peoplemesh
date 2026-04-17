@@ -39,6 +39,18 @@ describe("renderFooter()", () => {
     expect(html).toContain("Terms of Service");
   });
 
+  it("includes GitHub issues link", () => {
+    const html = renderFooter();
+    expect(html).toContain('href="https://github.com/francescopace/peoplemesh/issues"');
+    expect(html).toContain("GitHub Issues");
+  });
+
+  it("includes GitHub conversations link", () => {
+    const html = renderFooter();
+    expect(html).toContain('href="https://github.com/francescopace/peoplemesh/discussions"');
+    expect(html).toContain("GitHub Conversations");
+  });
+
   it("applies default class", () => {
     const html = renderFooter();
     expect(html).toContain("landing-footer");

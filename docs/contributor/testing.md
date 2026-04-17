@@ -51,6 +51,7 @@ Fail fast on any regression before merge.
 make start
 make test-backend
 make test-frontend
+make image
 make container
 make clean
 ```

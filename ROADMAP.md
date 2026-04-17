@@ -100,7 +100,7 @@ Goal: Turn into an enterprise-ready product.
   - **Workday ATS connector**: pull Job Requisitions via RaaS or REST API, map to `AtsJobPayload`, feed into `JobService.upsertFromAts()`. Options: `@Scheduled` Quarkus service or external bridge calling `POST /api/v1/maintenance/ingest/jobs`. Auth: Workday OAuth 2.0 or RaaS Basic Auth.
 - [ ] **Enterprise Features** — Full role-based access (beyond the current `is_admin` entitlement), admin console UI. *Partial:* SSO via OIDC and audit logs already implemented in Phase 0.
 - [ ] **Matching Engine v2** — Domain-specific embeddings, advanced reranking. *Not started.*
-- [ ] **Deployment Options** — SaaS, private cloud, on-prem (OpenShift). *Partial:* `Dockerfile.jvm` (UBI OpenJDK 21) available; native profile in `pom.xml`. No Helm chart, no Operator, no multi-env deployment pipeline yet.
+- [ ] **Deployment Options** — SaaS, private cloud, on-prem (OpenShift). *Partial:* `Dockerfile.jvm` (UBI9 OpenJDK 21 runtime) available; native profile in `pom.xml`. No Helm chart, no Operator, no multi-env deployment pipeline yet.
 
 ---
 

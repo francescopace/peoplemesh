@@ -59,6 +59,14 @@ For dev LLM flows, ensure Ollama is available locally.
 
 For full setup, verification, troubleshooting, and auth prerequisites, see [`docs/getting-started/quickstart.md`](docs/getting-started/quickstart.md).
 
+Build a local container image:
+
+```bash
+make image
+# optional override:
+# make image IMAGE_NAME=peoplemesh:dev
+```
+
 ## Documentation
 
 Technical documentation is organized in [`docs/README.md`](docs/README.md), which is the canonical index by goal.

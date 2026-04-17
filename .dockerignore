@@ -1,0 +1,16 @@
+.git
+.cursor
+.idea
+.vscode
+
+docs
+ignored
+node_modules
+src/main/web/node_modules
+
+.quarkus
+.mvn
+target/*-runner
+target/surefire-reports
+target/failsafe-reports
+target/site

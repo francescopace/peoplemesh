@@ -10,6 +10,9 @@ export function renderFooter({ extraClass = "" } = {}) {
             <div class="footer-brand-name">PeopleMesh &copy; ${year}</div>
           </div>
           <div class="footer-links">
+            <a href="https://github.com/francescopace/peoplemesh" target="_blank" rel="noreferrer">GitHub</a>
+            <a href="https://github.com/francescopace/peoplemesh/issues" target="_blank" rel="noreferrer">Issues</a>
+            <a href="https://github.com/francescopace/peoplemesh/discussions" target="_blank" rel="noreferrer">Discussions</a>
             <a href="#/privacy_policy">Privacy Policy</a>
             <a href="#/terms_of_service">Terms of Service</a>
           </div>
