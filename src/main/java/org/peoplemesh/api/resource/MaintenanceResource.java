@@ -22,10 +22,6 @@ import org.peoplemesh.api.error.ProblemDetail;
 import org.peoplemesh.application.MaintenanceApplicationService;
 import org.peoplemesh.config.AppConfig;
 import org.peoplemesh.domain.exception.NotFoundBusinessException;
-import org.peoplemesh.service.ClusteringScheduler;
-import org.peoplemesh.service.GdprService;
-import org.peoplemesh.service.JdbcConsentTokenStore;
-import org.peoplemesh.service.MaintenanceService;
 
 @Path("/api/v1/maintenance")
 @Produces(MediaType.APPLICATION_JSON)
@@ -38,18 +34,6 @@ public class MaintenanceResource {
     @Inject
     MaintenanceApplicationService maintenanceApplicationService;
 
-    @Inject
-    JdbcConsentTokenStore consentTokenStore;
-
-    @Inject
-    GdprService gdprService;
-
-    @Inject
-    ClusteringScheduler clusteringScheduler;
-
-    @Inject
-    MaintenanceService maintenanceService;
-
     @Context
     HttpHeaders httpHeaders;
 
@@ -57,36 +41,21 @@ public class MaintenanceResource {
     @Path("/purge-consent-tokens")
     public Response purgeConsentTokens(@HeaderParam("X-Maintenance-Key") String key) {
         assertAuthorized(key);
-        if (maintenanceApplicationService != null) {
-            return Response.ok(maintenanceApplicationService.purgeConsentTokens()).build();
-        }
-        return Response.ok(java.util.Map.of("action", "purge-consent-tokens", "purged", consentTokenStore.purgeExpired())).build();
+        return Response.ok(maintenanceApplicationService.purgeConsentTokens()).build();
     }
 
     @POST
     @Path("/enforce-retention")
     public Response enforceRetention(@HeaderParam("X-Maintenance-Key") String key) {
         assertAuthorized(key);
-        if (maintenanceApplicationService != null) {
-            return Response.ok(maintenanceApplicationService.enforceRetention()).build();
-        }
-        return Response.ok(java.util.Map.of(
-                "action",
-                "enforce-retention",
-                "deleted",
-                gdprService.enforceRetention(config.retention().inactiveMonths())
-        )).build();
+        return Response.ok(maintenanceApplicationService.enforceRetention()).build();
     }
 
     @POST
     @Path("/run-clustering")
     public Response runClustering(@HeaderParam("X-Maintenance-Key") String key) {
         assertAuthorized(key);
-        if (maintenanceApplicationService != null) {
-            return Response.ok(maintenanceApplicationService.runClustering()).build();
-        }
-        clusteringScheduler.runClustering();
-        return Response.ok(java.util.Map.of("action", "run-clustering", "status", "completed")).build();
+        return Response.ok(maintenanceApplicationService.runClustering()).build();
     }
 
     @POST
@@ -95,7 +64,7 @@ public class MaintenanceResource {
                                 @QueryParam("limit") @DefaultValue("20") @Min(1) @Max(200) int limit) {
         assertAuthorized(key);
         try {
-            return Response.ok(maintenanceService.previewLdapUsers(limit)).build();
+            return Response.ok(maintenanceApplicationService.previewLdapUsers(limit)).build();
         } catch (IllegalStateException e) {
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity(ProblemDetail.of(400, "Configuration Error", "LDAP configuration is invalid"))
@@ -108,7 +77,7 @@ public class MaintenanceResource {
     public Response ldapImport(@HeaderParam("X-Maintenance-Key") String key) {
         assertAuthorized(key);
         try {
-            return Response.ok(maintenanceService.importFromLdap()).build();
+            return Response.ok(maintenanceApplicationService.importFromLdap()).build();
         } catch (IllegalStateException e) {
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity(ProblemDetail.of(400, "Configuration Error", "LDAP configuration is invalid"))
@@ -126,7 +95,7 @@ public class MaintenanceResource {
                                          @QueryParam("batchSize") @DefaultValue("1") @Min(1) @Max(1000) int batchSize) {
         assertAuthorized(key);
         try {
-            return Response.accepted(maintenanceService.startEmbeddingRegeneration(
+            return Response.accepted(maintenanceApplicationService.regenerateEmbeddings(
                     nodeTypeParam, onlyMissing, batchSize
             )).build();
         } catch (IllegalArgumentException e) {
@@ -144,7 +113,7 @@ public class MaintenanceResource {
                                                String jobIdParam) {
         assertAuthorized(key);
         try {
-            var status = maintenanceService.getEmbeddingRegenerationStatus(jobIdParam)
+            var status = maintenanceApplicationService.embeddingRegenerationStatus(jobIdParam)
                     .orElseThrow(() -> new NotFoundBusinessException("Embedding job not found"));
             return Response.ok(status).build();
         } catch (NotFoundBusinessException e) {

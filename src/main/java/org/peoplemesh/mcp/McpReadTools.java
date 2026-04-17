@@ -7,12 +7,9 @@ import io.quarkus.security.Authenticated;
 import org.peoplemesh.domain.exception.BusinessException;
 import org.peoplemesh.domain.dto.MeshMatchResult;
 import org.peoplemesh.domain.dto.ProfileSchema;
-import org.peoplemesh.domain.model.MeshNode;
-import org.peoplemesh.repository.NodeRepository;
 import org.peoplemesh.service.EmbeddingService;
 import org.peoplemesh.service.MatchesService;
 import org.peoplemesh.service.MatchingService;
-import org.peoplemesh.service.NodeAccessPolicyService;
 import org.peoplemesh.service.ProfileService;
 import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
@@ -35,10 +32,6 @@ public class McpReadTools {
     MatchingService matchingService;
     @Inject
     EmbeddingService embeddingService;
-    @Inject
-    NodeRepository nodeRepository;
-    @Inject
-    NodeAccessPolicyService nodeAccessPolicyService;
     @Inject
     ObjectMapper objectMapper;
 
@@ -143,16 +136,10 @@ public class McpReadTools {
                 return new TextContent("Error: Invalid nodeId format.");
             }
             UUID userId = userResolver.resolveUserId();
-            MeshNode node = nodeRepository.findById(id).orElse(null);
-            if (node == null || node.embedding == null) {
-                return new TextContent("Node not found or has no embedding.");
+            if (matchesService == null) {
+                return new TextContent("Error: match service unavailable.");
             }
-            if (!nodeAccessPolicyService.canReadNode(userId, node)) {
-                return new TextContent("Error: access denied.");
-            }
-            List<MeshMatchResult> results = matchesService != null
-                    ? matchesService.matchFromNode(userId, id, type, country)
-                    : matchingService.findAllMatches(userId, node.embedding, type, country);
+            List<MeshMatchResult> results = matchesService.matchFromNode(userId, id, type, country);
             String json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(results);
             return new TextContent(json);
         } catch (SecurityException e) {

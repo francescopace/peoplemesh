@@ -1,4 +1,4 @@
-package org.peoplemesh.api;
+package org.peoplemesh.util;
 
 import jakarta.ws.rs.core.HttpHeaders;
 

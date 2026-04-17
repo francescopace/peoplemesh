@@ -10,11 +10,10 @@ import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.peoplemesh.domain.dto.MeshMatchResult;
 import org.peoplemesh.domain.dto.ProfileSchema;
-import org.peoplemesh.domain.model.MeshNode;
-import org.peoplemesh.repository.NodeRepository;
+import org.peoplemesh.domain.exception.NotFoundBusinessException;
 import org.peoplemesh.service.EmbeddingService;
+import org.peoplemesh.service.MatchesService;
 import org.peoplemesh.service.MatchingService;
-import org.peoplemesh.service.NodeAccessPolicyService;
 import org.peoplemesh.service.ProfileService;
 
 import java.util.Collections;
@@ -36,11 +35,9 @@ class McpReadToolsTest {
     @Mock
     MatchingService matchingService;
     @Mock
+    MatchesService matchesService;
+    @Mock
     EmbeddingService embeddingService;
-    @Mock
-    NodeRepository nodeRepository;
-    @Mock
-    NodeAccessPolicyService nodeAccessPolicyService;
     @Spy
     ObjectMapper objectMapper = new ObjectMapper();
 
@@ -98,16 +95,15 @@ class McpReadToolsTest {
     void match_valid_returnsJson() throws Exception {
         UUID userId = UUID.randomUUID();
         when(userResolver.resolveUserId()).thenReturn(userId);
-        when(embeddingService.generateEmbedding(anyString())).thenReturn(new float[]{1f, 2f});
         MeshMatchResult one = sampleMatch();
-        when(matchingService.findAllMatches(eq(userId), any(float[].class), eq("JOB"), eq("IT")))
+        when(matchesService.matchFromSchema(eq(userId), any(ProfileSchema.class), eq("JOB"), eq("IT")))
                 .thenReturn(List.of(one));
 
         String json = "{\"professional\":{\"roles\":[\"Engineer\"]}}";
         TextContent result = mcpReadTools.match(json, "JOB", "IT");
 
         assertTrue(result.text().contains(one.title()));
-        verify(matchingService).findAllMatches(eq(userId), any(float[].class), eq("JOB"), eq("IT"));
+        verify(matchesService).matchFromSchema(eq(userId), any(ProfileSchema.class), eq("JOB"), eq("IT"));
     }
 
     @Test
@@ -124,7 +120,7 @@ class McpReadToolsTest {
     void matchMe_noResults_returnsEmptyJsonArray() throws Exception {
         UUID userId = UUID.randomUUID();
         when(userResolver.resolveUserId()).thenReturn(userId);
-        when(matchingService.findAllMatches(userId, "PEOPLE", null)).thenReturn(Collections.emptyList());
+        when(matchesService.matchMyProfile(userId, "PEOPLE", null)).thenReturn(Collections.emptyList());
 
         TextContent result = mcpReadTools.matchMe("PEOPLE", null);
 
@@ -137,7 +133,7 @@ class McpReadToolsTest {
         UUID userId = UUID.randomUUID();
         when(userResolver.resolveUserId()).thenReturn(userId);
         MeshMatchResult one = sampleMatch();
-        when(matchingService.findAllMatches(userId, null, "DE")).thenReturn(List.of(one));
+        when(matchesService.matchMyProfile(userId, null, "DE")).thenReturn(List.of(one));
 
         TextContent result = mcpReadTools.matchMe(null, "DE");
 
@@ -161,9 +157,12 @@ class McpReadToolsTest {
     @Test
     void matchNode_notFound_returnsMessage() {
         UUID nodeUuid = UUID.randomUUID();
-        when(nodeRepository.findById(nodeUuid)).thenReturn(Optional.empty());
+        UUID userId = UUID.randomUUID();
+        when(userResolver.resolveUserId()).thenReturn(userId);
+        when(matchesService.matchFromNode(userId, nodeUuid, null, null))
+                .thenThrow(new NotFoundBusinessException("Node not found or has no embedding"));
         TextContent result = mcpReadTools.matchNode(nodeUuid.toString(), null, null);
-        assertTrue(result.text().contains("Node not found"));
+        assertTrue(result.text().contains("Node not found or has no embedding"));
     }
 
     @Test
@@ -171,15 +170,9 @@ class McpReadToolsTest {
         UUID userId = UUID.randomUUID();
         UUID nodeUuid = UUID.randomUUID();
         when(userResolver.resolveUserId()).thenReturn(userId);
-
-        MeshNode node = new MeshNode();
-        node.embedding = new float[]{0.5f};
-
         MeshMatchResult one = sampleMatch();
-        when(matchingService.findAllMatches(eq(userId), eq(node.embedding), isNull(), isNull()))
+        when(matchesService.matchFromNode(eq(userId), eq(nodeUuid), isNull(), isNull()))
                 .thenReturn(List.of(one));
-        when(nodeRepository.findById(nodeUuid)).thenReturn(Optional.of(node));
-        when(nodeAccessPolicyService.canReadNode(userId, node)).thenReturn(true);
         TextContent result = mcpReadTools.matchNode(nodeUuid.toString(), null, null);
         assertTrue(result.text().contains(one.title()));
     }

@@ -1,32 +1,30 @@
 package org.peoplemesh.mcp;
 
-import io.quarkus.security.identity.SecurityIdentity;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.peoplemesh.service.CurrentUserService;
 
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class UserResolverTest {
 
-    @Mock SecurityIdentity identity;
+    @Mock
+    CurrentUserService currentUserService;
 
-    @InjectMocks UserResolver userResolver;
+    @InjectMocks
+    UserResolver userResolver;
 
     @Test
-    void resolveUserId_noSessionAndNoOauthSubject_throwsSecurityException() {
-        when(identity.<UUID>getAttribute("pm.userId")).thenReturn(null);
-        when(identity.getPrincipal()).thenReturn(() -> "unknown-subject");
-
-        // MeshNode.findByIdOptional(...) is inherited from PanacheEntityBase
-        // and require bytecode enhancement — cannot be mocked in unit tests.
-        // Session-based and OAuth subject resolution paths are covered via FullFlowIT.
-        assertThrows(Exception.class, () -> userResolver.resolveUserId());
+    void resolveUserId_delegatesToCurrentUserService() {
+        UUID userId = UUID.randomUUID();
+        when(currentUserService.resolveUserId()).thenReturn(userId);
+        assertEquals(userId, userResolver.resolveUserId());
     }
 }

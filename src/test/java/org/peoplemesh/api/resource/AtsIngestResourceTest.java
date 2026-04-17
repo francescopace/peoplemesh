@@ -6,10 +6,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.peoplemesh.application.AtsIngestApplicationService;
 import org.peoplemesh.config.AppConfig;
 import org.peoplemesh.domain.dto.AtsIngestRequestDto;
 import org.peoplemesh.domain.dto.AtsIngestResultDto;
-import org.peoplemesh.service.AtsIngestService;
 
 import jakarta.ws.rs.ForbiddenException;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -25,7 +25,7 @@ import static org.mockito.Mockito.*;
 class AtsIngestResourceTest {
 
     @Mock AppConfig config;
-    @Mock AtsIngestService atsIngestService;
+    @Mock AtsIngestApplicationService atsIngestApplicationService;
     @Mock HttpHeaders httpHeaders;
 
     @InjectMocks
@@ -54,7 +54,7 @@ class AtsIngestResourceTest {
         AtsIngestRequestDto req = new AtsIngestRequestDto();
         req.jobs = Collections.emptyList();
 
-        when(atsIngestService.ingestJobs(req)).thenThrow(new IllegalArgumentException("jobs array is required"));
+        when(atsIngestApplicationService.ingestJobs(req)).thenThrow(new IllegalArgumentException("jobs array is required"));
         assertThrows(IllegalArgumentException.class, () -> resource.ingestJobs("test-key", req));
     }
 
@@ -68,7 +68,7 @@ class AtsIngestResourceTest {
         req.jobs = List.of(entry);
         req.ownerUserId = null;
 
-        when(atsIngestService.ingestJobs(req)).thenThrow(new IllegalArgumentException("owner_user_id is required"));
+        when(atsIngestApplicationService.ingestJobs(req)).thenThrow(new IllegalArgumentException("owner_user_id is required"));
         assertThrows(IllegalArgumentException.class, () -> resource.ingestJobs("test-key", req));
     }
 
@@ -84,7 +84,7 @@ class AtsIngestResourceTest {
         }
         req.jobs = jobs;
 
-        when(atsIngestService.ingestJobs(req)).thenThrow(new IllegalArgumentException("batch size exceeds maximum"));
+        when(atsIngestApplicationService.ingestJobs(req)).thenThrow(new IllegalArgumentException("batch size exceeds maximum"));
         assertThrows(IllegalArgumentException.class, () -> resource.ingestJobs("test-key", req));
     }
 
@@ -100,7 +100,7 @@ class AtsIngestResourceTest {
         entry.description = "Java development";
         req.jobs = List.of(entry);
 
-        when(atsIngestService.ingestJobs(req))
+        when(atsIngestApplicationService.ingestJobs(req))
                 .thenReturn(new AtsIngestResultDto(1, 0, List.of()));
 
         Response response = resource.ingestJobs("test-key", req);
@@ -137,7 +137,7 @@ class AtsIngestResourceTest {
         entry.description = "Desc";
         req.jobs = List.of(entry);
 
-        when(atsIngestService.ingestJobs(req))
+        when(atsIngestApplicationService.ingestJobs(req))
                 .thenReturn(new AtsIngestResultDto(0, 1, List.of(Map.of("external_id", "", "error", "Failed"))));
         Response response = resource.ingestJobs("test-key", req);
         assertEquals(200, response.getStatus());
@@ -159,7 +159,7 @@ class AtsIngestResourceTest {
         entry.description = "Desc";
         req.jobs = List.of(entry);
 
-        when(atsIngestService.ingestJobs(req))
+        when(atsIngestApplicationService.ingestJobs(req))
                 .thenReturn(new AtsIngestResultDto(0, 1, List.of(Map.of("external_id", "ext-1", "error", "Failed"))));
         Response response = resource.ingestJobs("test-key", req);
 

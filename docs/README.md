@@ -36,6 +36,7 @@ This is the canonical index for technical documentation under `docs/`.
 ## Contributor Docs
 
 - Codebase structure and local development: [`contributor/development.md`](contributor/development.md)
+- Architecture guardrails and layer boundaries: [`contributor/architecture.md`](contributor/architecture.md)
 - Test strategy and commands: [`contributor/testing.md`](contributor/testing.md)
 - Documentation standards and templates: [`contributor/documentation-style.md`](contributor/documentation-style.md)
 

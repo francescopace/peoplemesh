@@ -7,6 +7,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.peoplemesh.domain.model.SkillCatalog;
 import org.peoplemesh.domain.model.SkillDefinition;
+import org.peoplemesh.repository.SkillCatalogRepository;
 import org.peoplemesh.repository.SkillDefinitionRepository;
 
 import java.io.ByteArrayInputStream;
@@ -23,6 +24,7 @@ class SkillCatalogServiceTest {
 
     @Mock EmbeddingService embeddingService;
     @Mock SkillDefinitionRepository skillDefinitionRepository;
+    @Mock SkillCatalogRepository skillCatalogRepository;
 
     @InjectMocks
     SkillCatalogService service;
@@ -30,154 +32,118 @@ class SkillCatalogServiceTest {
     @Test
     void importFromCsv_catalogNotFound_throws() {
         UUID id = UUID.randomUUID();
-        try (var mocked = mockStatic(SkillCatalog.class)) {
-            mocked.when(() -> SkillCatalog.findByIdOptional(id)).thenReturn(Optional.empty());
-
-            assertThrows(jakarta.ws.rs.NotFoundException.class,
-                    () -> service.importFromCsv(id, new ByteArrayInputStream(new byte[0])));
-        }
+        when(skillCatalogRepository.findById(id)).thenReturn(Optional.empty());
+        assertThrows(jakarta.ws.rs.NotFoundException.class,
+                () -> service.importFromCsv(id, new ByteArrayInputStream(new byte[0])));
     }
 
     @Test
     void importFromCsv_emptyFile_returnsZero() throws IOException {
         UUID id = UUID.randomUUID();
-        try (var mocked = mockStatic(SkillCatalog.class)) {
-            SkillCatalog catalog = new SkillCatalog();
-            catalog.name = "test";
-            mocked.when(() -> SkillCatalog.findByIdOptional(id)).thenReturn(Optional.of(catalog));
-
-            int count = service.importFromCsv(id, csvStream(""));
-            assertEquals(0, count);
-        }
+        SkillCatalog catalog = new SkillCatalog();
+        catalog.name = "test";
+        when(skillCatalogRepository.findById(id)).thenReturn(Optional.of(catalog));
+        int count = service.importFromCsv(id, csvStream(""));
+        assertEquals(0, count);
     }
 
     @Test
     void importFromCsv_headerOnly_returnsZero() throws IOException {
         UUID id = UUID.randomUUID();
-        try (var mocked = mockStatic(SkillCatalog.class)) {
-            SkillCatalog catalog = new SkillCatalog();
-            catalog.name = "test";
-            mocked.when(() -> SkillCatalog.findByIdOptional(id)).thenReturn(Optional.of(catalog));
-            when(skillDefinitionRepository.findByCatalog(id)).thenReturn(List.of());
-
-            int count = service.importFromCsv(id, csvStream("category,name,lxp\n"));
-            assertEquals(0, count);
-        }
+        SkillCatalog catalog = new SkillCatalog();
+        catalog.name = "test";
+        when(skillCatalogRepository.findById(id)).thenReturn(Optional.of(catalog));
+        when(skillDefinitionRepository.findByCatalog(id)).thenReturn(List.of());
+        int count = service.importFromCsv(id, csvStream("category,name,lxp\n"));
+        assertEquals(0, count);
     }
 
     @Test
     void importFromCsv_updatesExistingSkill() throws IOException {
         UUID id = UUID.randomUUID();
-        try (var catalogMock = mockStatic(SkillCatalog.class)) {
-
-            SkillCatalog catalog = new SkillCatalog();
-            catalog.name = "test";
-            catalogMock.when(() -> SkillCatalog.findByIdOptional(id)).thenReturn(Optional.of(catalog));
-
-            SkillDefinition existing = new SkillDefinition();
-            existing.name = "Java";
-            existing.category = "OldCategory";
-            when(skillDefinitionRepository.findByCatalog(id)).thenReturn(List.of(existing));
-
-            String csv = "category,name\nBackend,Java";
-            int count = service.importFromCsv(id, csvStream(csv));
-
-            assertEquals(0, count);
-            assertEquals("Backend", existing.category);
-        }
+        SkillCatalog catalog = new SkillCatalog();
+        catalog.name = "test";
+        when(skillCatalogRepository.findById(id)).thenReturn(Optional.of(catalog));
+        SkillDefinition existing = new SkillDefinition();
+        existing.name = "Java";
+        existing.category = "OldCategory";
+        when(skillDefinitionRepository.findByCatalog(id)).thenReturn(List.of(existing));
+        String csv = "category,name\nBackend,Java";
+        int count = service.importFromCsv(id, csvStream(csv));
+        assertEquals(0, count);
+        assertEquals("Backend", existing.category);
     }
 
     @Test
     void importFromCsv_escoHeader_updatesExistingSkill() throws IOException {
         UUID id = UUID.randomUUID();
-        try (var catalogMock = mockStatic(SkillCatalog.class)) {
-
-            SkillCatalog catalog = new SkillCatalog();
-            catalog.name = "test";
-            catalogMock.when(() -> SkillCatalog.findByIdOptional(id)).thenReturn(Optional.of(catalog));
-
-            SkillDefinition existing = new SkillDefinition();
-            existing.name = "industrial software";
-            existing.category = "OldCategory";
-            when(skillDefinitionRepository.findByCatalog(id)).thenReturn(List.of(existing));
-
-            String csv = """
-                    uri,title,preferred_label_en,skill_type,reuse_level
-                    http://data.europa.eu/esco/skill/41ec47dd-08b3-464a-9c45-c706f3e74467,industrial software,industrial software,knowledge,cross-sector
-                    """;
-            int count = service.importFromCsv(id, csvStream(csv));
-
-            assertEquals(0, count);
-            assertEquals("Knowledge", existing.category);
-            assertEquals("cross-sector", existing.lxpRecommendation);
-        }
+        SkillCatalog catalog = new SkillCatalog();
+        catalog.name = "test";
+        when(skillCatalogRepository.findById(id)).thenReturn(Optional.of(catalog));
+        SkillDefinition existing = new SkillDefinition();
+        existing.name = "industrial software";
+        existing.category = "OldCategory";
+        when(skillDefinitionRepository.findByCatalog(id)).thenReturn(List.of(existing));
+        String csv = """
+                uri,title,preferred_label_en,skill_type,reuse_level
+                http://data.europa.eu/esco/skill/41ec47dd-08b3-464a-9c45-c706f3e74467,industrial software,industrial software,knowledge,cross-sector
+                """;
+        int count = service.importFromCsv(id, csvStream(csv));
+        assertEquals(0, count);
+        assertEquals("Knowledge", existing.category);
+        assertEquals("cross-sector", existing.lxpRecommendation);
     }
 
     @Test
     void importFromCsv_skillsBaseCategoryNameHeader_updatesExistingSkill() throws IOException {
         UUID id = UUID.randomUUID();
-        try (var catalogMock = mockStatic(SkillCatalog.class)) {
-
-            SkillCatalog catalog = new SkillCatalog();
-            catalog.name = "test";
-            catalogMock.when(() -> SkillCatalog.findByIdOptional(id)).thenReturn(Optional.of(catalog));
-
-            SkillDefinition existing = new SkillDefinition();
-            existing.name = "Java";
-            existing.category = "OldCategory";
-            when(skillDefinitionRepository.findByCatalog(id)).thenReturn(List.of(existing));
-
-            String csv = """
-                    "Category name",Name,"LXP Recommendation\t"
-                    "Agile Project Management","Java",
-                    """;
-            int count = service.importFromCsv(id, csvStream(csv));
-
-            assertEquals(0, count);
-            assertEquals("Agile Project Management", existing.category);
-            assertNull(existing.lxpRecommendation);
-        }
+        SkillCatalog catalog = new SkillCatalog();
+        catalog.name = "test";
+        when(skillCatalogRepository.findById(id)).thenReturn(Optional.of(catalog));
+        SkillDefinition existing = new SkillDefinition();
+        existing.name = "Java";
+        existing.category = "OldCategory";
+        when(skillDefinitionRepository.findByCatalog(id)).thenReturn(List.of(existing));
+        String csv = """
+                "Category name",Name,"LXP Recommendation\t"
+                "Agile Project Management","Java",
+                """;
+        int count = service.importFromCsv(id, csvStream(csv));
+        assertEquals(0, count);
+        assertEquals("Agile Project Management", existing.category);
+        assertNull(existing.lxpRecommendation);
     }
 
     @Test
     void importFromCsv_skillsBaseCategoryNameHeaderWithBom_updatesExistingSkill() throws IOException {
         UUID id = UUID.randomUUID();
-        try (var catalogMock = mockStatic(SkillCatalog.class)) {
-
-            SkillCatalog catalog = new SkillCatalog();
-            catalog.name = "test";
-            catalogMock.when(() -> SkillCatalog.findByIdOptional(id)).thenReturn(Optional.of(catalog));
-
-            SkillDefinition existing = new SkillDefinition();
-            existing.name = "Java";
-            existing.category = "OldCategory";
-            when(skillDefinitionRepository.findByCatalog(id)).thenReturn(List.of(existing));
-
-            String csv = """
-                    \uFEFF"Category name",Name,"LXP Recommendation\t"
-                    "Agile Project Management","Java",
-                    """;
-            int count = service.importFromCsv(id, csvStream(csv));
-
-            assertEquals(0, count);
-            assertEquals("Agile Project Management", existing.category);
-            assertNull(existing.lxpRecommendation);
-        }
+        SkillCatalog catalog = new SkillCatalog();
+        catalog.name = "test";
+        when(skillCatalogRepository.findById(id)).thenReturn(Optional.of(catalog));
+        SkillDefinition existing = new SkillDefinition();
+        existing.name = "Java";
+        existing.category = "OldCategory";
+        when(skillDefinitionRepository.findByCatalog(id)).thenReturn(List.of(existing));
+        String csv = """
+                \uFEFF"Category name",Name,"LXP Recommendation\t"
+                "Agile Project Management","Java",
+                """;
+        int count = service.importFromCsv(id, csvStream(csv));
+        assertEquals(0, count);
+        assertEquals("Agile Project Management", existing.category);
+        assertNull(existing.lxpRecommendation);
     }
 
     @Test
     void importFromCsv_unsupportedHeader_throws() {
         UUID id = UUID.randomUUID();
-        try (var mocked = mockStatic(SkillCatalog.class)) {
-            SkillCatalog catalog = new SkillCatalog();
-            catalog.name = "test";
-            mocked.when(() -> SkillCatalog.findByIdOptional(id)).thenReturn(Optional.of(catalog));
-
-            String csv = "foo,bar\nx,y\n";
-            IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                    () -> service.importFromCsv(id, csvStream(csv)));
-            assertTrue(ex.getMessage().contains("Unsupported skills CSV format"));
-        }
+        SkillCatalog catalog = new SkillCatalog();
+        catalog.name = "test";
+        when(skillCatalogRepository.findById(id)).thenReturn(Optional.of(catalog));
+        String csv = "foo,bar\nx,y\n";
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> service.importFromCsv(id, csvStream(csv)));
+        assertTrue(ex.getMessage().contains("Unsupported skills CSV format"));
     }
 
     @Test
@@ -231,30 +197,21 @@ class SkillCatalogServiceTest {
     @Test
     void deleteCatalog_notFound_throws() {
         UUID id = UUID.randomUUID();
-        try (var mocked = mockStatic(SkillCatalog.class)) {
-            mocked.when(() -> SkillCatalog.findByIdOptional(id)).thenReturn(Optional.empty());
-
-            assertThrows(jakarta.ws.rs.NotFoundException.class, () -> service.deleteCatalog(id));
-        }
+        when(skillCatalogRepository.findById(id)).thenReturn(Optional.empty());
+        assertThrows(jakarta.ws.rs.NotFoundException.class, () -> service.deleteCatalog(id));
     }
 
     @Test
     void listCatalogs_delegates() {
-        try (var mocked = mockStatic(SkillCatalog.class)) {
-            mocked.when(SkillCatalog::findAllSorted).thenReturn(Collections.emptyList());
-
-            assertEquals(Collections.emptyList(), service.listCatalogs());
-        }
+        when(skillCatalogRepository.findAllSorted()).thenReturn(Collections.emptyList());
+        assertEquals(Collections.emptyList(), service.listCatalogs());
     }
 
     @Test
     void getCatalog_delegates() {
         UUID id = UUID.randomUUID();
-        try (var mocked = mockStatic(SkillCatalog.class)) {
-            mocked.when(() -> SkillCatalog.findByIdOptional(id)).thenReturn(Optional.empty());
-
-            assertTrue(service.getCatalog(id).isEmpty());
-        }
+        when(skillCatalogRepository.findById(id)).thenReturn(Optional.empty());
+        assertTrue(service.getCatalog(id).isEmpty());
     }
 
     @Test

@@ -7,6 +7,7 @@ import jakarta.ws.rs.NotFoundException;
 import org.jboss.logging.Logger;
 import org.peoplemesh.domain.model.SkillCatalog;
 import org.peoplemesh.domain.model.SkillDefinition;
+import org.peoplemesh.repository.SkillCatalogRepository;
 import org.peoplemesh.repository.SkillDefinitionRepository;
 
 import java.io.BufferedReader;
@@ -30,6 +31,9 @@ public class SkillCatalogService {
     @Inject
     SkillDefinitionRepository skillDefinitionRepository;
 
+    @Inject
+    SkillCatalogRepository skillCatalogRepository;
+
     @Transactional
     public SkillCatalog createCatalog(String name, String description,
                                        Map<String, Object> levelScale, String source) {
@@ -38,14 +42,14 @@ public class SkillCatalogService {
         catalog.description = description;
         catalog.levelScale = levelScale;
         catalog.source = source;
-        catalog.persist();
+        skillCatalogRepository.persist(catalog);
         return catalog;
     }
 
     @Transactional
     public SkillCatalog updateCatalog(UUID catalogId, String name, String description,
                                       Map<String, Object> levelScale, String source) {
-        SkillCatalog catalog = SkillCatalog.findByIdOptional(catalogId)
+        SkillCatalog catalog = skillCatalogRepository.findById(catalogId)
                 .orElseThrow(() -> new NotFoundException("Catalog not found"));
         catalog.name = name;
         catalog.description = description;
@@ -58,7 +62,7 @@ public class SkillCatalogService {
 
     @Transactional
     public int importFromCsv(UUID catalogId, InputStream csvStream) throws IOException {
-        SkillCatalog catalog = SkillCatalog.findByIdOptional(catalogId)
+        SkillCatalog catalog = skillCatalogRepository.findById(catalogId)
                 .orElseThrow(() -> new NotFoundException("Catalog not found"));
 
         int count = 0;
@@ -111,7 +115,7 @@ public class SkillCatalogService {
                     sd.name = name;
                     sd.aliases = aliases.isEmpty() ? null : aliases;
                     sd.lxpRecommendation = lxpRecommendation;
-                    sd.persist();
+                    skillDefinitionRepository.upsert(sd);
                     existingByName.put(name.toLowerCase(Locale.ROOT), sd);
                     count++;
                 }
@@ -188,51 +192,30 @@ public class SkillCatalogService {
 
     @Transactional
     public void deleteCatalog(UUID catalogId) {
-        SkillCatalog catalog = SkillCatalog.findByIdOptional(catalogId)
+        SkillCatalog catalog = skillCatalogRepository.findById(catalogId)
                 .orElseThrow(() -> new NotFoundException("Catalog not found"));
-        catalog.delete();
+        skillCatalogRepository.delete(catalog);
     }
 
     public List<SkillCatalog> listCatalogs() {
-        return SkillCatalog.findAllSorted();
+        return skillCatalogRepository.findAllSorted();
     }
 
     public Optional<SkillCatalog> getCatalog(UUID catalogId) {
-        return SkillCatalog.findByIdOptional(catalogId);
+        return skillCatalogRepository.findById(catalogId);
     }
 
     public List<SkillDefinition> listSkills(UUID catalogId, String category, int page, int size) {
-        if (skillDefinitionRepository != null) {
-            return skillDefinitionRepository.listSkills(catalogId, category, page, size);
-        }
-        List<SkillDefinition> catalogSkills = findCatalogSkills(catalogId);
-        if (category != null && !category.isBlank()) {
-            catalogSkills = catalogSkills.stream()
-                    .filter(sd -> category.equals(sd.category))
-                    .toList();
-        }
-        int from = Math.max(0, page * size);
-        if (from >= catalogSkills.size()) {
-            return List.of();
-        }
-        int to = Math.min(catalogSkills.size(), from + size);
-        return catalogSkills.subList(from, to);
+        return skillDefinitionRepository.listSkills(catalogId, category, page, size);
     }
 
     private List<SkillDefinition> findCatalogSkills(UUID catalogId) {
-        if (skillDefinitionRepository != null) {
-            List<SkillDefinition> skills = skillDefinitionRepository.findByCatalog(catalogId);
-            return skills != null ? skills : List.of();
-        }
-        return SkillDefinition.findByCatalog(catalogId);
+        List<SkillDefinition> skills = skillDefinitionRepository.findByCatalog(catalogId);
+        return skills != null ? skills : List.of();
     }
 
     private void persistSkillDefinition(SkillDefinition skillDefinition) {
-        if (skillDefinitionRepository != null) {
-            skillDefinitionRepository.upsert(skillDefinition);
-            return;
-        }
-        skillDefinition.persist();
+        skillDefinitionRepository.upsert(skillDefinition);
     }
 
     private static String[] parseCsvLine(String line) {

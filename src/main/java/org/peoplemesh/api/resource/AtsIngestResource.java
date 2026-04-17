@@ -16,7 +16,6 @@ import org.peoplemesh.application.AtsIngestApplicationService;
 import org.peoplemesh.config.AppConfig;
 import org.peoplemesh.domain.dto.AtsIngestRequestDto;
 import org.peoplemesh.domain.dto.AtsIngestResultDto;
-import org.peoplemesh.service.AtsIngestService;
 
 /**
  * Ingest endpoint for ATS (Applicant Tracking System) job feeds.
@@ -36,9 +35,6 @@ public class AtsIngestResource {
 
     @Inject
     AtsIngestApplicationService atsIngestApplicationService;
-
-    @Inject
-    AtsIngestService atsIngestService;
 
     @Context
     HttpHeaders httpHeaders;
@@ -78,9 +74,7 @@ public class AtsIngestResource {
         if (request == null) {
             return Response.status(Response.Status.BAD_REQUEST).build();
         }
-        AtsIngestResultDto result = atsIngestApplicationService != null
-                ? atsIngestApplicationService.ingestJobs(request)
-                : atsIngestService.ingestJobs(request);
+        AtsIngestResultDto result = atsIngestApplicationService.ingestJobs(request);
         return Response.ok(result).build();
     }
 

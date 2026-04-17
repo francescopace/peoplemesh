@@ -3,6 +3,7 @@ package org.peoplemesh.api;
 import jakarta.ws.rs.ForbiddenException;
 import jakarta.ws.rs.core.HttpHeaders;
 import org.peoplemesh.config.AppConfig;
+import org.peoplemesh.util.ClientIpResolver;
 import org.peoplemesh.util.IpAllowlistUtils;
 
 import java.nio.charset.StandardCharsets;

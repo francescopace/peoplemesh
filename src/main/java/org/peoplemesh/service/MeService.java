@@ -4,7 +4,6 @@ import io.quarkus.security.identity.SecurityIdentity;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.core.HttpHeaders;
-import org.peoplemesh.api.ClientIpResolver;
 import org.peoplemesh.domain.enums.NodeType;
 import org.peoplemesh.domain.exception.NotFoundBusinessException;
 import org.peoplemesh.domain.exception.ValidationBusinessException;
@@ -14,6 +13,7 @@ import org.peoplemesh.domain.dto.ProfileSchema;
 import org.peoplemesh.domain.dto.SkillAssessmentDto;
 import org.peoplemesh.repository.NodeRepository;
 import org.peoplemesh.repository.UserIdentityRepository;
+import org.peoplemesh.util.ClientIpResolver;
 
 import java.util.ArrayList;
 import java.util.Collection;

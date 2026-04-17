@@ -8,14 +8,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.peoplemesh.application.MaintenanceApplicationService;
 import org.peoplemesh.config.AppConfig;
 import org.peoplemesh.domain.dto.LdapImportResult;
 import org.peoplemesh.domain.dto.LdapUserPreview;
-import org.peoplemesh.domain.enums.NodeType;
-import org.peoplemesh.service.ClusteringScheduler;
-import org.peoplemesh.service.GdprService;
-import org.peoplemesh.service.JdbcConsentTokenStore;
-import org.peoplemesh.service.MaintenanceService;
 import org.peoplemesh.service.NodeEmbeddingMaintenanceService;
 import org.peoplemesh.util.IpAllowlistUtils;
 
@@ -25,7 +21,6 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -36,13 +31,7 @@ class MaintenanceResourceTest {
     @Mock
     AppConfig.MaintenanceConfig maintenanceConfig;
     @Mock
-    JdbcConsentTokenStore consentTokenStore;
-    @Mock
-    GdprService gdprService;
-    @Mock
-    ClusteringScheduler clusteringScheduler;
-    @Mock
-    MaintenanceService maintenanceService;
+    MaintenanceApplicationService maintenanceApplicationService;
     @Mock
     HttpHeaders httpHeaders;
 
@@ -105,13 +94,13 @@ class MaintenanceResourceTest {
         when(maintenanceConfig.allowedCidrs()).thenReturn(Optional.empty());
         List<LdapUserPreview> previews = List.of(new LdapUserPreview("uid1", "User One", "u1@test.com",
                 "User", "One", "Dev", "IT", "US", "NYC"));
-        when(maintenanceService.previewLdapUsers(500)).thenReturn(previews);
+        when(maintenanceApplicationService.previewLdapUsers(500)).thenReturn(previews);
 
         Response response = resource.ldapPreview("valid-key", 500);
 
         assertEquals(200, response.getStatus());
         assertSame(previews, response.getEntity());
-        verify(maintenanceService).previewLdapUsers(500);
+        verify(maintenanceApplicationService).previewLdapUsers(500);
     }
 
     @Test
@@ -120,13 +109,13 @@ class MaintenanceResourceTest {
         when(maintenanceConfig.apiKey()).thenReturn(Optional.of("valid-key"));
         when(maintenanceConfig.allowedCidrs()).thenReturn(Optional.empty());
         LdapImportResult result = new LdapImportResult(5, 2, 1, 0, 1000, List.of());
-        when(maintenanceService.importFromLdap()).thenReturn(result);
+        when(maintenanceApplicationService.importFromLdap()).thenReturn(result);
 
         Response response = resource.ldapImport("valid-key");
 
         assertEquals(200, response.getStatus());
         assertSame(result, response.getEntity());
-        verify(maintenanceService).importFromLdap();
+        verify(maintenanceApplicationService).importFromLdap();
     }
 
     @Test
@@ -135,7 +124,7 @@ class MaintenanceResourceTest {
         when(maintenanceConfig.apiKey()).thenReturn(Optional.of("valid-key"));
 
         assertThrows(ForbiddenException.class, () -> resource.ldapImport("wrong-key"));
-        verify(maintenanceService, never()).importFromLdap();
+        verify(maintenanceApplicationService, never()).importFromLdap();
     }
 
     @Test
@@ -143,7 +132,7 @@ class MaintenanceResourceTest {
         when(config.maintenance()).thenReturn(maintenanceConfig);
         when(maintenanceConfig.apiKey()).thenReturn(Optional.of("valid-key"));
         when(maintenanceConfig.allowedCidrs()).thenReturn(Optional.empty());
-        when(maintenanceService.importFromLdap())
+        when(maintenanceApplicationService.importFromLdap())
                 .thenThrow(new IllegalStateException("LDAP bind failed"));
 
         Response response = resource.ldapImport("valid-key");
@@ -173,14 +162,14 @@ class MaintenanceResourceTest {
                         null,
                         null
                 );
-        when(maintenanceService.startEmbeddingRegeneration(null, false, 1))
+        when(maintenanceApplicationService.regenerateEmbeddings(null, false, 1))
                 .thenReturn(queuedStatus);
 
         Response response = resource.regenerateEmbeddings("valid-key", null, false, 1);
 
         assertEquals(202, response.getStatus());
         assertSame(queuedStatus, response.getEntity());
-        verify(maintenanceService).startEmbeddingRegeneration(null, false, 1);
+        verify(maintenanceApplicationService).regenerateEmbeddings(null, false, 1);
     }
 
     @Test
@@ -205,14 +194,14 @@ class MaintenanceResourceTest {
                         null,
                         null
                 );
-        when(maintenanceService.startEmbeddingRegeneration("job", true, 32))
+        when(maintenanceApplicationService.regenerateEmbeddings("job", true, 32))
                 .thenReturn(queuedStatus);
 
         Response response = resource.regenerateEmbeddings("valid-key", "job", true, 32);
 
         assertEquals(202, response.getStatus());
         assertSame(queuedStatus, response.getEntity());
-        verify(maintenanceService).startEmbeddingRegeneration("job", true, 32);
+        verify(maintenanceApplicationService).regenerateEmbeddings("job", true, 32);
     }
 
     @Test
@@ -220,13 +209,13 @@ class MaintenanceResourceTest {
         when(config.maintenance()).thenReturn(maintenanceConfig);
         when(maintenanceConfig.apiKey()).thenReturn(Optional.of("valid-key"));
         when(maintenanceConfig.allowedCidrs()).thenReturn(Optional.empty());
-        when(maintenanceService.startEmbeddingRegeneration("not-valid", false, 1))
+        when(maintenanceApplicationService.regenerateEmbeddings("not-valid", false, 1))
                 .thenThrow(new IllegalArgumentException("Invalid nodeType"));
 
         Response response = resource.regenerateEmbeddings("valid-key", "not-valid", false, 1);
 
         assertEquals(400, response.getStatus());
-        verify(maintenanceService).startEmbeddingRegeneration("not-valid", false, 1);
+        verify(maintenanceApplicationService).regenerateEmbeddings("not-valid", false, 1);
     }
 
     @Test
@@ -234,7 +223,7 @@ class MaintenanceResourceTest {
         when(config.maintenance()).thenReturn(maintenanceConfig);
         when(maintenanceConfig.apiKey()).thenReturn(Optional.of("valid-key"));
         when(maintenanceConfig.allowedCidrs()).thenReturn(Optional.empty());
-        when(maintenanceService.startEmbeddingRegeneration(null, true, 64))
+        when(maintenanceApplicationService.regenerateEmbeddings(null, true, 64))
                 .thenThrow(new IllegalArgumentException("batchSize must be between 1 and 32"));
 
         Response response = resource.regenerateEmbeddings("valid-key", null, true, 64);
@@ -265,7 +254,7 @@ class MaintenanceResourceTest {
                         Instant.now(),
                         null
                 );
-        when(maintenanceService.getEmbeddingRegenerationStatus(jobId.toString())).thenReturn(Optional.of(status));
+        when(maintenanceApplicationService.embeddingRegenerationStatus(jobId.toString())).thenReturn(Optional.of(status));
 
         Response response = resource.regenerateEmbeddingsStatus("valid-key", jobId.toString());
 
@@ -279,7 +268,7 @@ class MaintenanceResourceTest {
         when(maintenanceConfig.apiKey()).thenReturn(Optional.of("valid-key"));
         when(maintenanceConfig.allowedCidrs()).thenReturn(Optional.empty());
         UUID jobId = UUID.randomUUID();
-        when(maintenanceService.getEmbeddingRegenerationStatus(jobId.toString())).thenReturn(Optional.empty());
+        when(maintenanceApplicationService.embeddingRegenerationStatus(jobId.toString())).thenReturn(Optional.empty());
 
         Response response = resource.regenerateEmbeddingsStatus("valid-key", jobId.toString());
 
@@ -291,12 +280,12 @@ class MaintenanceResourceTest {
         when(config.maintenance()).thenReturn(maintenanceConfig);
         when(maintenanceConfig.apiKey()).thenReturn(Optional.of("valid-key"));
         when(maintenanceConfig.allowedCidrs()).thenReturn(Optional.empty());
-        when(maintenanceService.getEmbeddingRegenerationStatus("not-a-uuid"))
+        when(maintenanceApplicationService.embeddingRegenerationStatus("not-a-uuid"))
                 .thenThrow(new IllegalArgumentException("Invalid jobId format"));
 
         Response response = resource.regenerateEmbeddingsStatus("valid-key", "not-a-uuid");
 
         assertEquals(400, response.getStatus());
-        verify(maintenanceService).getEmbeddingRegenerationStatus("not-a-uuid");
+        verify(maintenanceApplicationService).embeddingRegenerationStatus("not-a-uuid");
     }
 }
