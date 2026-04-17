@@ -5,7 +5,7 @@ In development mode, infrastructure dependencies are auto-configured via DevServ
 This reference follows PeopleMesh's security- and GDPR-first posture by design (secrets management, access restrictions, and policy-aligned data handling).
 
 Environment variable names in this page use upper snake case (for example `DB_URL`).
-Quarkus application keys use dotted lowercase format (for example `peoplemesh.search.max-per-minute`).
+Quarkus application keys use dotted lowercase format (for example `peoplemesh.search.min-score`).
 
 ## Audience
 
@@ -121,7 +121,6 @@ Current migration includes:
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `peoplemesh.search.max-per-minute` | `10` | Max searches per user per minute |
 | `peoplemesh.search.min-score` | `0.05` | Minimum result score threshold |
 
 ## Matching

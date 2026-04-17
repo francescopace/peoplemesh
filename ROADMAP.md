@@ -23,7 +23,7 @@ Goal: Have a working end-to-end matching system for a small team.
 - [x] **LangChain4j abstraction** — OpenAI in prod, Ollama/Granite locally (zero-cost dev). Configurable embedding and chat models.
 - [x] **Profile Quality (Seed Data)** — Manual onboarding via web UI + LDAP bulk import (`LdapImportService` with preview, audit, batch embedding generation via maintenance endpoints). Required fields: role, skills, experience summary. Optional: Slack username, languages.
 - [x] **Contact Layer** — "Contact on Slack", copy email/username on public profiles. No Slack API integration (by design).
-- [x] **Fast Search UX** — < 2s response time target, clean search-to-results UI. Rate-limited (`SearchConfig.maxPerMinute`), min score threshold filtering.
+- [x] **Fast Search UX** — < 2s response time target, clean search-to-results UI with min score threshold filtering.
 - [x] **Improved Ranking** — Hybrid scoring tuning in `MatchingService` (embedding similarity + skill-level weighting + metadata). Skill Catalog adds proficiency-aware matching.
 - [x] **Basic profile enrichment (LLM from CV)** — CV import via Docling + LLM structuring (`LlmProfileStructuring`), GitHub import with repo language/topic enrichment.
 - [x] **Privacy dashboard** — GDPR export (Art. 15/20), account deletion (Art. 17, hard delete), processing restriction (Art. 18), granular per-scope consent management (`MeshNodeConsent`). Two-column layout. Retention enforcement via `GdprService`.

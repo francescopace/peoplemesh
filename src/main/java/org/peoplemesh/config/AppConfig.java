@@ -138,9 +138,6 @@ public interface AppConfig {
     }
 
     interface SearchConfig {
-        @WithDefault("10")
-        int maxPerMinute();
-
         @WithDefault("0.05")
         double minScore();
     }

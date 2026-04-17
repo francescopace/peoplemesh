@@ -11,7 +11,6 @@ import org.mockito.MockedStatic;
 import org.peoplemesh.config.AppConfig;
 import org.peoplemesh.domain.dto.ParsedSearchQuery;
 import org.peoplemesh.domain.dto.SearchResponse;
-import org.peoplemesh.domain.exception.RateLimitException;
 import org.peoplemesh.domain.model.SkillAssessment;
 
 import java.lang.reflect.Field;
@@ -43,7 +42,6 @@ class SearchServiceTest {
     @BeforeEach
     void setUp() throws Exception {
         lenient().when(config.search()).thenReturn(searchConfig);
-        lenient().when(searchConfig.maxPerMinute()).thenReturn(100);
         lenient().when(searchConfig.minScore()).thenReturn(0.0);
         lenient().when(skillAssessmentRepository.findByNodeIds(anyList())).thenReturn(Collections.emptyMap());
         lenient().when(skillDefinitionRepository.findByIds(anyList())).thenReturn(Collections.emptyList());
@@ -62,15 +60,6 @@ class SearchServiceTest {
         assertNotNull(response);
         assertTrue(response.results().isEmpty());
         verifyNoInteractions(embeddingService);
-    }
-
-    @Test
-    void search_rateLimited_throwsRateLimitException() {
-        when(consentService.hasActiveConsent(userId, "professional_matching")).thenReturn(true);
-        when(searchConfig.maxPerMinute()).thenReturn(0);
-
-        assertThrows(RateLimitException.class,
-                () -> searchService.search(userId, "query", null));
     }
 
     @Test
@@ -149,13 +138,6 @@ class SearchServiceTest {
         assertFalse(response.parsedQuery().keywords().contains("for"));
         assertFalse(response.parsedQuery().keywords().contains("a"));
         assertTrue(response.parsedQuery().keywords().contains("java"));
-    }
-
-    @Test
-    void rateLimitException_isRuntimeException() {
-        var ex = new RateLimitException("test");
-        assertInstanceOf(RuntimeException.class, ex);
-        assertEquals("test", ex.getMessage());
     }
 
     @Test

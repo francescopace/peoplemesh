@@ -12,14 +12,12 @@ import org.peoplemesh.api.error.BusinessExceptionMapper;
 import org.peoplemesh.api.error.IllegalArgumentExceptionMapper;
 import org.peoplemesh.api.error.IllegalStateExceptionMapper;
 import org.peoplemesh.api.error.ProblemDetail;
-import org.peoplemesh.api.error.RateLimitExceptionMapper;
 import org.peoplemesh.api.error.SecurityExceptionMapper;
 import org.peoplemesh.api.error.UnauthorizedExceptionMapper;
 import org.peoplemesh.api.error.UnhandledExceptionMapper;
 import org.peoplemesh.api.error.ValidationExceptionMapper;
 import org.peoplemesh.api.error.WebApplicationExceptionMapper;
 import org.peoplemesh.domain.exception.BusinessException;
-import org.peoplemesh.domain.exception.RateLimitException;
 
 import java.util.Set;
 
@@ -32,7 +30,6 @@ class GlobalExceptionMapperTest {
     private final WebApplicationExceptionMapper webMapper = new WebApplicationExceptionMapper();
     private final UnauthorizedExceptionMapper unauthorizedMapper = new UnauthorizedExceptionMapper();
     private final SecurityExceptionMapper securityMapper = new SecurityExceptionMapper();
-    private final RateLimitExceptionMapper rateLimitMapper = new RateLimitExceptionMapper();
     private final ValidationExceptionMapper validationMapper = new ValidationExceptionMapper();
     private final BusinessExceptionMapper businessMapper = new BusinessExceptionMapper();
     private final IllegalArgumentExceptionMapper illegalArgumentMapper = new IllegalArgumentExceptionMapper();
@@ -64,13 +61,6 @@ class GlobalExceptionMapperTest {
     void securityException_returns403() {
         Response response = securityMapper.toResponse(new SecurityException("forbidden"));
         assertEquals(403, response.getStatus());
-    }
-
-    @Test
-    void rateLimitException_returns429_withRetryAfter() {
-        Response response = rateLimitMapper.toResponse(new RateLimitException("rate limited"));
-        assertEquals(429, response.getStatus());
-        assertEquals("60", response.getHeaderString("Retry-After"));
     }
 
     @Test

@@ -9,7 +9,6 @@ import jakarta.inject.Inject;
 import org.peoplemesh.repository.MeshNodeSearchRepository;
 import org.jboss.logging.Logger;
 import org.peoplemesh.config.AppConfig;
-import org.peoplemesh.domain.exception.RateLimitException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.peoplemesh.domain.dto.*;
@@ -54,21 +53,11 @@ public class SearchService {
     ConsentService consentService;
 
     @Inject
-    SearchRateLimiter searchRateLimiter;
-
-    @Inject
     SkillLevelResolutionService skillLevelResolutionService;
-
-    private final SearchRateLimiter localRateLimiter = new SearchRateLimiter();
 
     public SearchResponse search(UUID userId, String queryText, String countryFilter) {
         if (!consentService.hasActiveConsent(userId, "professional_matching")) {
             return new SearchResponse(null, Collections.emptyList());
-        }
-
-        SearchRateLimiter rateLimiter = searchRateLimiter != null ? searchRateLimiter : localRateLimiter;
-        if (rateLimiter.isRateLimited(userId, config.search().maxPerMinute())) {
-            throw new RateLimitException("Search rate limit exceeded");
         }
 
         SearchQueryParser parser = selectQueryParser().orElse(null);
