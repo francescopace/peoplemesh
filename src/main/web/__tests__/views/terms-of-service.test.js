@@ -53,7 +53,7 @@ describe("renderTermsOfService()", () => {
     const container = document.createElement("div");
     renderTermsOfService(container);
 
-    expect(container.textContent).toContain("legal@peoplemesh.org");
+    expect(container.textContent).toContain("contact@peoplemesh.org");
   });
 
   it("contains back to home link", () => {

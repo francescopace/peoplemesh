@@ -189,7 +189,7 @@ export function renderTermsOfService(container) {
             <h2>15. Contact</h2>
           </div>
           <div class="legal-card-body">
-            <p>For questions about these Terms: <strong>legal@peoplemesh.org</strong></p>
+            <p>For questions about these Terms: <strong>contact@peoplemesh.org</strong></p>
           </div>
         </div>
       </article>

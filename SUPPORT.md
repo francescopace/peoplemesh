@@ -23,4 +23,4 @@ See [`SECURITY.md`](SECURITY.md) for private reporting instructions.
 
 For commercial licensing, enterprise deployment, or partnership requests, contact:
 
-- `info@peoplemesh.org`
+- `contact@peoplemesh.org`

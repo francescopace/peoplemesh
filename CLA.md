@@ -60,7 +60,7 @@ To the maximum extent permitted by applicable law, You shall not be liable for a
 
 This constitutes your electronic signature. The comment is permanently linked to your GitHub identity and archived in the repository's pull request history.
 
-**Option B — Email.** Send a signed statement to info@peoplemesh.org from the email address associated with your GitHub account, referencing this Agreement and your GitHub username.
+**Option B — Email.** Send a signed statement to contact@peoplemesh.org from the email address associated with your GitHub account, referencing this Agreement and your GitHub username.
 
 A GitHub Action will enforce that all contributors have signed before a pull request can be merged.
 
@@ -70,4 +70,4 @@ PeopleMesh is licensed under AGPL v3. This CLA grants the project maintainer the
 
 ## 10. Contact
 
-For questions about this CLA: info@peoplemesh.org
+For questions about this CLA: contact@peoplemesh.org

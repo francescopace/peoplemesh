@@ -30,7 +30,7 @@ export function renderPrivacyPolicy(container) {
             <h2>1. Data Controller</h2>
           </div>
           <div class="legal-card-body">
-            <p>PeopleMesh (&ldquo;we&rdquo;, &ldquo;us&rdquo;) is the data controller for the personal data collected through this platform. For data protection inquiries, contact us at <strong>privacy@peoplemesh.org</strong>.</p>
+            <p>PeopleMesh (&ldquo;we&rdquo;, &ldquo;us&rdquo;) is the data controller for the personal data collected through this platform. For data protection inquiries, contact us at <strong>security@peoplemesh.org</strong>.</p>
           </div>
         </div>
 

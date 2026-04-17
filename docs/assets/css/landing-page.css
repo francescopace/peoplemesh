@@ -248,6 +248,7 @@ main,
 .hero h1 {
   font-size: clamp(2rem, 6vw, 4.3rem);
   margin-bottom: var(--space-5);
+  white-space: nowrap;
 }
 
 .hero h1 em {
@@ -321,6 +322,10 @@ main,
   color: var(--text-secondary);
   line-height: 1.65;
   font-size: 1.06rem;
+}
+
+.section-header p.no-wrap-desktop {
+  white-space: nowrap;
 }
 
 .features-grid,
@@ -485,6 +490,15 @@ main,
   color: var(--text-primary);
 }
 
+.footer-legal {
+  margin-top: var(--space-6);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-gray-200);
+  color: var(--color-gray-500);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
 @keyframes float-a {
   0%,
   100% { transform: translate(0, 0) scale(1); }
@@ -529,6 +543,10 @@ main,
     padding-top: var(--space-16);
   }
 
+  .hero h1 {
+    white-space: normal;
+  }
+
   .section {
     padding: var(--space-12) 0;
   }
@@ -542,5 +560,9 @@ main,
   .footer-content {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .section-header p.no-wrap-desktop {
+    white-space: normal;
   }
 }
