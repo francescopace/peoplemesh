@@ -144,7 +144,7 @@ class ProfileServiceTest {
     }
 
     @Test
-    void applySelectiveImport_googleIdentityProvenance_blocksIdentityOverwrite() {
+    void applySelectiveImport_blocksIdentityOverwriteExceptBirthDate() {
         MeshNode node = createMockNode(userId);
         node.title = "Google Name";
         Map<String, String> provenance = new HashMap<>();
@@ -159,7 +159,7 @@ class ProfileServiceTest {
                 null,
                 null, null, null, null,
                 new ProfileSchema.IdentityInfo("Should Not Override", "First", "Last",
-                        "id@example.com", null, null, null)
+                        "id@example.com", null, null, "1990-01-01")
         );
 
         when(consentService.hasActiveConsent(eq(userId), anyString())).thenReturn(false);
@@ -169,12 +169,14 @@ class ProfileServiceTest {
 
         assertEquals("Google Name", node.title);
         assertNull(node.structuredData.get("first_name"));
+        assertNull(node.structuredData.get("email"));
+        assertEquals("1990-01-01", node.structuredData.get("birth_date"));
         assertEquals("Engineer", node.description);
         verify(audit).log(userId, "PROFILE_SELECTIVE_IMPORT", "peoplemesh_selective_import_github");
     }
 
     @Test
-    void applySelectiveImport_updatesIdentityAndEmbeddingWhenConsented() {
+    void applySelectiveImport_updatesBirthDateAndEmbeddingWhenConsented() {
         MeshNode node = createMockNode(userId);
         ProfileSchema selected = new ProfileSchema(
                 null, null, null,
@@ -194,15 +196,49 @@ class ProfileServiceTest {
 
             profileService.applySelectiveImport(userId, selected, "manual");
 
-            assertEquals("Jane D", node.title);
-            assertEquals("jane@example.com", node.structuredData.get("email"));
             assertEquals("Berlin", node.structuredData.get("city"));
             assertEquals("1988-05-17", node.structuredData.get("birth_date"));
-            assertEquals("ACME", node.structuredData.get("company"));
             assertEquals("DE", node.country);
             assertTrue(node.searchable);
             assertNotNull(node.embedding);
         }
+    }
+
+    @Test
+    void upsertProfile_updatesOnlyIdentityBirthDate() {
+        MeshNode node = createMockNode(userId);
+        node.title = "OAuth Name";
+        node.structuredData.put("first_name", "OAuthFirst");
+        node.structuredData.put("last_name", "OAuthLast");
+        node.structuredData.put("email", "oauth@example.com");
+        node.structuredData.put("avatar_url", "https://oauth-photo");
+        node.structuredData.put("company", "OAuth Co");
+        when(nodeRepository.findPublishedUserNode(userId)).thenReturn(Optional.of(node));
+        when(consentService.hasActiveConsent(eq(userId), anyString())).thenReturn(false);
+
+        ProfileSchema updates = new ProfileSchema(
+                null, null, null,
+                null, null, null, null, null, null,
+                new ProfileSchema.IdentityInfo(
+                        "Manual Name",
+                        "ManualFirst",
+                        "ManualLast",
+                        "manual@example.com",
+                        "https://manual-photo",
+                        "Manual Co",
+                        "1992-04-12"
+                )
+        );
+
+        profileService.upsertProfile(userId, updates);
+
+        assertEquals("OAuth Name", node.title);
+        assertEquals("OAuthFirst", node.structuredData.get("first_name"));
+        assertEquals("OAuthLast", node.structuredData.get("last_name"));
+        assertEquals("oauth@example.com", node.structuredData.get("email"));
+        assertEquals("https://oauth-photo", node.structuredData.get("avatar_url"));
+        assertEquals("OAuth Co", node.structuredData.get("company"));
+        assertEquals("1992-04-12", node.structuredData.get("birth_date"));
     }
 
     @Test

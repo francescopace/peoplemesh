@@ -39,8 +39,12 @@ public class NodeService {
     @Inject
     SkillAssessmentService skillAssessmentService;
 
+    @Inject
+    EntitlementService entitlementService;
+
     @Transactional
     public NodeDto createNode(UUID ownerUserId, NodePayload payload) {
+        ensureAdminForWrite(ownerUserId);
         ensureNodeTypeCanBeManagedViaApi(payload.nodeType());
         MeshNode node = createEmptyNode();
         node.createdBy = ownerUserId;
@@ -54,7 +58,11 @@ public class NodeService {
 
     @Transactional
     public Optional<NodeDto> updateNode(UUID ownerUserId, UUID nodeId, NodePayload payload) {
-        return findNodeByIdAndOwner(nodeId, ownerUserId)
+        ensureAdminForWrite(ownerUserId);
+        Optional<MeshNode> target = isAdminUser(ownerUserId)
+                ? findNodeById(nodeId)
+                : findNodeByIdAndOwner(nodeId, ownerUserId);
+        return target
                 .map(node -> {
                     ensureNodeTypeCanBeManagedViaApi(payload.nodeType());
                     applyPayload(node, payload);
@@ -161,6 +169,16 @@ public class NodeService {
 
     void logAudit(UUID userId, String action, String toolName) {
         auditService.log(userId, action, toolName);
+    }
+
+    boolean isAdminUser(UUID userId) {
+        return entitlementService.isAdmin(userId);
+    }
+
+    private void ensureAdminForWrite(UUID userId) {
+        if (!isAdminUser(userId)) {
+            throw new ForbiddenBusinessException("Only admins can create or update nodes");
+        }
     }
 
     private void ensureNodeTypeCanBeManagedViaApi(NodeType nodeType) {

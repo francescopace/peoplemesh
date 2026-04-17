@@ -370,12 +370,6 @@ function showImportPreviewModal(imported, current, source, container) {
 
 const IMPORT_FIELD_DEFS = [
   // [section, label, uiKey, dataSection, field, provKey]
-  ["Identity", "Display Name",    "identity.display_name",    "identity", "display_name",    "identity.display_name"],
-  ["Identity", "First Name",      "identity.first_name",      "identity", "first_name",      "identity.first_name"],
-  ["Identity", "Last Name",       "identity.last_name",       "identity", "last_name",       "identity.last_name"],
-  ["Identity", "Email",           "identity.email",           "identity", "email",           "identity.email"],
-  ["Identity", "Photo",           "identity.photo_url",       "identity", "photo_url",       "identity.photo_url"],
-  ["Identity", "Company",         "identity.company",         "identity", "company",         "identity.company"],
   ["Identity", "Birth Date",      "identity.birth_date",      "identity", "birth_date",      "identity.birth_date"],
   ["Professional", "Roles",           "professional.roles",           "professional", "roles",           "professional.roles"],
   ["Professional", "Seniority",       "professional.seniority",       "professional", "seniority",       "professional.seniority"],
@@ -407,7 +401,7 @@ const IMPORT_FIELD_DEFS = [
 
 const IDENTITY_PROTECTED_KEYS = new Set([
   "identity.display_name", "identity.first_name", "identity.last_name",
-  "identity.email", "identity.company", "identity.photo_url", "identity.birth_date",
+  "identity.email", "identity.company", "identity.photo_url",
 ]);
 
 const MERGEABLE_IMPORT_KEYS = new Set([
@@ -544,10 +538,10 @@ function renderProfileView(container, p) {
   const grid = el("div", { className: "profile-grid" });
 
   /* Identity */
-  const identitySection = editableSection("person", "Identity", "blue", false, p, root,
+  const identitySection = editableSection("person", "Identity", "blue", canEdit, p, root,
     (editing) => {
       const content = [];
-      if (identity.photo_url || editing) {
+      if (identity.photo_url) {
         const avatarRow = el("div", { className: "profile-identity-avatar" });
         if (identity.photo_url) {
           const img = el("img", {
@@ -559,40 +553,24 @@ function renderProfileView(container, p) {
           avatarRow.appendChild(img);
           if (prov["identity.photo_url"]) avatarRow.appendChild(provBadge(prov["identity.photo_url"]));
         }
-        if (editing) {
-          const urlField = el("input", {
-            className: "profile-editable-value", type: "url", name: "photoUrl",
-            dataset: { field: "photoUrl" },
-            value: identity.photo_url || "",
-            placeholder: "Photo URL",
-            style: "flex:1",
-          });
-          avatarRow.appendChild(urlField);
-        }
         content.push(avatarRow);
       }
       content.push(fieldRow([
-        editableLabeledField("Display Name", "displayName", identity.display_name, editing, prov["identity.display_name"]),
-        editableLabeledField("Email", "email", identity.email, editing, prov["identity.email"], "email"),
+        labeledField("Display Name", identity.display_name, prov["identity.display_name"]),
+        labeledField("Email", identity.email, prov["identity.email"]),
       ]));
       content.push(fieldRow([
-        editableLabeledField("First Name", "firstName", identity.first_name, editing, prov["identity.first_name"]),
-        editableLabeledField("Last Name", "lastName", identity.last_name, editing, prov["identity.last_name"]),
+        labeledField("First Name", identity.first_name, prov["identity.first_name"]),
+        labeledField("Last Name", identity.last_name, prov["identity.last_name"]),
       ]));
       content.push(fieldRow([
-        editableLabeledField("Company", "company", identity.company, editing, prov["identity.company"]),
+        labeledField("Company", identity.company, prov["identity.company"]),
         editableLabeledField("Birth Date", "birthDate", identity.birth_date, editing, prov["identity.birth_date"], "date"),
       ]));
       return content;
     },
     (body) => ({
       identity: {
-        display_name: val(body, "displayName") || undefined,
-        first_name: val(body, "firstName") || undefined,
-        last_name: val(body, "lastName") || undefined,
-        email: val(body, "email") || undefined,
-        photo_url: val(body, "photoUrl") || undefined,
-        company: val(body, "company") || undefined,
         birth_date: val(body, "birthDate") || undefined,
       },
     })
@@ -1341,6 +1319,7 @@ function renderContactLinkField(label, text, href, provSrc) {
 }
 
 export function arr(v) { return Array.isArray(v) ? v.join(", ") : (v || ""); }
+export { buildFieldMap, buildPartialProfile };
 function val(root, field) {
   const input = root.querySelector(`[data-field="${field}"]`);
   return (input?.value || "").trim();

@@ -44,7 +44,7 @@ This reference follows PeopleMesh's security- and GDPR-first posture by design (
 | POST | `/api/v1/matches` | Structured match |
 | GET | `/api/v1/matches/me` | Match from own profile embedding |
 | GET | `/api/v1/matches/{nodeId}` | Match from a node's embedding |
-| | | **Nodes** |
+| | | **Nodes** (`is_admin` for create/update) |
 | GET/POST | `/api/v1/nodes` | List / create mesh nodes |
 | GET/PUT | `/api/v1/nodes/{nodeId}` | Get / update a node |
 | GET | `/api/v1/nodes/{nodeId}/skills` | Node skill assessments |
@@ -75,12 +75,15 @@ This reference follows PeopleMesh's security- and GDPR-first posture by design (
 
 - Endpoint authorization depends on OIDC/session state and configured entitlements.
 - `GET /api/v1/system/statistics` requires entitlement `is_admin`.
+- `POST /api/v1/nodes` and `PUT /api/v1/nodes/{nodeId}` require entitlement `is_admin`.
 - `POST /api/v1/nodes` cannot create `JOB` nodes; jobs are managed via `POST /api/v1/maintenance/ingest/jobs`.
 - Maintenance endpoints require `X-Maintenance-Key` and may also enforce IP/CIDR restrictions.
 - MCP integration is read-only by design.
+- `PUT /api/v1/me` applies identity updates only for `identity.birth_date`; other identity fields are OAuth-managed.
 - Profile import apply (`POST /api/v1/me/import-apply`) expects a partial `ProfileSchema` payload.
   - For list fields (for example skills, tools, industries, languages, and professional-interest lists), merge behavior is client-driven: the server persists the array values that are sent.
   - `professional.roles` is treated as a single-role field: import always overrides role and, if multiple values are provided, only the first non-blank role is stored.
+  - Identity imports are restricted to `identity.birth_date`; other identity fields are ignored.
 - Contact fields are under `contacts`: `slack_handle`, `telegram_handle`, `mobile_phone`, `linkedin_url`.
 - Birth date is under `identity.birth_date`.
 - API implementation layering:

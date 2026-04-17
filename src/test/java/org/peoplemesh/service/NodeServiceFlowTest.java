@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.peoplemesh.domain.dto.NodeDto;
 import org.peoplemesh.domain.dto.NodePayload;
 import org.peoplemesh.domain.enums.NodeType;
+import org.peoplemesh.domain.exception.ForbiddenBusinessException;
 import org.peoplemesh.domain.model.MeshNode;
 
 import java.time.Instant;
@@ -18,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class NodeServiceFlowTest {
 
@@ -53,6 +55,7 @@ class NodeServiceFlowTest {
         UUID owner = UUID.randomUUID();
         UUID nodeId = UUID.randomUUID();
         MeshNode existing = service.newPersistedNode(nodeId, owner, NodeType.PROJECT, "Old", "Old desc");
+        service.byId = Optional.of(existing);
         service.byIdAndOwner = Optional.of(existing);
 
         NodePayload payload = new NodePayload(
@@ -88,6 +91,29 @@ class NodeServiceFlowTest {
     }
 
     @Test
+    void createNode_nonAdmin_throwsForbidden() {
+        TestableNodeService service = new TestableNodeService();
+        service.admin = false;
+
+        assertThrows(ForbiddenBusinessException.class, () -> service.createNode(
+                UUID.randomUUID(),
+                new NodePayload(NodeType.PROJECT, "title", "desc", List.of(), Map.of(), "IT")
+        ));
+    }
+
+    @Test
+    void updateNode_nonAdmin_throwsForbidden() {
+        TestableNodeService service = new TestableNodeService();
+        service.admin = false;
+
+        assertThrows(ForbiddenBusinessException.class, () -> service.updateNode(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                new NodePayload(NodeType.PROJECT, "title", "desc", List.of(), Map.of(), "IT")
+        ));
+    }
+
+    @Test
     void getAndListMethods_delegateToStores() {
         TestableNodeService service = new TestableNodeService();
         UUID owner = UUID.randomUUID();
@@ -108,6 +134,7 @@ class NodeServiceFlowTest {
     }
 
     private static final class TestableNodeService extends NodeService {
+        boolean admin = true;
         Optional<MeshNode> byId = Optional.empty();
         Optional<MeshNode> byIdAndOwner = Optional.empty();
         List<MeshNode> byOwner = List.of();
@@ -139,6 +166,11 @@ class NodeServiceFlowTest {
         @Override
         Optional<MeshNode> findNodeByIdAndOwner(UUID nodeId, UUID ownerUserId) {
             return byIdAndOwner;
+        }
+
+        @Override
+        boolean isAdminUser(UUID userId) {
+            return admin;
         }
 
         @Override

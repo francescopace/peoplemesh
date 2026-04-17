@@ -40,6 +40,7 @@ Goal: Have a working end-to-end matching system for a small team.
 - [x] **Security hardening** — CSRF header filter, security headers (HSTS, CSP, etc.), bot blocking filter, CORS allowlist, maintenance API key + CIDR restriction.
 - [x] **Audit trail** — Pseudonymised audit logging (`AuditLogEntry`) with SHA-256 hashed mesh node ID and IP. No profile content in logs.
 - [x] **DPIA** — Data Protection Impact Assessment drafted, covering GDPR Art. 22, data minimisation, retention, encryption, consent, and sub-processor risks.
+- [x] Basic reranking logic — implemented in `SearchService.rerank` with seniority-aware boost/penalty after unified scoring
 
 ---
 
@@ -49,7 +50,8 @@ Goal: Prove real usage in staffing / expert discovery.
 
 ### MUST-HAVE
 
-- [ ] **Matching Quality Layer** — Skill normalization (OpenShift ↔ K8s, etc.), must-have vs nice-to-have logic in query parsing, language filtering (hard constraint), seniority boost formula. *Partially done:* `SkillReconciliationService` maps free-text to catalog; `MatchingService` has hybrid scoring with skill-level weighting. *Missing:* explicit must-have/nice-to-have separation, language as hard filter, must-have penalty.
+- [ ] **Matching Quality Layer** — Skill normalization (OpenShift ↔ K8s, etc.), must-have vs nice-to-have logic in query parsing, language filtering (hard constraint), seniority boost formula. *Mostly done:* query parsing supports explicit `must_have` / `nice_to_have` (`LlmSearchQueryParser`, `ParsedSearchQuery`); language constraints are pushed into retrieval (`MeshNodeSearchRepository.unifiedVectorSearch`); scoring includes must-have penalty and seniority rerank (`SearchService`). *Remaining:* broaden/standardize synonym normalization coverage (beyond current alias handling and catalog reconciliation) and keep tuning/validation on pilot data.
+- [ ] **CV import enrichment: certifications** — Add dedicated `professional.certifications` support end-to-end (schema, `LlmProfileStructuring` extraction/normalization, `ProfileService` selective import, profile/import UI mapping, fake data + seed refresh, docs/tests).
 - [ ] **Usage Tracking** — Searches per user, clicks per result, contacts initiated. *Not implemented:* no analytics/telemetry layer; audit log tracks actions but no search-specific usage metrics or dashboards.
 - [ ] **Feedback Loop (Manual)** — Collect "good match / bad match" per result, adjust scoring. *Not implemented:* no feedback collection UI or storage.
 - [ ] **Share to Slack (Light)** — Copy profile summary, share in Slack channels. *Not implemented.*
@@ -58,15 +60,8 @@ Goal: Prove real usage in staffing / expert discovery.
 ### NICE-TO-HAVE
 
 - [ ] Multi-view embedding (core + skills) — single embedding per node today
-- [ ] Basic reranking logic — no reranker; hybrid scoring only
 - [ ] Name and surname search via LLM query parsing — detect person-name intent in free-text prompts and enrich structured query fields (for example `firstName`/`lastName`) before retrieval/ranking.
 - [ ] Reranker (Granite or custom)
-
-### EXCLUDE
-
-- Slack OAuth
-- Enterprise integrations (HRIS)
-- Complex permissions
 
 ---
 
@@ -92,11 +87,6 @@ Goal: Replicate success in multiple teams / orgs.
 
 - [ ] Slack deep linking (if mapping available)
 - [ ] Query history / saved searches
-
-### EXCLUDE
-
-- Full enterprise SSO
-- Marketplace features
 
 ---
 
@@ -163,22 +153,8 @@ Goal: Grow sustainable revenue while keeping the open-source core and privacy co
 | Phase | Status | Done | Remaining |
 |-------|--------|------|-----------|
 | **Phase 0** | **COMPLETE** | 23/23 | — |
-| **Phase 1** | Next up | 0/5 must-have | Matching quality, usage tracking, feedback, Slack share, email notifications |
+| **Phase 1** | In progress | 0/6 must-have | Matching quality finalization, certifications import, usage tracking, feedback, Slack share, email notifications |
 | **Phase 2** | Not started | 0/4 | Multi-tenant, access control, metrics, better matching |
 | **Phase 3** | Not started | 0/4 (SSO + audit done in P0) | Integrations, RBAC, matching v2, deployment |
 | **Phase 4** | Not started | 0/3 (export done in P0) | Portability, enterprise integration pack, governance at scale |
 | **Phase 5** | Not started | 0/3 | Commercial licensing, managed offering, enterprise services |
-
----
-
-## Focus Now
-
-- **Phase 1 priorities:** matching quality layer (must-have/nice-to-have logic, language filter), usage tracking, manual feedback loop, Slack share, email transport
-- **Pilot readiness:** real user onboarding (LDAP import ready), matching quality tuning
-
-## Ignore for Now
-
-- Multi-tenant (Phase 2+)
-- Full integrations / Workday connector (Phase 3)
-- Broad ecosystem scale features (Phase 4)
-- Sustainability expansion initiatives (Phase 5)

@@ -148,18 +148,9 @@ public class ProfileService {
 
         if (selectedFields.identity() != null) {
             var id = selectedFields.identity();
-            boolean googleIdentity = provenance.containsValue("google")
-                    && provenance.entrySet().stream()
-                            .anyMatch(e -> e.getKey().startsWith("identity.") && "google".equals(e.getValue()));
-
-            if (!googleIdentity) {
-                if (hasText(id.displayName())) { node.title = normalizeText(id.displayName()); provenance.put("identity.display_name", source); }
-                if (hasText(id.firstName())) { sd.put("first_name", normalizeText(id.firstName())); provenance.put("identity.first_name", source); }
-                if (hasText(id.lastName())) { sd.put("last_name", normalizeText(id.lastName())); provenance.put("identity.last_name", source); }
-                if (hasText(id.email())) { sd.put("email", normalizeText(id.email())); provenance.put("identity.email", source); }
-                if (hasText(id.company())) { sd.put("company", id.company().trim()); provenance.put("identity.company", source); }
-                if (hasText(id.photoUrl())) { sd.put("avatar_url", id.photoUrl().trim()); provenance.put("identity.photo_url", source); }
-                if (hasText(id.birthDate())) { sd.put("birth_date", id.birthDate().trim()); provenance.put("identity.birth_date", source); }
+            if (hasText(id.birthDate())) {
+                sd.put("birth_date", id.birthDate().trim());
+                provenance.put("identity.birth_date", source);
             }
         }
 
@@ -344,13 +335,9 @@ public class ProfileService {
 
         if (schema.identity() != null) {
             var id = schema.identity();
-            if (id.displayName() != null) node.title = normalizeText(id.displayName());
-            if (id.firstName() != null) sd.put("first_name", normalizeText(id.firstName()));
-            if (id.lastName() != null) sd.put("last_name", normalizeText(id.lastName()));
-            if (id.email() != null) sd.put("email", normalizeText(id.email()));
-            if (id.photoUrl() != null && !id.photoUrl().isBlank()) sd.put("avatar_url", id.photoUrl().trim());
-            if (id.company() != null) sd.put("company", id.company().trim());
-            if (id.birthDate() != null) sd.put("birth_date", id.birthDate().trim());
+            if (id.birthDate() != null) {
+                sd.put("birth_date", id.birthDate().trim());
+            }
         }
 
         node.structuredData = sd;
