@@ -165,7 +165,8 @@ public class ProfileService {
 
         if (selectedFields.professional() != null) {
             var p = selectedFields.professional();
-            if (hasValue(p.roles())) { node.description = String.join(",", p.roles()); provenance.put("professional.roles", source); }
+            String importedRole = firstNonBlankListValue(p.roles());
+            if (importedRole != null) { node.description = importedRole; provenance.put("professional.roles", source); }
             if (p.seniority() != null) { sd.put("seniority", p.seniority().name()); provenance.put("professional.seniority", source); }
             if (hasValue(p.industries())) { sd.put("industries", String.join(",", p.industries())); provenance.put("professional.industries", source); }
             if (hasValue(p.skillsTechnical())) { node.tags = new ArrayList<>(p.skillsTechnical()); provenance.put("professional.skills_technical", source); }
@@ -174,6 +175,9 @@ public class ProfileService {
             if (hasValue(p.languagesSpoken())) { sd.put("languages_spoken", p.languagesSpoken()); provenance.put("professional.languages_spoken", source); }
             if (p.workModePreference() != null) { sd.put("work_mode", p.workModePreference().name()); provenance.put("professional.work_mode_preference", source); }
             if (p.employmentType() != null) { sd.put("employment_type", p.employmentType().name()); provenance.put("professional.employment_type", source); }
+            if (hasText(p.slackHandle())) { sd.put("slack_handle", normalizeText(p.slackHandle())); provenance.put("professional.slack_handle", source); }
+            if (hasText(p.telegramHandle())) { sd.put("telegram_handle", normalizeText(p.telegramHandle())); provenance.put("professional.telegram_handle", source); }
+            if (hasText(p.mobilePhone())) { sd.put("mobile_phone", normalizeText(p.mobilePhone())); provenance.put("professional.mobile_phone", source); }
         }
 
         if (selectedFields.interestsProfessional() != null) {
@@ -224,7 +228,9 @@ public class ProfileService {
                         sdList(sd, "languages_spoken"),
                         parseEnum(WorkMode.class, sdString(sd, "work_mode")),
                         parseEnum(EmploymentType.class, sdString(sd, "employment_type")),
-                        sdString(sd, "slack_handle")
+                        sdString(sd, "slack_handle"),
+                        sdString(sd, "telegram_handle"),
+                        sdString(sd, "mobile_phone")
                 ),
                 new ProfileSchema.InterestsInfo(
                         sdList(sd, "topics_frequent"), sdList(sd, "learning_areas"),
@@ -270,6 +276,8 @@ public class ProfileService {
             if (p.workModePreference() != null) sd.put("work_mode", p.workModePreference().name());
             if (p.employmentType() != null) sd.put("employment_type", p.employmentType().name());
             if (p.slackHandle() != null) sd.put("slack_handle", p.slackHandle());
+            if (p.telegramHandle() != null) sd.put("telegram_handle", p.telegramHandle());
+            if (p.mobilePhone() != null) sd.put("mobile_phone", p.mobilePhone());
         }
 
         if (schema.interestsProfessional() != null) {
@@ -386,6 +394,19 @@ public class ProfileService {
 
     private static boolean hasValue(List<?> list) {
         return list != null && !list.isEmpty();
+    }
+
+    private static String firstNonBlankListValue(List<String> values) {
+        if (values == null || values.isEmpty()) {
+            return null;
+        }
+        for (String value : values) {
+            String normalized = normalizeText(value);
+            if (normalized != null) {
+                return normalized;
+            }
+        }
+        return null;
     }
 
     private static String joinName(String firstName, String lastName) {

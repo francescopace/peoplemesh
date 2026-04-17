@@ -138,7 +138,9 @@ public class LlmProfileStructuring implements ProfileStructuringLlm {
                 p.languagesSpoken(),
                 p.workModePreference(),
                 p.employmentType(),
-                p.slackHandle()
+                p.slackHandle(),
+                p.telegramHandle(),
+                p.mobilePhone()
         );
         return new ProfileSchema(
                 schema.profileVersion(),

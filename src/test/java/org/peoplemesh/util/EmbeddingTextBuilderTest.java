@@ -169,6 +169,8 @@ class EmbeddingTextBuilderTest {
                 List.of("English", "Italian"),
                 WorkMode.REMOTE,
                 EmploymentType.FREELANCE,
+                null,
+                null,
                 null
         );
         ProfileSchema.InterestsInfo interests = new ProfileSchema.InterestsInfo(

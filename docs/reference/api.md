@@ -28,7 +28,7 @@ This reference follows PeopleMesh's security- and GDPR-first posture by design (
 | | | **Me** |
 | GET | `/api/v1/me` | Get profile (`?identity_only=true` for session check) |
 | PUT | `/api/v1/me` | Update profile |
-| POST | `/api/v1/me/import-apply` | Apply import preview |
+| POST | `/api/v1/me/import-apply` | Apply selected fields from an import preview |
 | DELETE | `/api/v1/me` | Delete account (GDPR Art. 17) |
 | GET | `/api/v1/me/export` | GDPR data export (Art. 15/20) |
 | POST | `/api/v1/me/cv-import` | CV import (Docling + LLM) |
@@ -78,6 +78,10 @@ This reference follows PeopleMesh's security- and GDPR-first posture by design (
 - `POST /api/v1/nodes` cannot create `JOB` nodes; jobs are managed via `POST /api/v1/maintenance/ingest/jobs`.
 - Maintenance endpoints require `X-Maintenance-Key` and may also enforce IP/CIDR restrictions.
 - MCP integration is read-only by design.
+- Profile import apply (`POST /api/v1/me/import-apply`) expects a partial `ProfileSchema` payload.
+  - For list fields (for example skills, tools, industries, languages, and professional-interest lists), merge behavior is client-driven: the server persists the array values that are sent.
+  - `professional.roles` is treated as a single-role field: import always overrides role and, if multiple values are provided, only the first non-blank role is stored.
+  - Contact fields are under `professional`: `slack_handle`, `telegram_handle`, `mobile_phone`.
 - API implementation layering:
   - REST endpoints live under `org.peoplemesh.api.resource`
   - Orchestration flow is `api/resource -> service -> repository`

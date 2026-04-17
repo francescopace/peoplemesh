@@ -138,8 +138,8 @@ class ProfileServiceTest {
         ProfileSchema selected = new ProfileSchema(
                 null, null, null,
                 new ProfileSchema.ProfessionalInfo(
-                        List.of("Engineer"), null, null,
-                        List.of("Java"), null, null, null, null, null, null),
+                        List.of("Engineer", "Architect"), null, null,
+                        List.of("Java"), null, null, null, null, null, null, null, null),
                 null, null, null, null,
                 new ProfileSchema.IdentityInfo("Should Not Override", "First", "Last",
                         "id@example.com", null, null, null)
@@ -192,6 +192,9 @@ class ProfileServiceTest {
         node.structuredData = new LinkedHashMap<>();
         node.structuredData.put("seniority", "SENIOR");
         node.structuredData.put("email", "test@test.com");
+        node.structuredData.put("slack_handle", "@jane");
+        node.structuredData.put("telegram_handle", "@jane_tg");
+        node.structuredData.put("mobile_phone", "+39123456789");
         node.description = "Developer";
         node.tags = List.of("Java");
         node.country = "IT";
@@ -203,6 +206,9 @@ class ProfileServiceTest {
         assertNotNull(schema.professional());
         assertNotNull(schema.geography());
         assertEquals("IT", schema.geography().country());
+        assertEquals("@jane", schema.professional().slackHandle());
+        assertEquals("@jane_tg", schema.professional().telegramHandle());
+        assertEquals("+39123456789", schema.professional().mobilePhone());
     }
 
     // === Helpers ===
@@ -224,7 +230,7 @@ class ProfileServiceTest {
         return new ProfileSchema(null, null, null,
                 new ProfileSchema.ProfessionalInfo(
                         List.of("Developer"), null, null,
-                        List.of("Java"), null, null, null, null, null, null),
+                        List.of("Java"), null, null, null, null, null, null, null, null),
                 null, null, new ProfileSchema.GeographyInfo("IT", null, null),
                 null, null);
     }

@@ -40,7 +40,7 @@ public final class OAuthProfileParser {
                 null,
                 new ProfileSchema.ProfessionalInfo(
                         roles, seniority, industries, skills,
-                        null, null, optionalList(language), null, null, null
+                        null, null, optionalList(language), null, null, null, null, null
                 ),
                 new ProfileSchema.InterestsInfo(topics, null, null),
                 null,
@@ -72,7 +72,7 @@ public final class OAuthProfileParser {
                 null,
                 new ProfileSchema.ProfessionalInfo(
                         roles, seniority, null, skills,
-                        null, null, optionalList(language), null, null, null
+                        null, null, optionalList(language), null, null, null, null, null
                 ),
                 new ProfileSchema.InterestsInfo(topics, null, null),
                 null,

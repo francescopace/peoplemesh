@@ -42,7 +42,9 @@ public record ProfileSchema(
             @JsonProperty("languages_spoken") @Size(max = 30) List<@NotNull @Size(max = 50) String> languagesSpoken,
             @JsonProperty("work_mode_preference") WorkMode workModePreference,
             @JsonProperty("employment_type") EmploymentType employmentType,
-            @JsonProperty("slack_handle") @Size(max = 100) String slackHandle
+            @JsonProperty("slack_handle") @Size(max = 100) String slackHandle,
+            @JsonProperty("telegram_handle") @Size(max = 100) String telegramHandle,
+            @JsonProperty("mobile_phone") @Size(max = 32) String mobilePhone
     ) {}
 
     public record InterestsInfo(

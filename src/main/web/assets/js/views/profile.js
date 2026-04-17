@@ -179,6 +179,10 @@ function showImportPreviewModal(imported, current, source, container) {
   FIELD_MAP.forEach((f) => {
     if (f.importedDisplay && f.importedDisplay !== "\u2014") selected.add(f.key);
   });
+  const mergeModes = new Map();
+  FIELD_MAP.forEach((f) => {
+    if (f.canMerge && f.hasConflict) mergeModes.set(f.key, "merge");
+  });
 
   const sourceLabel = formatProvSource(source);
 
@@ -206,6 +210,9 @@ function showImportPreviewModal(imported, current, source, container) {
   const intro = el("div", { className: "import-preview-intro" },
     el("p", {},
       "Select which fields to import. Deselect any field you want to keep as-is."
+    ),
+    el("p", { className: "text-secondary" },
+      "For list fields, we can merge new values with your current profile."
     ),
   );
 
@@ -244,13 +251,14 @@ function showImportPreviewModal(imported, current, source, container) {
       }
 
       const isChecked = selected.has(f.key);
-      const hasConflict = f.currentDisplay && f.currentDisplay !== "\u2014" &&
-        f.currentDisplay !== f.importedDisplay;
+      const hasConflict = f.hasConflict;
+      const mergeEnabled = mergeModes.get(f.key) === "merge";
 
       const row = el("div", {
-        className: `import-preview-row${isChecked ? " import-preview-row--selected" : ""}${hasConflict ? " import-preview-row--conflict" : ""}`,
+        className: `import-preview-row${isChecked ? " import-preview-row--selected" : ""}${hasConflict ? " import-preview-row--conflict" : ""}${mergeEnabled ? " import-preview-row--merge" : ""}`,
         onClick: (e) => {
           if (e.target.tagName === "INPUT") return;
+          if (e.target instanceof Element && e.target.closest(".import-preview-merge-label")) return;
           cb.checked = !cb.checked;
           cb.dispatchEvent(new Event("change"));
         },
@@ -285,7 +293,29 @@ function showImportPreviewModal(imported, current, source, container) {
       imp.appendChild(el("span", { className: "import-preview-val import-preview-val--new" }, f.importedDisplay));
       values.appendChild(imp);
 
+      if (f.canMerge && mergeEnabled && f.mergedDisplay && f.mergedDisplay !== "\u2014") {
+        const merged = el("div", { className: "import-preview-result" });
+        merged.appendChild(el("span", { className: "import-preview-val-label" }, "Result"));
+        merged.appendChild(el("span", { className: "import-preview-val" }, f.mergedDisplay));
+        values.appendChild(merged);
+      }
+
       info.appendChild(values);
+
+      if (f.canMerge) {
+        const mergeLabel = el("label", { className: "import-preview-merge-label" });
+        const mergeCb = el("input", { type: "checkbox", className: "import-preview-merge-cb" });
+        mergeCb.checked = mergeEnabled;
+        mergeCb.addEventListener("change", () => {
+          if (mergeCb.checked) mergeModes.set(f.key, "merge");
+          else mergeModes.delete(f.key);
+          renderRows();
+        });
+        mergeLabel.appendChild(mergeCb);
+        mergeLabel.appendChild(el("span", {}, "Merge with current values"));
+        info.appendChild(mergeLabel);
+      }
+
       row.appendChild(cb);
       row.appendChild(info);
       tableWrap.appendChild(row);
@@ -320,7 +350,7 @@ function showImportPreviewModal(imported, current, source, container) {
     cancelBtn.disabled = true;
     applyBtn.querySelector("span:last-child").textContent = "Saving...";
     try {
-      const partial = buildPartialProfile(imported, selected);
+      const partial = buildPartialProfile(imported, current, selected, mergeModes);
       await api.post("/api/v1/me/import-apply?source=" + encodeURIComponent(source), partial);
       toast(`Imported ${selected.size} field${selected.size !== 1 ? "s" : ""} from ${sourceLabel}`, "success");
       overlay.remove();
@@ -379,6 +409,17 @@ const IDENTITY_PROTECTED_KEYS = new Set([
   "identity.email", "identity.company", "identity.photo_url", "identity.locale",
 ]);
 
+const MERGEABLE_IMPORT_KEYS = new Set([
+  "professional.skills_technical",
+  "professional.skills_soft",
+  "professional.tools_and_tech",
+  "professional.languages_spoken",
+  "professional.industries",
+  "interests.topics_frequent",
+  "interests.learning_areas",
+  "interests.project_types",
+]);
+
 function buildFieldMap(imported, current, source) {
   const prov = current?.field_provenance || {};
   const isNonGoogleImport = source && source !== "google";
@@ -390,14 +431,31 @@ function buildFieldMap(imported, current, source) {
 
   return IMPORT_FIELD_DEFS
     .filter(([, , uiKey]) => !(hasGoogleIdentity && IDENTITY_PROTECTED_KEYS.has(uiKey)))
-    .map(([section, label, uiKey, dataSection, field, provKey]) => ({
-      section,
-      label,
-      key: uiKey,
-      importedDisplay: displayVal(imported?.[dataSection]?.[field]),
-      currentDisplay: displayVal(current?.[dataSection]?.[field]),
-      currentProv: prov[provKey] || null,
-    }));
+    .map(([section, label, uiKey, dataSection, field, provKey]) => {
+      const importedRaw = imported?.[dataSection]?.[field];
+      const currentRaw = current?.[dataSection]?.[field];
+      const importedDisplay = displayVal(importedRaw);
+      const currentDisplay = displayVal(currentRaw);
+      const hasConflict = currentDisplay !== "\u2014" &&
+        importedDisplay !== "\u2014" &&
+        currentDisplay !== importedDisplay;
+      const canMerge = hasConflict &&
+        MERGEABLE_IMPORT_KEYS.has(uiKey) &&
+        hasArrayValues(importedRaw) &&
+        hasArrayValues(currentRaw);
+
+      return {
+        section,
+        label,
+        key: uiKey,
+        importedDisplay,
+        currentDisplay,
+        currentProv: prov[provKey] || null,
+        hasConflict,
+        canMerge,
+        mergedDisplay: canMerge ? displayVal(mergeDistinctValues(currentRaw, importedRaw)) : null,
+      };
+    });
 }
 
 function displayVal(v) {
@@ -411,17 +469,47 @@ function displayVal(v) {
   return s;
 }
 
-function buildPartialProfile(imported, selectedKeys) {
+function hasArrayValues(value) {
+  return Array.isArray(value) && value.some((item) => normalizeMergeValue(item) != null);
+}
+
+function mergeDistinctValues(currentValues, importedValues) {
+  const merged = [];
+  const seen = new Set();
+  for (const list of [currentValues, importedValues]) {
+    if (!Array.isArray(list)) continue;
+    for (const item of list) {
+      const normalized = normalizeMergeValue(item);
+      if (!normalized) continue;
+      const key = normalized.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(normalized);
+    }
+  }
+  return merged;
+}
+
+function normalizeMergeValue(value) {
+  if (value == null) return null;
+  const normalized = String(value).trim();
+  return normalized || null;
+}
+
+function buildPartialProfile(imported, current, selectedKeys, mergeModes = new Map()) {
   const result = {};
   for (const [, , uiKey, dataSection, field] of IMPORT_FIELD_DEFS) {
     if (!selectedKeys.has(uiKey)) continue;
     const src = imported[dataSection];
     if (!src) continue;
-    const val = src[field];
+    let val = src[field];
+    if (mergeModes.get(uiKey) === "merge" && MERGEABLE_IMPORT_KEYS.has(uiKey)) {
+      val = mergeDistinctValues(current?.[dataSection]?.[field], val);
+    }
     if (val == null) continue;
     if (Array.isArray(val) && val.length === 0) continue;
     if (!result[dataSection]) result[dataSection] = {};
-    result[dataSection][field] = val;
+    result[dataSection][field] = Array.isArray(val) ? [...val] : val;
   }
   return result;
 }
@@ -442,8 +530,7 @@ function renderProfileView(container, p) {
   const grid = el("div", { className: "profile-grid" });
 
   /* Identity */
-  const slackHandle = prof.slack_handle || "";
-  const identitySection = editableSection("person", "Identity", "blue", canEdit, p, root,
+  const identitySection = editableSection("person", "Identity", "blue", false, p, root,
     (editing) => {
       const content = [];
       if (identity.photo_url || editing) {
@@ -480,9 +567,7 @@ function renderProfileView(container, p) {
       ]));
       content.push(fieldRow([
         editableLabeledField("Company", "company", identity.company, editing, prov["identity.company"]),
-        editing
-          ? editableLabeledField("Slack Handle", "slackHandle", slackHandle, editing)
-          : (slackHandle ? slackField(slackHandle) : labeledField("Slack", "")),
+        labeledField("Locale", localeLabel(identity.locale), prov["identity.locale"]),
       ]));
       return content;
     },
@@ -494,9 +579,6 @@ function renderProfileView(container, p) {
         email: val(body, "email") || undefined,
         photo_url: val(body, "photoUrl") || undefined,
         company: val(body, "company") || undefined,
-      },
-      professional: {
-        slack_handle: val(body, "slackHandle") || undefined,
       },
     })
   );
@@ -511,7 +593,6 @@ function renderProfileView(container, p) {
         editableLabeledField("City", "city", geo.city, editing),
         editablePairSelect("Country", "country", COUNTRY_OPTIONS, geo.country, editing),
         editableSelect("Timezone", "timezone", TIMEZONE_OPTIONS, geo.timezone, editing),
-        editablePairSelect("Locale", "locale", LOCALE_OPTIONS, identity.locale, editing, prov["identity.locale"]),
       ])];
     },
     (body) => ({
@@ -520,13 +601,42 @@ function renderProfileView(container, p) {
         city: val(body, "city") || undefined,
         timezone: val(body, "timezone") || undefined,
       },
-      identity: {
-        locale: val(body, "locale") || undefined,
-      },
     })
   );
   locationSection.classList.add("profile-grid-full");
   grid.appendChild(locationSection);
+
+  /* Contacts */
+  const contactsSection = editableSection("contact_phone", "Contacts", "purple", canEdit, p, root,
+    (editing) => {
+      const content = [];
+      content.push(fieldRow([
+        editing
+          ? editableLabeledField("Slack", "slackHandle", prof.slack_handle, editing, prov["professional.slack_handle"])
+          : (prof.slack_handle
+            ? slackField(prof.slack_handle, prov["professional.slack_handle"])
+            : labeledField("Slack", "", prov["professional.slack_handle"])),
+        editing
+          ? editableLabeledField("Telegram", "telegramHandle", prof.telegram_handle, editing, prov["professional.telegram_handle"])
+          : (prof.telegram_handle
+            ? telegramField(prof.telegram_handle, prov["professional.telegram_handle"])
+            : labeledField("Telegram", "", prov["professional.telegram_handle"])),
+        editing
+          ? editableLabeledField("Mobile", "mobilePhone", prof.mobile_phone, editing, prov["professional.mobile_phone"], "tel")
+          : phoneField(prof.mobile_phone, prov["professional.mobile_phone"]),
+      ]));
+      return content;
+    },
+    (body) => ({
+      professional: {
+        slack_handle: val(body, "slackHandle") || undefined,
+        telegram_handle: val(body, "telegramHandle") || undefined,
+        mobile_phone: val(body, "mobilePhone") || undefined,
+      },
+    })
+  );
+  contactsSection.classList.add("profile-grid-full");
+  grid.appendChild(contactsSection);
 
   /* === Sidebar cards (grid column 2) === */
 
@@ -1145,10 +1255,21 @@ export function provBadge(src) {
   return el("span", { className: "profile-prov-badge" }, formatProvSource(src));
 }
 
-function slackField(handle) {
+function localeLabel(localeCode) {
+  if (!localeCode) return "";
+  const normalized = String(localeCode).trim();
+  if (!normalized) return "";
+  const match = LOCALE_OPTIONS.find(([code]) => code.toLowerCase() === normalized.toLowerCase());
+  return match ? `${match[1]} (${match[0]})` : normalized;
+}
+
+function slackField(handle, provSrc) {
   const wrap = el("div", { className: "profile-field" });
-  wrap.appendChild(el("div", { className: "profile-field-label" }, "Slack"));
+  const labelEl = el("div", { className: "profile-field-label" }, "Slack");
+  if (provSrc) labelEl.appendChild(provBadge(provSrc));
+  wrap.appendChild(labelEl);
   const cleanHandle = handle.replace(/^@/, "");
+  const displayHandle = cleanHandle ? `@${cleanHandle}` : handle;
   const link = el("a", {
     href: `slack://user?team=&id=${cleanHandle}`,
     target: "_blank",
@@ -1156,7 +1277,39 @@ function slackField(handle) {
     style: "display:flex;align-items:center;gap:0.4rem;text-decoration:none;color:inherit",
   });
   link.appendChild(el("i", { className: "fa-brands fa-slack", style: "font-size:16px;color:#611f69" }));
-  link.appendChild(document.createTextNode(handle));
+  link.appendChild(document.createTextNode(displayHandle));
+  const valueWrap = el("div", { className: "profile-field-value" });
+  valueWrap.appendChild(link);
+  wrap.appendChild(valueWrap);
+  return wrap;
+}
+
+function telegramField(handle, provSrc) {
+  const cleanHandle = handle.replace(/^@/, "");
+  const displayHandle = cleanHandle ? `@${cleanHandle}` : handle;
+  return renderContactLinkField("Telegram", displayHandle, `https://t.me/${cleanHandle}`, provSrc);
+}
+
+function phoneField(phone, provSrc) {
+  if (!phone) return labeledField("Mobile", "", provSrc);
+  const normalizedPhone = phone.replace(/\s+/g, "");
+  return renderContactLinkField("Mobile", phone, `tel:${normalizedPhone}`, provSrc);
+}
+
+function renderContactLinkField(label, text, href, provSrc) {
+  const wrap = el("div", { className: "profile-field" });
+  const labelEl = el("div", { className: "profile-field-label" }, label);
+  if (provSrc) labelEl.appendChild(provBadge(provSrc));
+  wrap.appendChild(labelEl);
+  const linkAttrs = {
+    href,
+    style: "display:flex;align-items:center;gap:0.4rem;text-decoration:none;color:inherit",
+  };
+  if (!href.startsWith("tel:")) {
+    linkAttrs.target = "_blank";
+    linkAttrs.rel = "noopener";
+  }
+  const link = el("a", linkAttrs, text);
   const valueWrap = el("div", { className: "profile-field-value" });
   valueWrap.appendChild(link);
   wrap.appendChild(valueWrap);
