@@ -81,7 +81,8 @@ This reference follows PeopleMesh's security- and GDPR-first posture by design (
 - Profile import apply (`POST /api/v1/me/import-apply`) expects a partial `ProfileSchema` payload.
   - For list fields (for example skills, tools, industries, languages, and professional-interest lists), merge behavior is client-driven: the server persists the array values that are sent.
   - `professional.roles` is treated as a single-role field: import always overrides role and, if multiple values are provided, only the first non-blank role is stored.
-  - Contact fields are under `professional`: `slack_handle`, `telegram_handle`, `mobile_phone`.
+- Contact fields are under `contacts`: `slack_handle`, `telegram_handle`, `mobile_phone`, `linkedin_url`.
+- Birth date is under `identity.birth_date`.
 - API implementation layering:
   - REST endpoints live under `org.peoplemesh.api.resource`
   - Orchestration flow is `api/resource -> service -> repository`

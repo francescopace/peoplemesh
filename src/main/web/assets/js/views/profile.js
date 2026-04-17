@@ -47,16 +47,6 @@ const TIMEZONE_OPTIONS = [
   "Australia/Sydney", "Pacific/Auckland",
   "UTC",
 ];
-const LOCALE_OPTIONS = [
-  ["en", "English"], ["it", "Italian"], ["de", "German"], ["fr", "French"],
-  ["es", "Spanish"], ["pt", "Portuguese"], ["nl", "Dutch"], ["pl", "Polish"],
-  ["ro", "Romanian"], ["cs", "Czech"], ["hu", "Hungarian"], ["sv", "Swedish"],
-  ["da", "Danish"], ["fi", "Finnish"], ["no", "Norwegian"], ["el", "Greek"],
-  ["bg", "Bulgarian"], ["hr", "Croatian"], ["sk", "Slovak"], ["sl", "Slovenian"],
-  ["et", "Estonian"], ["lv", "Latvian"], ["lt", "Lithuanian"],
-  ["ja", "Japanese"], ["zh", "Chinese"], ["ko", "Korean"], ["ar", "Arabic"],
-];
-
 export async function renderProfile(container) {
   container.dataset.page = "profile";
   container.innerHTML = "";
@@ -386,7 +376,7 @@ const IMPORT_FIELD_DEFS = [
   ["Identity", "Email",           "identity.email",           "identity", "email",           "identity.email"],
   ["Identity", "Photo",           "identity.photo_url",       "identity", "photo_url",       "identity.photo_url"],
   ["Identity", "Company",         "identity.company",         "identity", "company",         "identity.company"],
-  ["Identity", "Locale",          "identity.locale",          "identity", "locale",          "identity.locale"],
+  ["Identity", "Birth Date",      "identity.birth_date",      "identity", "birth_date",      "identity.birth_date"],
   ["Professional", "Roles",           "professional.roles",           "professional", "roles",           "professional.roles"],
   ["Professional", "Seniority",       "professional.seniority",       "professional", "seniority",       "professional.seniority"],
   ["Professional", "Technical Skills", "professional.skills_technical", "professional", "skills_technical", "professional.skills_technical"],
@@ -396,9 +386,20 @@ const IMPORT_FIELD_DEFS = [
   ["Professional", "Industries",       "professional.industries",       "professional", "industries",       "professional.industries"],
   ["Professional", "Work Mode",        "professional.work_mode_preference", "professional", "work_mode_preference", "professional.work_mode_preference"],
   ["Professional", "Employment Type",  "professional.employment_type",  "professional", "employment_type",  "professional.employment_type"],
+  ["Contacts", "Slack",                "contacts.slack_handle",         "contacts", "slack_handle",       "contacts.slack_handle"],
+  ["Contacts", "Telegram",             "contacts.telegram_handle",      "contacts", "telegram_handle",    "contacts.telegram_handle"],
+  ["Contacts", "Mobile",               "contacts.mobile_phone",         "contacts", "mobile_phone",       "contacts.mobile_phone"],
+  ["Contacts", "LinkedIn",             "contacts.linkedin_url",         "contacts", "linkedin_url",       "contacts.linkedin_url"],
   ["Interests", "Topics",             "interests.topics_frequent",     "interests_professional", "topics_frequent",     "interests_professional.topics_frequent"],
   ["Interests", "Learning Areas",     "interests.learning_areas",      "interests_professional", "learning_areas",      "interests_professional.learning_areas"],
   ["Interests", "Project Types",      "interests.project_types",       "interests_professional", "project_types",       "interests_professional.project_types"],
+  ["Personal", "Hobbies",             "personal.hobbies",              "personal", "hobbies",             "personal.hobbies"],
+  ["Personal", "Sports",              "personal.sports",               "personal", "sports",              "personal.sports"],
+  ["Personal", "Education",           "personal.education",            "personal", "education",           "personal.education"],
+  ["Personal", "Causes",              "personal.causes",               "personal", "causes",              "personal.causes"],
+  ["Personal", "Personality Tags",    "personal.personality_tags",     "personal", "personality_tags",    "personal.personality_tags"],
+  ["Personal", "Music Genres",        "personal.music_genres",         "personal", "music_genres",        "personal.music_genres"],
+  ["Personal", "Book Genres",         "personal.book_genres",          "personal", "book_genres",         "personal.book_genres"],
   ["Location", "Country",  "geography.country",  "geography", "country",  "geography.country"],
   ["Location", "City",     "geography.city",     "geography", "city",     "geography.city"],
   ["Location", "Timezone", "geography.timezone", "geography", "timezone", "geography.timezone"],
@@ -406,7 +407,7 @@ const IMPORT_FIELD_DEFS = [
 
 const IDENTITY_PROTECTED_KEYS = new Set([
   "identity.display_name", "identity.first_name", "identity.last_name",
-  "identity.email", "identity.company", "identity.photo_url", "identity.locale",
+  "identity.email", "identity.company", "identity.photo_url", "identity.birth_date",
 ]);
 
 const MERGEABLE_IMPORT_KEYS = new Set([
@@ -418,6 +419,13 @@ const MERGEABLE_IMPORT_KEYS = new Set([
   "interests.topics_frequent",
   "interests.learning_areas",
   "interests.project_types",
+  "personal.hobbies",
+  "personal.sports",
+  "personal.education",
+  "personal.causes",
+  "personal.personality_tags",
+  "personal.music_genres",
+  "personal.book_genres",
 ]);
 
 function buildFieldMap(imported, current, source) {
@@ -519,6 +527,12 @@ function buildPartialProfile(imported, current, selectedKeys, mergeModes = new M
 function renderProfileView(container, p) {
   const prov = p.field_provenance || {};
   const prof = p.professional || {};
+  const contacts = p.contacts || {
+    slack_handle: prof.slack_handle,
+    telegram_handle: prof.telegram_handle,
+    mobile_phone: prof.mobile_phone,
+    linkedin_url: prof.linkedin_url,
+  };
   const identity = p.identity || {};
   const geo = p.geography || {};
   const interests = p.interests_professional || {};
@@ -567,7 +581,7 @@ function renderProfileView(container, p) {
       ]));
       content.push(fieldRow([
         editableLabeledField("Company", "company", identity.company, editing, prov["identity.company"]),
-        labeledField("Locale", localeLabel(identity.locale), prov["identity.locale"]),
+        editableLabeledField("Birth Date", "birthDate", identity.birth_date, editing, prov["identity.birth_date"], "date"),
       ]));
       return content;
     },
@@ -579,6 +593,7 @@ function renderProfileView(container, p) {
         email: val(body, "email") || undefined,
         photo_url: val(body, "photoUrl") || undefined,
         company: val(body, "company") || undefined,
+        birth_date: val(body, "birthDate") || undefined,
       },
     })
   );
@@ -612,26 +627,30 @@ function renderProfileView(container, p) {
       const content = [];
       content.push(fieldRow([
         editing
-          ? editableLabeledField("Slack", "slackHandle", prof.slack_handle, editing, prov["professional.slack_handle"])
-          : (prof.slack_handle
-            ? slackField(prof.slack_handle, prov["professional.slack_handle"])
-            : labeledField("Slack", "", prov["professional.slack_handle"])),
+          ? editableLabeledField("Slack", "slackHandle", contacts.slack_handle, editing, prov["contacts.slack_handle"] || prov["professional.slack_handle"])
+          : (contacts.slack_handle
+            ? slackField(contacts.slack_handle, prov["contacts.slack_handle"] || prov["professional.slack_handle"])
+            : labeledField("Slack", "", prov["contacts.slack_handle"] || prov["professional.slack_handle"])),
         editing
-          ? editableLabeledField("Telegram", "telegramHandle", prof.telegram_handle, editing, prov["professional.telegram_handle"])
-          : (prof.telegram_handle
-            ? telegramField(prof.telegram_handle, prov["professional.telegram_handle"])
-            : labeledField("Telegram", "", prov["professional.telegram_handle"])),
+          ? editableLabeledField("Telegram", "telegramHandle", contacts.telegram_handle, editing, prov["contacts.telegram_handle"] || prov["professional.telegram_handle"])
+          : (contacts.telegram_handle
+            ? telegramField(contacts.telegram_handle, prov["contacts.telegram_handle"] || prov["professional.telegram_handle"])
+            : labeledField("Telegram", "", prov["contacts.telegram_handle"] || prov["professional.telegram_handle"])),
         editing
-          ? editableLabeledField("Mobile", "mobilePhone", prof.mobile_phone, editing, prov["professional.mobile_phone"], "tel")
-          : phoneField(prof.mobile_phone, prov["professional.mobile_phone"]),
+          ? editableLabeledField("Mobile", "mobilePhone", contacts.mobile_phone, editing, prov["contacts.mobile_phone"] || prov["professional.mobile_phone"], "tel")
+          : phoneField(contacts.mobile_phone, prov["contacts.mobile_phone"] || prov["professional.mobile_phone"]),
+        editing
+          ? editableLabeledField("LinkedIn", "linkedinUrl", contacts.linkedin_url, editing, prov["contacts.linkedin_url"] || prov["professional.linkedin_url"], "url")
+          : linkedinField(contacts.linkedin_url, prov["contacts.linkedin_url"] || prov["professional.linkedin_url"]),
       ]));
       return content;
     },
     (body) => ({
-      professional: {
+      contacts: {
         slack_handle: val(body, "slackHandle") || undefined,
         telegram_handle: val(body, "telegramHandle") || undefined,
         mobile_phone: val(body, "mobilePhone") || undefined,
+        linkedin_url: val(body, "linkedinUrl") || undefined,
       },
     })
   );
@@ -1255,14 +1274,6 @@ export function provBadge(src) {
   return el("span", { className: "profile-prov-badge" }, formatProvSource(src));
 }
 
-function localeLabel(localeCode) {
-  if (!localeCode) return "";
-  const normalized = String(localeCode).trim();
-  if (!normalized) return "";
-  const match = LOCALE_OPTIONS.find(([code]) => code.toLowerCase() === normalized.toLowerCase());
-  return match ? `${match[1]} (${match[0]})` : normalized;
-}
-
 function slackField(handle, provSrc) {
   const wrap = el("div", { className: "profile-field" });
   const labelEl = el("div", { className: "profile-field-label" }, "Slack");
@@ -1294,6 +1305,19 @@ function phoneField(phone, provSrc) {
   if (!phone) return labeledField("Mobile", "", provSrc);
   const normalizedPhone = phone.replace(/\s+/g, "");
   return renderContactLinkField("Mobile", phone, `tel:${normalizedPhone}`, provSrc);
+}
+
+function linkedinField(linkedinUrl, provSrc) {
+  if (!linkedinUrl) return labeledField("LinkedIn", "", provSrc);
+  const normalizedUrl = normalizeLinkedinUrl(linkedinUrl);
+  return renderContactLinkField("LinkedIn", normalizedUrl, normalizedUrl, provSrc);
+}
+
+function normalizeLinkedinUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw)) return raw;
+  return `https://${raw}`;
 }
 
 function renderContactLinkField(label, text, href, provSrc) {

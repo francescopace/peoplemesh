@@ -39,6 +39,12 @@ export async function renderPublicProfile(container, { id }) {
 async function renderPublicProfileView(container, p, nodeId) {
   const prov = p.field_provenance || {};
   const prof = p.professional || {};
+  const contacts = p.contacts || {
+    slack_handle: prof.slack_handle,
+    telegram_handle: prof.telegram_handle,
+    mobile_phone: prof.mobile_phone,
+    linkedin_url: prof.linkedin_url,
+  };
   const identity = p.identity || {};
   const geo = p.geography || {};
   const interests = p.interests_professional || {};
@@ -89,8 +95,14 @@ async function renderPublicProfileView(container, p, nodeId) {
     labeledField("Display Name", identity.display_name, prov["identity.display_name"]),
     emailField,
   ];
-  if (prof.slack_handle) {
-    const handle = prof.slack_handle.replace(/^@/, "");
+  if (identity.company) {
+    idFields.push(labeledField("Company", identity.company, prov["identity.company"]));
+  }
+  if (identity.birth_date) {
+    idFields.push(labeledField("Birth Date", identity.birth_date, prov["identity.birth_date"]));
+  }
+  if (contacts.slack_handle) {
+    const handle = contacts.slack_handle.replace(/^@/, "");
     const slackWrap = el("div", { className: "profile-field" });
     slackWrap.appendChild(el("div", { className: "profile-field-label" }, "Slack"));
     const slackLink = el("a", {
@@ -99,11 +111,26 @@ async function renderPublicProfileView(container, p, nodeId) {
       rel: "noopener",
       style: "display:flex;align-items:center;gap:0.4rem;text-decoration:none;color:inherit",
     });
-    slackLink.appendChild(document.createTextNode(prof.slack_handle));
+    slackLink.appendChild(document.createTextNode(contacts.slack_handle));
     const slackValue = el("div", { className: "profile-field-value" });
     slackValue.appendChild(slackLink);
     slackWrap.appendChild(slackValue);
     idFields.push(slackWrap);
+  }
+  if (contacts.linkedin_url) {
+    const linkedinUrl = normalizeLinkedinUrl(contacts.linkedin_url);
+    const linkedinWrap = el("div", { className: "profile-field" });
+    linkedinWrap.appendChild(el("div", { className: "profile-field-label" }, "LinkedIn"));
+    const linkedinLink = el("a", {
+      href: linkedinUrl,
+      target: "_blank",
+      rel: "noopener",
+      style: "display:flex;align-items:center;gap:0.4rem;text-decoration:none;color:inherit",
+    }, linkedinUrl);
+    const linkedinValue = el("div", { className: "profile-field-value" });
+    linkedinValue.appendChild(linkedinLink);
+    linkedinWrap.appendChild(linkedinValue);
+    idFields.push(linkedinWrap);
   }
   idBody.appendChild(fieldRow(idFields));
   grid.appendChild(idCard);
@@ -234,5 +261,12 @@ function readonlySection(icon, title, color) {
   card.appendChild(header);
   card.appendChild(el("div", { className: "profile-card-body" }));
   return card;
+}
+
+function normalizeLinkedinUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw)) return raw;
+  return `https://${raw}`;
 }
 

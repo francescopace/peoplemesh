@@ -55,7 +55,7 @@ class McpReadToolsTest {
         UUID userId = UUID.randomUUID();
         when(currentUserService.resolveUserId()).thenReturn(userId);
         ProfileSchema schema = new ProfileSchema(
-                null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null);
         when(profileService.getProfile(userId)).thenReturn(Optional.of(schema));
 
         TextContent result = mcpReadTools.getMyProfile();

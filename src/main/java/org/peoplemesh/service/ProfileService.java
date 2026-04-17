@@ -69,7 +69,7 @@ public class ProfileService {
             String lastName,
             String email,
             String photoUrl,
-            String locale,
+            String birthDate,
             String company
     ) {
         MeshNode node = findNodeById(nodeId)
@@ -118,9 +118,9 @@ public class ProfileService {
             sd.put("avatar_url", photoUrl.trim());
             provenance.put("identity.photo_url", provider);
         }
-        if (locale != null && !locale.isBlank() && sd.get("locale") == null) {
-            sd.put("locale", locale.trim());
-            provenance.put("identity.locale", provider);
+        if (birthDate != null && !birthDate.isBlank() && sd.get("birth_date") == null) {
+            sd.put("birth_date", birthDate.trim());
+            provenance.put("identity.birth_date", provider);
         }
         if (company != null && !company.isBlank() && sd.get("company") == null) {
             sd.put("company", company.trim());
@@ -159,7 +159,7 @@ public class ProfileService {
                 if (hasText(id.email())) { sd.put("email", normalizeText(id.email())); provenance.put("identity.email", source); }
                 if (hasText(id.company())) { sd.put("company", id.company().trim()); provenance.put("identity.company", source); }
                 if (hasText(id.photoUrl())) { sd.put("avatar_url", id.photoUrl().trim()); provenance.put("identity.photo_url", source); }
-                if (hasText(id.locale())) { sd.put("locale", id.locale().trim()); provenance.put("identity.locale", source); }
+                if (hasText(id.birthDate())) { sd.put("birth_date", id.birthDate().trim()); provenance.put("identity.birth_date", source); }
             }
         }
 
@@ -175,9 +175,14 @@ public class ProfileService {
             if (hasValue(p.languagesSpoken())) { sd.put("languages_spoken", p.languagesSpoken()); provenance.put("professional.languages_spoken", source); }
             if (p.workModePreference() != null) { sd.put("work_mode", p.workModePreference().name()); provenance.put("professional.work_mode_preference", source); }
             if (p.employmentType() != null) { sd.put("employment_type", p.employmentType().name()); provenance.put("professional.employment_type", source); }
-            if (hasText(p.slackHandle())) { sd.put("slack_handle", normalizeText(p.slackHandle())); provenance.put("professional.slack_handle", source); }
-            if (hasText(p.telegramHandle())) { sd.put("telegram_handle", normalizeText(p.telegramHandle())); provenance.put("professional.telegram_handle", source); }
-            if (hasText(p.mobilePhone())) { sd.put("mobile_phone", normalizeText(p.mobilePhone())); provenance.put("professional.mobile_phone", source); }
+        }
+
+        if (selectedFields.contacts() != null) {
+            var c = selectedFields.contacts();
+            if (hasText(c.slackHandle())) { sd.put("slack_handle", normalizeText(c.slackHandle())); provenance.put("contacts.slack_handle", source); }
+            if (hasText(c.telegramHandle())) { sd.put("telegram_handle", normalizeText(c.telegramHandle())); provenance.put("contacts.telegram_handle", source); }
+            if (hasText(c.mobilePhone())) { sd.put("mobile_phone", normalizeText(c.mobilePhone())); provenance.put("contacts.mobile_phone", source); }
+            if (hasText(c.linkedinUrl())) { sd.put("linkedin_url", c.linkedinUrl().trim()); provenance.put("contacts.linkedin_url", source); }
         }
 
         if (selectedFields.interestsProfessional() != null) {
@@ -185,6 +190,17 @@ public class ProfileService {
             if (hasValue(ip.topicsFrequent())) { sd.put("topics_frequent", ip.topicsFrequent()); provenance.put("interests_professional.topics_frequent", source); }
             if (hasValue(ip.learningAreas())) { sd.put("learning_areas", ip.learningAreas()); provenance.put("interests_professional.learning_areas", source); }
             if (hasValue(ip.projectTypes())) { sd.put("project_types", ip.projectTypes()); provenance.put("interests_professional.project_types", source); }
+        }
+
+        if (selectedFields.personal() != null) {
+            var pe = selectedFields.personal();
+            if (hasValue(pe.hobbies())) { sd.put("hobbies", pe.hobbies()); provenance.put("personal.hobbies", source); }
+            if (hasValue(pe.sports())) { sd.put("sports", pe.sports()); provenance.put("personal.sports", source); }
+            if (hasValue(pe.education())) { sd.put("education", pe.education()); provenance.put("personal.education", source); }
+            if (hasValue(pe.causes())) { sd.put("causes", pe.causes()); provenance.put("personal.causes", source); }
+            if (hasValue(pe.personalityTags())) { sd.put("personality_tags", pe.personalityTags()); provenance.put("personal.personality_tags", source); }
+            if (hasValue(pe.musicGenres())) { sd.put("music_genres", pe.musicGenres()); provenance.put("personal.music_genres", source); }
+            if (hasValue(pe.bookGenres())) { sd.put("book_genres", pe.bookGenres()); provenance.put("personal.book_genres", source); }
         }
 
         if (selectedFields.geography() != null) {
@@ -227,10 +243,13 @@ public class ProfileService {
                         node.tags, sdList(sd, "skills_soft"), sdList(sd, "tools_and_tech"),
                         sdList(sd, "languages_spoken"),
                         parseEnum(WorkMode.class, sdString(sd, "work_mode")),
-                        parseEnum(EmploymentType.class, sdString(sd, "employment_type")),
+                        parseEnum(EmploymentType.class, sdString(sd, "employment_type"))
+                ),
+                new ProfileSchema.ContactsInfo(
                         sdString(sd, "slack_handle"),
                         sdString(sd, "telegram_handle"),
-                        sdString(sd, "mobile_phone")
+                        sdString(sd, "mobile_phone"),
+                        sdString(sd, "linkedin_url")
                 ),
                 new ProfileSchema.InterestsInfo(
                         sdList(sd, "topics_frequent"), sdList(sd, "learning_areas"),
@@ -242,7 +261,11 @@ public class ProfileService {
                         sdList(sd, "personality_tags"), sdList(sd, "music_genres"),
                         sdList(sd, "book_genres")
                 ),
-                new ProfileSchema.GeographyInfo(node.country, sdString(sd, "city"), sdString(sd, "timezone")),
+                new ProfileSchema.GeographyInfo(
+                        node.country,
+                        sdString(sd, "city"),
+                        sdString(sd, "timezone")
+                ),
                 provenance != null ? Map.copyOf(provenance) : null,
                 new ProfileSchema.IdentityInfo(
                         node.title,
@@ -250,8 +273,8 @@ public class ProfileService {
                         sdString(sd, "last_name"),
                         sdString(sd, "email"),
                         sdString(sd, "avatar_url"),
-                        sdString(sd, "locale"),
-                        sdString(sd, "company")
+                        sdString(sd, "company"),
+                        sdString(sd, "birth_date")
                 )
         );
     }
@@ -275,9 +298,14 @@ public class ProfileService {
             if (p.languagesSpoken() != null) sd.put("languages_spoken", p.languagesSpoken());
             if (p.workModePreference() != null) sd.put("work_mode", p.workModePreference().name());
             if (p.employmentType() != null) sd.put("employment_type", p.employmentType().name());
-            if (p.slackHandle() != null) sd.put("slack_handle", p.slackHandle());
-            if (p.telegramHandle() != null) sd.put("telegram_handle", p.telegramHandle());
-            if (p.mobilePhone() != null) sd.put("mobile_phone", p.mobilePhone());
+        }
+
+        if (schema.contacts() != null) {
+            var c = schema.contacts();
+            if (c.slackHandle() != null) sd.put("slack_handle", c.slackHandle());
+            if (c.telegramHandle() != null) sd.put("telegram_handle", c.telegramHandle());
+            if (c.mobilePhone() != null) sd.put("mobile_phone", c.mobilePhone());
+            if (c.linkedinUrl() != null) sd.put("linkedin_url", c.linkedinUrl().trim());
         }
 
         if (schema.interestsProfessional() != null) {
@@ -321,8 +349,8 @@ public class ProfileService {
             if (id.lastName() != null) sd.put("last_name", normalizeText(id.lastName()));
             if (id.email() != null) sd.put("email", normalizeText(id.email()));
             if (id.photoUrl() != null && !id.photoUrl().isBlank()) sd.put("avatar_url", id.photoUrl().trim());
-            if (id.locale() != null) sd.put("locale", id.locale().trim());
             if (id.company() != null) sd.put("company", id.company().trim());
+            if (id.birthDate() != null) sd.put("birth_date", id.birthDate().trim());
         }
 
         node.structuredData = sd;
@@ -413,4 +441,5 @@ public class ProfileService {
         if (firstName != null && lastName != null) return firstName + " " + lastName;
         return firstName != null ? firstName : lastName;
     }
+
 }

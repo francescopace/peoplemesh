@@ -1,6 +1,9 @@
 package org.peoplemesh.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.ChatModel;
@@ -11,7 +14,9 @@ import org.jboss.logging.Logger;
 import org.peoplemesh.domain.dto.ProfileSchema;
 
 import java.time.Instant;
+import java.util.Iterator;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 
@@ -37,21 +42,52 @@ public class LlmProfileStructuring implements ProfileStructuringLlm {
                 "work_mode_preference": "REMOTE|HYBRID|OFFICE|FLEXIBLE|null",
                 "employment_type": "EMPLOYED|FREELANCE|FOUNDER|LOOKING|OPEN_TO_OFFERS|null"
               },
+              "contacts": {
+                "slack_handle": null,
+                "telegram_handle": null,
+                "mobile_phone": null,
+                "linkedin_url": null
+              },
               "interests_professional": {
                 "topics_frequent": ["..."],
                 "learning_areas": ["..."],
                 "project_types": ["..."]
+              },
+              "personal": {
+                "hobbies": null,
+                "sports": null,
+                "education": null,
+                "causes": null,
+                "personality_tags": null,
+                "music_genres": null,
+                "book_genres": null
               },
               "geography": {
                 "country": "<ISO country code if clear, else null>",
                 "city": "<city if clear, else null>",
                 "timezone": null
               },
+              "identity": {
+                "display_name": null,
+                "first_name": null,
+                "last_name": null,
+                "email": null,
+                "photo_url": null,
+                "company": null,
+                "birth_date": null
+              },
               "field_provenance": {
                 "professional.roles": "cv_llm",
                 "professional.skills_technical": "cv_llm",
                 "professional.languages_spoken": "cv_llm",
-                "geography.country": "cv_llm"
+                "contacts.slack_handle": "cv_llm",
+                "contacts.telegram_handle": "cv_llm",
+                "contacts.mobile_phone": "cv_llm",
+                "contacts.linkedin_url": "cv_llm",
+                "geography.country": "cv_llm",
+                "identity.birth_date": "cv_llm",
+                "identity.display_name": "cv_llm",
+                "identity.email": "cv_llm"
               }
             }
             Rules:
@@ -73,7 +109,25 @@ public class LlmProfileStructuring implements ProfileStructuringLlm {
             - Exclude from tools_and_tech non-tool entities such as publication channels, events, communities, employers, and role titles.
             - Exclude certifications and credential names from tools_and_tech (e.g., phrases containing "certified" or "certification").
             - learning_areas must include only explicit learning goals/focus areas from CV text; if none are explicit, set learning_areas to null.
+            - Populate contacts.* fields when explicitly present in CV: mobile_phone, linkedin_url, telegram_handle, slack_handle.
+            - Populate identity fields when explicitly present in CV: display_name, first_name, last_name, email, photo_url, company.
+            - Populate personal section when explicitly present (hobbies, sports, education, causes, personality_tags, music_genres, book_genres).
+            - birth_date must be YYYY-MM-DD when explicitly present, otherwise null.
+            - Keep output compact to avoid truncation: max 8 items for any list field.
+            - personal.* fields MUST be arrays of strings or null (never objects).
             - Keep arrays concise, deduplicated, and free of near-duplicates.
+            """;
+
+    private static final String REPAIR_PROMPT = """
+            You receive malformed or truncated JSON from a previous extraction.
+            Return ONE valid JSON object matching the same ProfileSchema structure exactly.
+            Rules:
+            - Output ONLY raw JSON.
+            - Do not add markdown.
+            - Keep existing extracted values when possible.
+            - If uncertain or missing, use null.
+            - Array fields must be arrays of strings (or null), never objects.
+            - Keep output compact: max 8 items per array.
             """;
 
     @Inject
@@ -94,13 +148,13 @@ public class LlmProfileStructuring implements ProfileStructuringLlm {
         int cvWords = (cvContent == null || cvContent.isBlank()) ? 0 : cvContent.trim().split("\\s+").length;
         LOG.infof("Profile structuring LLM started: chars=%d words=%d", cvChars, cvWords);
 
+        String extractionTimestamp = Instant.now().toString();
         String content;
         try {
-            String extractionTimestamp = Instant.now().toString();
-            content = chatModel.chat(
-                    SystemMessage.from(SYSTEM_PROMPT),
-                    UserMessage.from("Extraction UTC timestamp: " + extractionTimestamp + "\nCV Content:\n" + cvContent)
-            ).aiMessage().text();
+            content = runChat(
+                    SYSTEM_PROMPT,
+                    "Extraction UTC timestamp: " + extractionTimestamp + "\nCV Content:\n" + cvContent
+            );
         } catch (Exception e) {
             LOG.errorf(e, "LLM call failed for CV extraction");
             return Optional.empty();
@@ -110,16 +164,219 @@ public class LlmProfileStructuring implements ProfileStructuringLlm {
             return Optional.empty();
         }
 
+        Optional<ProfileSchema> parsed = parseProfileSchema(content);
+        if (parsed.isPresent()) {
+            logExtractionSummary(parsed.get());
+            return parsed;
+        }
+
+        LOG.warnf("Primary LLM response was invalid or truncated. Attempting JSON repair: responseLength=%d", content.length());
         try {
-            LOG.debugf("Profile structuring LLM response: responseLength=%d", content.length());
-            ProfileSchema extracted = objectMapper.readValue(MatchingUtils.stripMarkdownFences(content), ProfileSchema.class);
-            ProfileSchema sanitized = sanitizeSchema(extracted);
-            logExtractionSummary(sanitized);
-            return Optional.ofNullable(sanitized);
+            String repaired = runChat(
+                    REPAIR_PROMPT,
+                    "Extraction UTC timestamp: " + extractionTimestamp + "\nMalformed JSON:\n" + MatchingUtils.stripMarkdownFences(content)
+            );
+            Optional<ProfileSchema> repairedParsed = parseProfileSchema(repaired);
+            if (repairedParsed.isPresent()) {
+                logExtractionSummary(repairedParsed.get());
+                return repairedParsed;
+            }
+            LOG.error("Failed to parse repaired LLM response for CV extraction");
         } catch (Exception e) {
-            LOG.errorf(e, "Failed to parse LLM response for CV extraction");
+            LOG.errorf(e, "LLM repair call failed for CV extraction");
+        }
+        return Optional.empty();
+    }
+
+    private String runChat(String systemPrompt, String userPrompt) {
+        return chatModel.chat(
+                SystemMessage.from(systemPrompt),
+                UserMessage.from(userPrompt)
+        ).aiMessage().text();
+    }
+
+    private Optional<ProfileSchema> parseProfileSchema(String content) {
+        try {
+            String raw = MatchingUtils.stripMarkdownFences(content);
+            String jsonCandidate = extractJsonCandidate(raw);
+            JsonNode root = objectMapper.readTree(jsonCandidate);
+            if (!(root instanceof ObjectNode objectRoot)) {
+                return Optional.empty();
+            }
+            normalizeSchemaNode(objectRoot);
+            ProfileSchema extracted = objectMapper.treeToValue(objectRoot, ProfileSchema.class);
+            return Optional.ofNullable(sanitizeSchema(extracted));
+        } catch (Exception e) {
+            LOG.debugf(e, "Failed to parse profile schema candidate");
             return Optional.empty();
         }
+    }
+
+    private static String extractJsonCandidate(String raw) {
+        if (raw == null) return "";
+        int first = raw.indexOf('{');
+        int last = raw.lastIndexOf('}');
+        if (first >= 0 && last > first) {
+            return raw.substring(first, last + 1);
+        }
+        return raw;
+    }
+
+    private void normalizeSchemaNode(ObjectNode root) {
+        ObjectNode professional = objectNodeOrCreate(root, "professional");
+        normalizeStringArrayField(professional, "roles");
+        normalizeStringArrayField(professional, "industries");
+        normalizeStringArrayField(professional, "skills_technical");
+        normalizeStringArrayField(professional, "skills_soft");
+        normalizeStringArrayField(professional, "tools_and_tech");
+        normalizeStringArrayField(professional, "languages_spoken");
+        normalizeEnumField(professional, "seniority", List.of("JUNIOR", "MID", "SENIOR", "LEAD", "EXECUTIVE"));
+        normalizeEnumField(professional, "work_mode_preference", List.of("REMOTE", "HYBRID", "OFFICE", "FLEXIBLE"));
+        normalizeEnumField(professional, "employment_type", List.of("EMPLOYED", "FREELANCE", "FOUNDER", "LOOKING", "OPEN_TO_OFFERS"));
+
+        ObjectNode contacts = objectNodeOrCreate(root, "contacts");
+        copyLegacyContactField(professional, contacts, "slack_handle");
+        copyLegacyContactField(professional, contacts, "telegram_handle");
+        copyLegacyContactField(professional, contacts, "mobile_phone");
+        copyLegacyContactField(professional, contacts, "linkedin_url");
+        professional.remove(List.of("slack_handle", "telegram_handle", "mobile_phone", "linkedin_url"));
+        normalizeStringField(contacts, "slack_handle");
+        normalizeStringField(contacts, "telegram_handle");
+        normalizeStringField(contacts, "mobile_phone");
+        normalizeStringField(contacts, "linkedin_url");
+
+        ObjectNode interests = objectNodeOrCreate(root, "interests_professional");
+        normalizeStringArrayField(interests, "topics_frequent");
+        normalizeStringArrayField(interests, "learning_areas");
+        normalizeStringArrayField(interests, "project_types");
+
+        ObjectNode personal = objectNodeOrCreate(root, "personal");
+        normalizeStringArrayField(personal, "hobbies");
+        normalizeStringArrayField(personal, "sports");
+        normalizeStringArrayField(personal, "education");
+        normalizeStringArrayField(personal, "causes");
+        normalizeStringArrayField(personal, "personality_tags");
+        normalizeStringArrayField(personal, "music_genres");
+        normalizeStringArrayField(personal, "book_genres");
+
+        ObjectNode geography = objectNodeOrCreate(root, "geography");
+        normalizeStringField(geography, "country");
+        normalizeStringField(geography, "city");
+        normalizeStringField(geography, "timezone");
+
+        ObjectNode identity = objectNodeOrCreate(root, "identity");
+        normalizeStringField(identity, "display_name");
+        normalizeStringField(identity, "first_name");
+        normalizeStringField(identity, "last_name");
+        normalizeStringField(identity, "email");
+        normalizeStringField(identity, "photo_url");
+        normalizeStringField(identity, "company");
+        normalizeStringField(identity, "birth_date");
+    }
+
+    private static void copyLegacyContactField(ObjectNode professional, ObjectNode contacts, String key) {
+        if (!contacts.hasNonNull(key) && professional.hasNonNull(key)) {
+            contacts.set(key, professional.get(key));
+        }
+    }
+
+    private static ObjectNode objectNodeOrCreate(ObjectNode root, String field) {
+        JsonNode node = root.get(field);
+        if (node instanceof ObjectNode out) {
+            return out;
+        }
+        ObjectNode created = root.objectNode();
+        root.set(field, created);
+        return created;
+    }
+
+    private static void normalizeStringField(ObjectNode parent, String field) {
+        JsonNode node = parent.get(field);
+        if (node == null || node.isNull()) return;
+        if (node.isTextual()) {
+            String v = node.asText().trim();
+            if (v.isBlank()) parent.putNull(field);
+            else parent.put(field, v);
+            return;
+        }
+        if (node.isArray() && node.size() > 0 && node.get(0).isTextual()) {
+            String v = node.get(0).asText().trim();
+            if (v.isBlank()) parent.putNull(field);
+            else parent.put(field, v);
+            return;
+        }
+        parent.putNull(field);
+    }
+
+    private static void normalizeEnumField(ObjectNode parent, String field, List<String> allowed) {
+        JsonNode node = parent.get(field);
+        if (node == null || node.isNull()) return;
+        String value = node.asText(null);
+        if (value == null) {
+            parent.putNull(field);
+            return;
+        }
+        String normalized = value.trim().toUpperCase(Locale.ROOT);
+        if (!allowed.contains(normalized)) {
+            parent.putNull(field);
+            return;
+        }
+        parent.put(field, normalized);
+    }
+
+    private static void normalizeStringArrayField(ObjectNode parent, String field) {
+        JsonNode node = parent.get(field);
+        if (node == null || node.isNull()) return;
+        ArrayNode out = parent.arrayNode();
+        if (node.isArray()) {
+            for (JsonNode item : node) {
+                String value = asNormalizedString(item);
+                if (value != null) out.add(value);
+            }
+        } else if (node.isObject()) {
+            Iterator<JsonNode> values = node.elements();
+            while (values.hasNext()) {
+                String value = asNormalizedString(values.next());
+                if (value != null) out.add(value);
+            }
+        } else {
+            String value = asNormalizedString(node);
+            if (value != null) out.add(value);
+        }
+        if (out.isEmpty()) {
+            parent.putNull(field);
+        } else {
+            parent.set(field, dedupeArray(out));
+        }
+    }
+
+    private static ArrayNode dedupeArray(ArrayNode input) {
+        LinkedHashSet<String> seen = new LinkedHashSet<>();
+        ArrayNode out = input.arrayNode();
+        for (JsonNode item : input) {
+            if (!item.isTextual()) continue;
+            String v = item.asText().trim();
+            if (v.isBlank()) continue;
+            if (seen.add(v.toLowerCase(Locale.ROOT))) {
+                out.add(v);
+            }
+            if (out.size() >= 8) {
+                break;
+            }
+        }
+        return out;
+    }
+
+    private static String asNormalizedString(JsonNode node) {
+        if (node == null || node.isNull()) return null;
+        if (node.isTextual()) {
+            String v = node.asText().trim();
+            return v.isBlank() ? null : v;
+        }
+        if (node.isNumber() || node.isBoolean()) {
+            return node.asText();
+        }
+        return null;
     }
 
     private ProfileSchema sanitizeSchema(ProfileSchema schema) {
@@ -137,16 +394,14 @@ public class LlmProfileStructuring implements ProfileStructuringLlm {
                 sanitizedTools,
                 p.languagesSpoken(),
                 p.workModePreference(),
-                p.employmentType(),
-                p.slackHandle(),
-                p.telegramHandle(),
-                p.mobilePhone()
+                p.employmentType()
         );
         return new ProfileSchema(
                 schema.profileVersion(),
                 schema.generatedAt(),
                 schema.consent(),
                 sanitizedProfessional,
+                schema.contacts(),
                 schema.interestsProfessional(),
                 schema.personal(),
                 schema.geography(),

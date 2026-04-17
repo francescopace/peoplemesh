@@ -181,7 +181,7 @@ class OAuthProfileParserTest {
         OidcSubject subject = new OidcSubject(
                 "sub123", "Alice Smith", "Alice", "Smith",
                 "alice@example.com", "Senior Java Developer at Acme",
-                null, "en-US", null, null);
+                null, "en-US", "https://img.example/alice.png", "Acme");
 
         ProfileSchema schema = OAuthProfileParser.buildImportSchema("github", subject);
 
@@ -195,7 +195,17 @@ class OAuthProfileParserTest {
         assertTrue(schema.professional().skillsTechnical().contains("Java"));
         assertNotNull(schema.geography());
         assertEquals("US", schema.geography().country());
+        assertNotNull(schema.identity());
+        assertEquals("Alice Smith", schema.identity().displayName());
+        assertEquals("Alice", schema.identity().firstName());
+        assertEquals("Smith", schema.identity().lastName());
+        assertEquals("alice@example.com", schema.identity().email());
+        assertEquals("https://img.example/alice.png", schema.identity().photoUrl());
+        assertEquals("Acme", schema.identity().company());
+        assertNull(schema.identity().birthDate());
         assertNotNull(schema.fieldProvenance());
+        assertEquals("github", schema.fieldProvenance().get("identity.email"));
+        assertEquals("github", schema.fieldProvenance().get("professional.skills_technical"));
     }
 
     @Test
@@ -229,8 +239,9 @@ class OAuthProfileParserTest {
     @Test
     void buildEnrichedGitHubSchema_mergesLanguagesAndTopics() {
         OidcSubject subject = new OidcSubject(
-                "sub123", "Dev User", null, null,
-                null, "Python developer using Docker", null, "en-US", null, null);
+                "sub123", "Dev User", "Dev", "User",
+                "dev@example.com", "Python developer using Docker", null, "en-US",
+                "https://img.example/dev.png", "Acme Inc");
 
         GitHubEnrichedResult enriched = new GitHubEnrichedResult(
                 subject,
@@ -248,6 +259,16 @@ class OAuthProfileParserTest {
         assertNotNull(schema.interestsProfessional());
         assertNotNull(schema.interestsProfessional().topicsFrequent());
         assertTrue(schema.interestsProfessional().topicsFrequent().contains("machine-learning"));
+        assertNotNull(schema.geography());
+        assertEquals("US", schema.geography().country());
+        assertNotNull(schema.identity());
+        assertEquals("Dev User", schema.identity().displayName());
+        assertEquals("Dev", schema.identity().firstName());
+        assertEquals("User", schema.identity().lastName());
+        assertEquals("dev@example.com", schema.identity().email());
+        assertEquals("https://img.example/dev.png", schema.identity().photoUrl());
+        assertEquals("Acme Inc", schema.identity().company());
+        assertNull(schema.identity().birthDate());
     }
 
     @Test

@@ -168,10 +168,7 @@ class EmbeddingTextBuilderTest {
                 List.of("Docker", "Kubernetes"),
                 List.of("English", "Italian"),
                 WorkMode.REMOTE,
-                EmploymentType.FREELANCE,
-                null,
-                null,
-                null
+                EmploymentType.FREELANCE
         );
         ProfileSchema.InterestsInfo interests = new ProfileSchema.InterestsInfo(
                 List.of("Distributed systems"),
@@ -193,6 +190,7 @@ class EmbeddingTextBuilderTest {
                 Instant.parse("2026-01-01T00:00:00Z"),
                 null,
                 professional,
+                null,
                 interests,
                 personal,
                 geography,
@@ -238,6 +236,7 @@ class EmbeddingTextBuilderTest {
         ProfileSchema schema = new ProfileSchema(
                 "v1",
                 Instant.parse("2026-01-01T00:00:00Z"),
+                null,
                 null,
                 null,
                 null,

@@ -98,7 +98,7 @@ public class OAuthCallbackService {
         profileService.upsertProfileFromProvider(
                 userNode.id, provider, displayName,
                 subject.givenName(), subject.familyName(), subject.email(),
-                subject.picture(), subject.locale(), subject.hostedDomain());
+                subject.picture(), null, subject.hostedDomain());
 
         return new LoginResult(userNode.id, displayName, isNewUser);
     }

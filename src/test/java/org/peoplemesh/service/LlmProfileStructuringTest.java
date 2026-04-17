@@ -129,6 +129,57 @@ class LlmProfileStructuringTest {
     }
 
     @Test
+    void extractProfile_personalEducationObject_isNormalizedToStringList() {
+        String json = """
+                {
+                  "profile_version": "1.0",
+                  "professional": {
+                    "roles": ["Dev"]
+                  },
+                  "personal": {
+                    "education": {
+                      "degree": "MSc Computer Science",
+                      "university": "Sapienza"
+                    }
+                  }
+                }
+                """;
+        mockChatResponse(json);
+
+        Optional<ProfileSchema> result = structuring.extractProfile("cv");
+
+        assertTrue(result.isPresent());
+        assertNotNull(result.get().personal());
+        assertEquals(java.util.List.of("MSc Computer Science", "Sapienza"), result.get().personal().education());
+    }
+
+    @Test
+    void extractProfile_invalidThenValid_retrySucceeds() {
+        ChatResponse first = mock(ChatResponse.class);
+        AiMessage firstMessage = mock(AiMessage.class);
+        when(first.aiMessage()).thenReturn(firstMessage);
+        when(firstMessage.text()).thenReturn("{ invalid");
+
+        ChatResponse second = mock(ChatResponse.class);
+        AiMessage secondMessage = mock(AiMessage.class);
+        when(second.aiMessage()).thenReturn(secondMessage);
+        when(secondMessage.text()).thenReturn("""
+                {
+                  "profile_version": "1.0",
+                  "professional": {
+                    "roles": ["Dev"]
+                  }
+                }
+                """);
+        when(chatModel.chat(any(), any())).thenReturn(first, second);
+
+        Optional<ProfileSchema> result = structuring.extractProfile("cv");
+
+        assertTrue(result.isPresent());
+        verify(chatModel, times(2)).chat(any(), any());
+    }
+
+    @Test
     void extractProfile_nullContent_handlesGracefully() {
         String json = """
                 {

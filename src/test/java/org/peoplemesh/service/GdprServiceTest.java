@@ -156,7 +156,7 @@ class GdprServiceTest {
         service.auditEntries = List.of(auditEntry);
 
         when(profileService.getProfile(userId)).thenReturn(Optional.of(
-                new ProfileSchema(null, null, null, null, null, null, null, null, null)
+                new ProfileSchema(null, null, null, null, null, null, null, null, null, null)
         ));
 
         when(nodeRepository.findPublishedUserNode(userId)).thenReturn(Optional.of(userNode));

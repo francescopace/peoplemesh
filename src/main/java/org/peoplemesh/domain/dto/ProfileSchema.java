@@ -18,6 +18,7 @@ public record ProfileSchema(
         @JsonProperty("generated_at") Instant generatedAt,
         @Valid ConsentInfo consent,
         @Valid ProfessionalInfo professional,
+        @Valid ContactsInfo contacts,
         @JsonProperty("interests_professional") @Valid InterestsInfo interestsProfessional,
         @Valid PersonalInfo personal,
         @Valid GeographyInfo geography,
@@ -41,10 +42,14 @@ public record ProfileSchema(
             @JsonProperty("tools_and_tech") @Size(max = 50) List<@NotNull @Size(max = 100) String> toolsAndTech,
             @JsonProperty("languages_spoken") @Size(max = 30) List<@NotNull @Size(max = 50) String> languagesSpoken,
             @JsonProperty("work_mode_preference") WorkMode workModePreference,
-            @JsonProperty("employment_type") EmploymentType employmentType,
+            @JsonProperty("employment_type") EmploymentType employmentType
+    ) {}
+
+    public record ContactsInfo(
             @JsonProperty("slack_handle") @Size(max = 100) String slackHandle,
             @JsonProperty("telegram_handle") @Size(max = 100) String telegramHandle,
-            @JsonProperty("mobile_phone") @Size(max = 32) String mobilePhone
+            @JsonProperty("mobile_phone") @Size(max = 32) String mobilePhone,
+            @JsonProperty("linkedin_url") @Size(max = 2048) String linkedinUrl
     ) {}
 
     public record InterestsInfo(
@@ -75,7 +80,7 @@ public record ProfileSchema(
             @JsonProperty("last_name") @Size(max = 120) String lastName,
             @Size(max = 320) String email,
             @JsonProperty("photo_url") @Size(max = 2048) String photoUrl,
-            @Size(max = 20) String locale,
-            @Size(max = 200) String company
+            @Size(max = 200) String company,
+            @JsonProperty("birth_date") @Size(max = 32) String birthDate
     ) {}
 }

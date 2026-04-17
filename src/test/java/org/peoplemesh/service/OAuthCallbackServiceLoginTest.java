@@ -64,7 +64,7 @@ class OAuthCallbackServiceLoginTest {
         verify(profileService).upsertProfileFromProvider(
                 eq(nodeId), eq("google"), eq("Jane Doe"),
                 eq("Jane"), eq("Doe"), eq("jane@example.com"),
-                eq("pic"), eq("en"), eq((String) null));
+                eq("pic"), eq((String) null), eq((String) null));
     }
 
     @Test
