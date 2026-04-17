@@ -83,3 +83,8 @@ Open-source governance, sustainability, and legal documents:
 
 AGPL v3.
 PeopleMesh is open-source first. See [BUSINESS_MODEL.md](BUSINESS_MODEL.md) for sustainability, dual-licensing details, and commercial options for organizations that need them.
+
+## Author
+
+- Author: Francesco Pace
+- Website: [peoplemesh.org](https://peoplemesh.org)
