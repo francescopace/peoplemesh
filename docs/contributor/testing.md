@@ -14,9 +14,9 @@ mvn verify
 
 Coverage policy:
 
-- JaCoCo enforces 80% line coverage at bundle level
+- JaCoCo enforces 80% line coverage (configured with `jacoco:check` includes in `pom.xml`)
 - Coverage is merged across unit and integration runs
-- Class exclusions for coverage are configured in `pom.xml` (`jacoco-maven-plugin` -> `configuration.excludes`)
+- Exclusions should stay minimal and justified (`LdapImportService` remains excluded due to infrastructure-bound LDAP dependency)
 
 Test style:
 

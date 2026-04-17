@@ -3,6 +3,7 @@ package org.peoplemesh.api.resource;
 import io.quarkus.security.Authenticated;
 import jakarta.inject.Inject;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Pattern;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
@@ -39,7 +40,11 @@ public class NodesResource {
     ProfileService profileService;
 
     @GET
-    public Response listMyNodes(@QueryParam("type") String type) {
+    public Response listMyNodes(
+            @QueryParam("type")
+            @Pattern(regexp = "^[A-Za-z_]*$", message = "type must be alphabetic")
+            String type
+    ) {
         UUID userId = userResolver.resolveUserId();
         List<NodeDto> nodes = nodeService.listByCreatorFiltered(userId, type);
         return Response.ok(nodes).build();

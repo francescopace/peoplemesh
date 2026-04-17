@@ -12,7 +12,7 @@ import org.peoplemesh.domain.enums.NodeType;
 import org.peoplemesh.repository.NodeRepository;
 import org.peoplemesh.repository.SkillDefinitionRepository;
 
-import java.util.Collection;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
@@ -30,8 +30,13 @@ public class SystemStatisticsService {
     SkillDefinitionRepository skillDefinitionRepository;
 
     private static final String LLM_METRIC = "peoplemesh.llm.inference";
-    private static final String EMBEDDING_METRIC = "peoplemesh.embedding.inference";
-    private static final String HNSW_METRIC = "peoplemesh.hnsw.search";
+    private static final String EMBEDDING_SINGLE_METRIC = "peoplemesh.embedding.inference";
+    private static final String EMBEDDING_BATCH_METRIC = "peoplemesh.embedding.inference.batch";
+    private static final List<String> HNSW_METRICS = List.of(
+            "peoplemesh.hnsw.search.user",
+            "peoplemesh.hnsw.search.node",
+            "peoplemesh.hnsw.search.unified"
+    );
 
     public SystemStatisticsDto loadStatistics() {
         long users = nodeRepository.countByType(NodeType.USER);
@@ -40,8 +45,9 @@ public class SystemStatisticsService {
         long skills = skillDefinitionRepository.countAll();
         TimingStatisticsDto timings = new TimingStatisticsDto(
                 aggregateTimer(LLM_METRIC),
-                aggregateTimer(EMBEDDING_METRIC),
-                aggregateTimer(HNSW_METRIC)
+                aggregateTimer(EMBEDDING_SINGLE_METRIC),
+                aggregateTimer(EMBEDDING_BATCH_METRIC),
+                aggregateTimers(HNSW_METRICS)
         );
 
         return new SystemStatisticsDto(users, jobs, groups, skills, timings);
@@ -49,7 +55,20 @@ public class SystemStatisticsService {
 
     private OperationTimingStatsDto aggregateTimer(String metricName) {
         String safeMetricName = Objects.requireNonNull(metricName);
-        Collection<Timer> timers = meterRegistry.find(safeMetricName).timers();
+        return aggregateTimers(List.of(safeMetricName));
+    }
+
+    private OperationTimingStatsDto aggregateTimers(List<String> metricNames) {
+        if (metricNames == null) {
+            throw new IllegalArgumentException("metricNames is required");
+        }
+        List<Timer> timers = new ArrayList<>();
+        for (String metricName : metricNames) {
+            if (metricName == null || metricName.isBlank()) {
+                continue;
+            }
+            timers.addAll(meterRegistry.find(metricName).timers());
+        }
         if (timers.isEmpty()) {
             return new OperationTimingStatsDto(0, 0, 0, 0);
         }

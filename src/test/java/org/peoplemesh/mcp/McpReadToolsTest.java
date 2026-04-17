@@ -76,7 +76,7 @@ class McpReadToolsTest {
         when(userResolver.resolveUserId()).thenThrow(new SecurityException("not registered"));
 
         TextContent result = mcpReadTools.getMyProfile();
-        assertTrue(result.text().contains("not registered"));
+        assertTrue(result.text().contains("access denied"));
     }
 
     // === match ===
@@ -112,11 +112,10 @@ class McpReadToolsTest {
 
     @Test
     void match_securityException_returnsError() {
-        when(embeddingService.generateEmbedding(anyString())).thenReturn(new float[]{1f});
         when(userResolver.resolveUserId()).thenThrow(new SecurityException("denied"));
 
         TextContent result = mcpReadTools.match("{\"professional\":{\"roles\":[\"X\"]}}", null, null);
-        assertTrue(result.text().contains("denied"));
+        assertTrue(result.text().contains("access denied"));
     }
 
     // === matchMe ===

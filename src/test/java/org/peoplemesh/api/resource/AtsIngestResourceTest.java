@@ -106,10 +106,9 @@ class AtsIngestResourceTest {
         Response response = resource.ingestJobs("test-key", req);
         assertEquals(200, response.getStatus());
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> body = (Map<String, Object>) response.getEntity();
-        assertEquals(1, body.get("upserted"));
-        assertEquals(0, body.get("failed"));
+        AtsIngestResultDto body = (AtsIngestResultDto) response.getEntity();
+        assertEquals(1, body.upserted());
+        assertEquals(0, body.failed());
     }
 
     @Test
@@ -143,10 +142,9 @@ class AtsIngestResourceTest {
         Response response = resource.ingestJobs("test-key", req);
         assertEquals(200, response.getStatus());
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> body = (Map<String, Object>) response.getEntity();
-        assertEquals(0, body.get("upserted"));
-        assertEquals(1, body.get("failed"));
+        AtsIngestResultDto body = (AtsIngestResultDto) response.getEntity();
+        assertEquals(0, body.upserted());
+        assertEquals(1, body.failed());
     }
 
     @Test
@@ -165,8 +163,7 @@ class AtsIngestResourceTest {
                 .thenReturn(new AtsIngestResultDto(0, 1, List.of(Map.of("external_id", "ext-1", "error", "Failed"))));
         Response response = resource.ingestJobs("test-key", req);
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> body = (Map<String, Object>) response.getEntity();
-        assertEquals(1, body.get("failed"));
+        AtsIngestResultDto body = (AtsIngestResultDto) response.getEntity();
+        assertEquals(1, body.failed());
     }
 }

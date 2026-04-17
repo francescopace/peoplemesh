@@ -80,11 +80,13 @@ This reference follows PeopleMesh's security- and GDPR-first posture by design (
 - MCP integration is read-only by design.
 - API implementation layering:
   - REST endpoints live under `org.peoplemesh.api.resource`
+  - Transport orchestration lives under `org.peoplemesh.application`
   - API error contracts and exception mapping live under `org.peoplemesh.api.error`
 - Input validation is enforced with Jakarta Validation on DTO and endpoint payloads (for example node creation/update, ATS ingest payloads, and skill assessments).
 - API errors are normalized through `ProblemDetail` responses; internal exception details are not returned in response bodies.
 - `GET /api/v1/system/statistics` includes timing summaries for:
   - `timings.llmInference`
-  - `timings.embeddingInference`
   - `timings.hnswSearch`
+  - `timings.embeddingInferenceSingle`
+  - `timings.embeddingInferenceBatch`
   Each block provides `sampleCount`, `avgMs`, `p95Ms`, and `maxMs`.

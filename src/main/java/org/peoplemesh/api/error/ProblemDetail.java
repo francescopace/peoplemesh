@@ -19,6 +19,10 @@ public record ProblemDetail(
             .orElse("about:blank");
 
     public static ProblemDetail of(int status, String title, String detail) {
+        return of(status, title, detail, null);
+    }
+
+    public static ProblemDetail of(int status, String title, String detail, String instance) {
         String type = "about:blank".equals(BASE_URI) ? BASE_URI : switch (status) {
             case 400 -> BASE_URI + "/bad-request";
             case 401 -> BASE_URI + "/unauthorized";
@@ -26,8 +30,12 @@ public record ProblemDetail(
             case 404 -> BASE_URI + "/not-found";
             case 409 -> BASE_URI + "/conflict";
             case 429 -> BASE_URI + "/rate-limit-exceeded";
+            case 413 -> BASE_URI + "/payload-too-large";
+            case 500 -> BASE_URI + "/internal-error";
+            case 501 -> BASE_URI + "/not-implemented";
+            case 502 -> BASE_URI + "/bad-gateway";
             default -> BASE_URI + "/internal-error";
         };
-        return new ProblemDetail(type, title, status, detail, null);
+        return new ProblemDetail(type, title, status, detail, instance);
     }
 }

@@ -9,6 +9,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DefaultValue;
@@ -30,7 +31,7 @@ import org.jboss.logging.Logger;
 import org.jboss.resteasy.reactive.RestForm;
 import org.jboss.resteasy.reactive.multipart.FileUpload;
 import org.peoplemesh.api.error.ProblemDetail;
-import org.peoplemesh.config.AppConfig;
+import org.peoplemesh.application.MeApplicationService;
 import org.peoplemesh.domain.dto.PrivacyDashboard;
 import org.peoplemesh.domain.dto.ProfileSchema;
 import org.peoplemesh.domain.dto.SkillAssessmentDto;
@@ -40,12 +41,9 @@ import org.peoplemesh.service.CvImportService;
 import org.peoplemesh.service.GdprService;
 import org.peoplemesh.service.MeService;
 import org.peoplemesh.service.OAuthCallbackService;
-import org.peoplemesh.service.ProfileService;
 import org.peoplemesh.service.SessionService;
 import org.peoplemesh.service.UserNotificationService;
 
-import java.io.InputStream;
-import java.nio.file.Files;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -64,9 +62,6 @@ public class MeResource {
     UserResolver userResolver;
 
     @Inject
-    ProfileService profileService;
-
-    @Inject
     GdprService gdprService;
 
     @Inject
@@ -76,13 +71,10 @@ public class MeResource {
     UserNotificationService userNotificationService;
 
     @Inject
-    CvImportService cvImportService;
-
-    @Inject
-    AppConfig appConfig;
-
-    @Inject
     MeService meService;
+
+    @Inject
+    MeApplicationService meApplicationService;
 
     @Context
     UriInfo uriInfo;
@@ -93,12 +85,8 @@ public class MeResource {
         if (identityOnly) {
             return identityPayload();
         }
-        if (identity.isAnonymous()) {
-            return Response.noContent().build();
-        }
         try {
-            UUID userId = userResolver.resolveUserId();
-            return profileService.getProfile(userId)
+            return meApplicationService.getCurrentProfile(identity)
                     .map(schema -> Response.ok(schema).build())
                     .orElse(Response.noContent().build());
         } catch (jakarta.ws.rs.NotAuthorizedException | SecurityException e) {
@@ -107,7 +95,7 @@ public class MeResource {
     }
 
     private Response identityPayload() {
-        return meService.resolveIdentityPayload(identity)
+        return meApplicationService.getIdentityPayload(identity)
                 .map(payload -> Response.ok(payload).build())
                 .orElseGet(() -> identity.isAnonymous()
                         ? Response.noContent().build()
@@ -120,11 +108,7 @@ public class MeResource {
     @Authenticated
     @Consumes(MediaType.APPLICATION_JSON)
     public Response updateProfile(@Valid ProfileSchema updates) {
-        UUID userId = userResolver.resolveUserId();
-        profileService.upsertProfile(userId, updates);
-        return profileService.getProfile(userId)
-                .map(schema -> Response.ok(schema).build())
-                .orElse(Response.ok(updates).build());
+        return Response.ok(meApplicationService.upsertCurrentProfile(updates)).build();
     }
 
     @POST
@@ -132,9 +116,7 @@ public class MeResource {
     @Path("/import-apply")
     @Consumes(MediaType.APPLICATION_JSON)
     public Response applyImport(@Valid ProfileSchema selectedFields, @QueryParam("source") String source) {
-        UUID userId = userResolver.resolveUserId();
-        meService.applySelectiveImport(userId, selectedFields, source);
-        return profileService.getProfile(userId)
+        return meApplicationService.applyImport(selectedFields, source)
                 .map(schema -> Response.ok(schema).build())
                 .orElse(Response.noContent().build());
     }
@@ -198,27 +180,24 @@ public class MeResource {
     @Path("/cv-import")
     @Consumes(MediaType.MULTIPART_FORM_DATA)
     public Response uploadCv(@RestForm("file") FileUpload file) {
-        UUID userId = userResolver.resolveUserId();
-        if (file == null) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(ProblemDetail.of(400, "Bad Request", "Missing file"))
-                    .build();
-        }
-        if (file.size() > appConfig.cvImport().maxFileSize()) {
-            return Response.status(Response.Status.REQUEST_ENTITY_TOO_LARGE)
-                    .entity(ProblemDetail.of(413, "Payload Too Large", "File exceeds maximum size"))
-                    .build();
-        }
-
-        try (InputStream is = Files.newInputStream(file.filePath())) {
-            CvImportService.CvImportResult result = cvImportService.parseCv(
-                    is, file.fileName(), file.size(), userId);
+        try {
+            CvImportService.CvImportResult result = meApplicationService.parseCv(file);
             return Response.ok(Map.of("imported", result.schema(), "source", result.source())).build();
+        } catch (org.peoplemesh.domain.exception.ValidationBusinessException e) {
+            if ("File exceeds maximum size".equals(e.publicDetail())) {
+                return Response.status(Response.Status.REQUEST_ENTITY_TOO_LARGE)
+                        .entity(ProblemDetail.of(413, "Payload Too Large", e.publicDetail()))
+                        .build();
+            }
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(ProblemDetail.of(400, "Bad Request", e.publicDetail()))
+                    .build();
         } catch (IllegalStateException e) {
             return Response.status(Response.Status.BAD_GATEWAY)
                     .entity(ProblemDetail.of(502, "Bad Gateway", "CV processing failed"))
                     .build();
         } catch (Exception e) {
+            UUID userId = userResolver.resolveUserId();
             LOG.errorf(e, "CV upload processing failed for userId=%s", userId);
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
                     .entity(ProblemDetail.of(500, "Internal Server Error", "Error processing file"))
@@ -239,7 +218,12 @@ public class MeResource {
     @Authenticated
     @Path("/consents/{scope}")
     @Consumes(MediaType.APPLICATION_JSON)
-    public Response grantConsent(@PathParam("scope") String scope, @Context HttpHeaders headers) {
+    public Response grantConsent(
+            @PathParam("scope")
+            @Pattern(regexp = "^[a-z_]+$", message = "scope format is invalid")
+            String scope,
+            @Context HttpHeaders headers
+    ) {
         UUID userId = userResolver.resolveUserId();
         meService.grantConsent(userId, scope, OAuthCallbackService.DEFAULT_CONSENT_SCOPES, headers);
         return Response.ok(Map.of("scope", scope, "status", "granted")).build();
@@ -248,7 +232,11 @@ public class MeResource {
     @DELETE
     @Authenticated
     @Path("/consents/{scope}")
-    public Response revokeConsent(@PathParam("scope") String scope) {
+    public Response revokeConsent(
+            @PathParam("scope")
+            @Pattern(regexp = "^[a-z_]+$", message = "scope format is invalid")
+            String scope
+    ) {
         UUID userId = userResolver.resolveUserId();
         meService.revokeConsent(userId, scope, OAuthCallbackService.DEFAULT_CONSENT_SCOPES);
         return Response.ok(Map.of("scope", scope, "status", "revoked")).build();

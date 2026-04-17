@@ -15,7 +15,7 @@ import org.peoplemesh.domain.enums.NodeType;
 import org.peoplemesh.service.ClusteringScheduler;
 import org.peoplemesh.service.GdprService;
 import org.peoplemesh.service.JdbcConsentTokenStore;
-import org.peoplemesh.service.LdapImportService;
+import org.peoplemesh.service.MaintenanceService;
 import org.peoplemesh.service.NodeEmbeddingMaintenanceService;
 import org.peoplemesh.util.IpAllowlistUtils;
 
@@ -42,9 +42,7 @@ class MaintenanceResourceTest {
     @Mock
     ClusteringScheduler clusteringScheduler;
     @Mock
-    LdapImportService ldapImportService;
-    @Mock
-    NodeEmbeddingMaintenanceService nodeEmbeddingMaintenanceService;
+    MaintenanceService maintenanceService;
     @Mock
     HttpHeaders httpHeaders;
 
@@ -107,13 +105,13 @@ class MaintenanceResourceTest {
         when(maintenanceConfig.allowedCidrs()).thenReturn(Optional.empty());
         List<LdapUserPreview> previews = List.of(new LdapUserPreview("uid1", "User One", "u1@test.com",
                 "User", "One", "Dev", "IT", "US", "NYC"));
-        when(ldapImportService.preview(200)).thenReturn(previews);
+        when(maintenanceService.previewLdapUsers(500)).thenReturn(previews);
 
         Response response = resource.ldapPreview("valid-key", 500);
 
         assertEquals(200, response.getStatus());
         assertSame(previews, response.getEntity());
-        verify(ldapImportService).preview(200);
+        verify(maintenanceService).previewLdapUsers(500);
     }
 
     @Test
@@ -122,13 +120,13 @@ class MaintenanceResourceTest {
         when(maintenanceConfig.apiKey()).thenReturn(Optional.of("valid-key"));
         when(maintenanceConfig.allowedCidrs()).thenReturn(Optional.empty());
         LdapImportResult result = new LdapImportResult(5, 2, 1, 0, 1000, List.of());
-        when(ldapImportService.importFromLdap(any())).thenReturn(result);
+        when(maintenanceService.importFromLdap()).thenReturn(result);
 
         Response response = resource.ldapImport("valid-key");
 
         assertEquals(200, response.getStatus());
         assertSame(result, response.getEntity());
-        verify(ldapImportService).importFromLdap(any());
+        verify(maintenanceService).importFromLdap();
     }
 
     @Test
@@ -137,7 +135,7 @@ class MaintenanceResourceTest {
         when(maintenanceConfig.apiKey()).thenReturn(Optional.of("valid-key"));
 
         assertThrows(ForbiddenException.class, () -> resource.ldapImport("wrong-key"));
-        verify(ldapImportService, never()).importFromLdap(any());
+        verify(maintenanceService, never()).importFromLdap();
     }
 
     @Test
@@ -145,7 +143,7 @@ class MaintenanceResourceTest {
         when(config.maintenance()).thenReturn(maintenanceConfig);
         when(maintenanceConfig.apiKey()).thenReturn(Optional.of("valid-key"));
         when(maintenanceConfig.allowedCidrs()).thenReturn(Optional.empty());
-        when(ldapImportService.importFromLdap(any()))
+        when(maintenanceService.importFromLdap())
                 .thenThrow(new IllegalStateException("LDAP bind failed"));
 
         Response response = resource.ldapImport("valid-key");
@@ -175,14 +173,14 @@ class MaintenanceResourceTest {
                         null,
                         null
                 );
-        when(nodeEmbeddingMaintenanceService.startRegenerationEmbeddings(any(), isNull(), eq(false), eq(1)))
+        when(maintenanceService.startEmbeddingRegeneration(null, false, 1))
                 .thenReturn(queuedStatus);
 
         Response response = resource.regenerateEmbeddings("valid-key", null, false, 1);
 
         assertEquals(202, response.getStatus());
         assertSame(queuedStatus, response.getEntity());
-        verify(nodeEmbeddingMaintenanceService).startRegenerationEmbeddings(any(), isNull(), eq(false), eq(1));
+        verify(maintenanceService).startEmbeddingRegeneration(null, false, 1);
     }
 
     @Test
@@ -207,14 +205,14 @@ class MaintenanceResourceTest {
                         null,
                         null
                 );
-        when(nodeEmbeddingMaintenanceService.startRegenerationEmbeddings(any(), eq(NodeType.JOB), eq(true), eq(32)))
+        when(maintenanceService.startEmbeddingRegeneration("job", true, 32))
                 .thenReturn(queuedStatus);
 
         Response response = resource.regenerateEmbeddings("valid-key", "job", true, 32);
 
         assertEquals(202, response.getStatus());
         assertSame(queuedStatus, response.getEntity());
-        verify(nodeEmbeddingMaintenanceService).startRegenerationEmbeddings(any(), eq(NodeType.JOB), eq(true), eq(32));
+        verify(maintenanceService).startEmbeddingRegeneration("job", true, 32);
     }
 
     @Test
@@ -222,11 +220,13 @@ class MaintenanceResourceTest {
         when(config.maintenance()).thenReturn(maintenanceConfig);
         when(maintenanceConfig.apiKey()).thenReturn(Optional.of("valid-key"));
         when(maintenanceConfig.allowedCidrs()).thenReturn(Optional.empty());
+        when(maintenanceService.startEmbeddingRegeneration("not-valid", false, 1))
+                .thenThrow(new IllegalArgumentException("Invalid nodeType"));
 
         Response response = resource.regenerateEmbeddings("valid-key", "not-valid", false, 1);
 
         assertEquals(400, response.getStatus());
-        verify(nodeEmbeddingMaintenanceService, never()).startRegenerationEmbeddings(any(), any(), anyBoolean(), anyInt());
+        verify(maintenanceService).startEmbeddingRegeneration("not-valid", false, 1);
     }
 
     @Test
@@ -234,7 +234,7 @@ class MaintenanceResourceTest {
         when(config.maintenance()).thenReturn(maintenanceConfig);
         when(maintenanceConfig.apiKey()).thenReturn(Optional.of("valid-key"));
         when(maintenanceConfig.allowedCidrs()).thenReturn(Optional.empty());
-        when(nodeEmbeddingMaintenanceService.startRegenerationEmbeddings(any(), isNull(), eq(true), eq(64)))
+        when(maintenanceService.startEmbeddingRegeneration(null, true, 64))
                 .thenThrow(new IllegalArgumentException("batchSize must be between 1 and 32"));
 
         Response response = resource.regenerateEmbeddings("valid-key", null, true, 64);
@@ -265,7 +265,7 @@ class MaintenanceResourceTest {
                         Instant.now(),
                         null
                 );
-        when(nodeEmbeddingMaintenanceService.getRegenerationJobStatus(jobId)).thenReturn(Optional.of(status));
+        when(maintenanceService.getEmbeddingRegenerationStatus(jobId.toString())).thenReturn(Optional.of(status));
 
         Response response = resource.regenerateEmbeddingsStatus("valid-key", jobId.toString());
 
@@ -279,7 +279,7 @@ class MaintenanceResourceTest {
         when(maintenanceConfig.apiKey()).thenReturn(Optional.of("valid-key"));
         when(maintenanceConfig.allowedCidrs()).thenReturn(Optional.empty());
         UUID jobId = UUID.randomUUID();
-        when(nodeEmbeddingMaintenanceService.getRegenerationJobStatus(jobId)).thenReturn(Optional.empty());
+        when(maintenanceService.getEmbeddingRegenerationStatus(jobId.toString())).thenReturn(Optional.empty());
 
         Response response = resource.regenerateEmbeddingsStatus("valid-key", jobId.toString());
 
@@ -291,10 +291,12 @@ class MaintenanceResourceTest {
         when(config.maintenance()).thenReturn(maintenanceConfig);
         when(maintenanceConfig.apiKey()).thenReturn(Optional.of("valid-key"));
         when(maintenanceConfig.allowedCidrs()).thenReturn(Optional.empty());
+        when(maintenanceService.getEmbeddingRegenerationStatus("not-a-uuid"))
+                .thenThrow(new IllegalArgumentException("Invalid jobId format"));
 
         Response response = resource.regenerateEmbeddingsStatus("valid-key", "not-a-uuid");
 
         assertEquals(400, response.getStatus());
-        verify(nodeEmbeddingMaintenanceService, never()).getRegenerationJobStatus(any());
+        verify(maintenanceService).getEmbeddingRegenerationStatus("not-a-uuid");
     }
 }

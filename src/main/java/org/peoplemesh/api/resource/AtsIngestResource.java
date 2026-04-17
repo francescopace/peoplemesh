@@ -12,13 +12,11 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.peoplemesh.api.MaintenanceAuthHelper;
-import org.peoplemesh.api.error.ProblemDetail;
+import org.peoplemesh.application.AtsIngestApplicationService;
 import org.peoplemesh.config.AppConfig;
 import org.peoplemesh.domain.dto.AtsIngestRequestDto;
 import org.peoplemesh.domain.dto.AtsIngestResultDto;
 import org.peoplemesh.service.AtsIngestService;
-
-import java.util.Map;
 
 /**
  * Ingest endpoint for ATS (Applicant Tracking System) job feeds.
@@ -35,6 +33,9 @@ public class AtsIngestResource {
 
     @Inject
     AppConfig config;
+
+    @Inject
+    AtsIngestApplicationService atsIngestApplicationService;
 
     @Inject
     AtsIngestService atsIngestService;
@@ -75,16 +76,12 @@ public class AtsIngestResource {
                                @Valid AtsIngestRequestDto request) {
         assertAuthorized(key);
         if (request == null) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(ProblemDetail.of(400, "Bad Request", "Request body is required"))
-                    .build();
+            return Response.status(Response.Status.BAD_REQUEST).build();
         }
-        AtsIngestResultDto result = atsIngestService.ingestJobs(request);
-        return Response.ok(Map.of(
-                "upserted", result.upserted(),
-                "failed", result.failed(),
-                "errors", result.errors()
-        )).build();
+        AtsIngestResultDto result = atsIngestApplicationService != null
+                ? atsIngestApplicationService.ingestJobs(request)
+                : atsIngestService.ingestJobs(request);
+        return Response.ok(result).build();
     }
 
     private void assertAuthorized(String key) {

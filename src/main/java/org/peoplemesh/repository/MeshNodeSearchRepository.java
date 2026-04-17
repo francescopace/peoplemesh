@@ -104,7 +104,7 @@ public class MeshNodeSearchRepository {
 
         StringBuilder sql = new StringBuilder();
         sql.append("SELECT n.id, n.node_type, n.title, n.description, n.tags, n.country, ");
-        sql.append("n.updated_at, n.structured_data, ");
+        sql.append("n.updated_at, CASE WHEN n.node_type = 'USER' THEN n.structured_data ELSE NULL END as structured_data, ");
         sql.append("(1 - (n.embedding <=> cast(:vec as vector))) as cosine_sim ");
         sql.append("FROM mesh.mesh_node n ");
         sql.append("WHERE n.embedding IS NOT NULL ");

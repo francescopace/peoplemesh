@@ -12,8 +12,6 @@ import org.peoplemesh.domain.enums.WorkMode;
 import org.peoplemesh.domain.model.MeshNode;
 import org.peoplemesh.repository.MeshNodeSearchRepository;
 import org.peoplemesh.repository.NodeRepository;
-import org.peoplemesh.repository.SkillAssessmentRepository;
-import org.peoplemesh.repository.SkillDefinitionRepository;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
@@ -21,7 +19,6 @@ import org.jboss.logging.Logger;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @ApplicationScoped
 public class MatchingService {
@@ -94,13 +91,10 @@ public class MatchingService {
     ConsentService consentService;
 
     @Inject
-    SkillAssessmentRepository skillAssessmentRepository;
-
-    @Inject
-    SkillDefinitionRepository skillDefinitionRepository;
-
-    @Inject
     NodeRepository nodeRepository;
+
+    @Inject
+    SkillLevelResolutionService skillLevelResolutionService;
 
     private static List<String> parseCommaSeparatedRoles(String plain) {
         return MatchingUtils.splitCommaSeparated(plain);
@@ -214,31 +208,14 @@ public class MatchingService {
         List<UUID> nodeIds = candidates.stream()
                 .map(row -> (UUID) row[0])
                 .toList();
-        Map<UUID, List<org.peoplemesh.domain.model.SkillAssessment>> assessmentsByNode =
-                skillAssessmentRepository.findByNodeIds(nodeIds);
-        if (assessmentsByNode.isEmpty()) {
+        if (skillLevelResolutionService == null) {
             return Collections.emptyMap();
         }
-        Set<UUID> skillIds = assessmentsByNode.values().stream()
-                .flatMap(List::stream)
-                .map(a -> a.skillId)
-                .collect(Collectors.toSet());
-        Map<UUID, String> namesById = skillDefinitionRepository.findByIds(new ArrayList<>(skillIds)).stream()
-                .collect(Collectors.toMap(d -> d.id, d -> d.name));
-        Map<UUID, Map<String, Short>> result = new HashMap<>();
-        for (Map.Entry<UUID, List<org.peoplemesh.domain.model.SkillAssessment>> entry : assessmentsByNode.entrySet()) {
-            Map<String, Short> byName = new HashMap<>();
-            for (org.peoplemesh.domain.model.SkillAssessment assessment : entry.getValue()) {
-                String name = namesById.get(assessment.skillId);
-                if (name != null) {
-                    byName.put(name.toLowerCase(Locale.ROOT).trim(), assessment.level);
-                }
-            }
-            if (!byName.isEmpty()) {
-                result.put(entry.getKey(), byName);
-            }
+        SkillLevelResolutionService.SkillLevels skillLevels = skillLevelResolutionService.resolveForNodeIds(nodeIds);
+        if (skillLevels.levelsByNodeForScoring().isEmpty()) {
+            return Collections.emptyMap();
         }
-        return result;
+        return skillLevels.levelsByNodeForScoring();
     }
 
     /**

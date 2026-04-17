@@ -2,6 +2,7 @@ package org.peoplemesh.domain.dto;
 
 public record TimingStatisticsDto(
         OperationTimingStatsDto llmInference,
-        OperationTimingStatsDto embeddingInference,
+        OperationTimingStatsDto embeddingInferenceSingle,
+        OperationTimingStatsDto embeddingInferenceBatch,
         OperationTimingStatsDto hnswSearch
 ) {}

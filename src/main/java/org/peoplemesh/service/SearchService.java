@@ -7,8 +7,6 @@ import io.quarkus.arc.All;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.peoplemesh.repository.MeshNodeSearchRepository;
-import org.peoplemesh.repository.SkillAssessmentRepository;
-import org.peoplemesh.repository.SkillDefinitionRepository;
 import org.jboss.logging.Logger;
 import org.peoplemesh.config.AppConfig;
 import org.peoplemesh.domain.exception.RateLimitException;
@@ -19,7 +17,6 @@ import org.peoplemesh.domain.enums.EmploymentType;
 import org.peoplemesh.domain.enums.NodeType;
 import org.peoplemesh.domain.enums.Seniority;
 import org.peoplemesh.domain.enums.WorkMode;
-import org.peoplemesh.domain.model.SkillAssessment;
 import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -57,13 +54,10 @@ public class SearchService {
     ConsentService consentService;
 
     @Inject
-    SkillAssessmentRepository skillAssessmentRepository;
-
-    @Inject
-    SkillDefinitionRepository skillDefinitionRepository;
-
-    @Inject
     SearchRateLimiter searchRateLimiter;
+
+    @Inject
+    SkillLevelResolutionService skillLevelResolutionService;
 
     private final SearchRateLimiter localRateLimiter = new SearchRateLimiter();
 
@@ -77,7 +71,7 @@ public class SearchService {
             throw new RateLimitException("Search rate limit exceeded");
         }
 
-        SearchQueryParser parser = queryParsers.isEmpty() ? null : queryParsers.get(0);
+        SearchQueryParser parser = selectQueryParser().orElse(null);
         ParsedSearchQuery parsedQuery;
         if (parser != null) {
             parsedQuery = parser.parse(queryText).orElse(fallbackParse(queryText));
@@ -124,7 +118,8 @@ public class SearchService {
         for (Object[] row : rows) {
             String sdRaw = row[7] != null ? row[7].toString() : null;
             Map<String, Object> sd = null;
-            if (sdRaw != null) {
+            NodeType nodeType = MatchingUtils.parseEnum(NodeType.class, (String) row[1]);
+            if (nodeType == NodeType.USER && sdRaw != null) {
                 try {
                     sd = objectMapper.readValue(sdRaw, new TypeReference<>() {});
                 } catch (Exception e) {
@@ -133,7 +128,7 @@ public class SearchService {
             }
             candidates.add(new RawNodeCandidate(
                     (UUID) row[0],
-                    MatchingUtils.parseEnum(NodeType.class, (String) row[1]),
+                    nodeType,
                     (String) row[2],
                     (String) row[3],
                     MatchingUtils.parseArray(row[4]),
@@ -436,44 +431,23 @@ public class SearchService {
         if (nodeIds.isEmpty()) {
             return SkillLevelContext.empty();
         }
-        Map<UUID, List<SkillAssessment>> assessmentsByNode = skillAssessmentRepository.findByNodeIds(nodeIds);
-        if (assessmentsByNode.isEmpty()) {
+        if (skillLevelResolutionService == null) {
             return SkillLevelContext.empty();
         }
-        Set<UUID> skillIds = assessmentsByNode.values().stream()
-                .flatMap(List::stream)
-                .map(a -> a.skillId)
-                .collect(Collectors.toSet());
-        if (skillIds.isEmpty()) {
+        SkillLevelResolutionService.SkillLevels skillLevels = skillLevelResolutionService.resolveForNodeIds(nodeIds);
+        if (skillLevels.levelsByNodeForResult().isEmpty() && skillLevels.levelsByNodeForScoring().isEmpty()) {
             return SkillLevelContext.empty();
         }
-        Map<UUID, String> namesById = skillDefinitionRepository.findByIds(new ArrayList<>(skillIds)).stream()
-                .collect(Collectors.toMap(d -> d.id, d -> d.name));
+        return new SkillLevelContext(skillLevels.levelsByNodeForResult(), skillLevels.levelsByNodeForScoring());
+    }
 
-        Map<UUID, Map<String, Integer>> levelsByNodeForResult = new HashMap<>();
-        Map<UUID, Map<String, Short>> levelsByNodeForScoring = new HashMap<>();
-        for (Map.Entry<UUID, List<SkillAssessment>> entry : assessmentsByNode.entrySet()) {
-            Map<String, Integer> resultLevels = new LinkedHashMap<>();
-            Map<String, Short> scoringLevels = new HashMap<>();
-            for (SkillAssessment assessment : entry.getValue()) {
-                if (assessment.level <= 0) {
-                    continue;
-                }
-                String name = namesById.get(assessment.skillId);
-                if (name == null) {
-                    continue;
-                }
-                resultLevels.put(name, (int) assessment.level);
-                scoringLevels.put(name.toLowerCase(Locale.ROOT).trim(), assessment.level);
-            }
-            if (!resultLevels.isEmpty()) {
-                levelsByNodeForResult.put(entry.getKey(), resultLevels);
-            }
-            if (!scoringLevels.isEmpty()) {
-                levelsByNodeForScoring.put(entry.getKey(), scoringLevels);
-            }
+    private Optional<SearchQueryParser> selectQueryParser() {
+        if (queryParsers == null || queryParsers.isEmpty()) {
+            return Optional.empty();
         }
-        return new SkillLevelContext(levelsByNodeForResult, levelsByNodeForScoring);
+        return queryParsers.stream()
+                .filter(Objects::nonNull)
+                .findFirst();
     }
 
     // === Records ===

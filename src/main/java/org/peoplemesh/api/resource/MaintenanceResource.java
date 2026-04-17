@@ -4,6 +4,7 @@ import io.smallrye.common.annotation.Blocking;
 import jakarta.inject.Inject;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Pattern;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.HeaderParam;
@@ -16,34 +17,26 @@ import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
-import org.jboss.logging.Logger;
 import org.peoplemesh.api.MaintenanceAuthHelper;
 import org.peoplemesh.api.error.ProblemDetail;
+import org.peoplemesh.application.MaintenanceApplicationService;
 import org.peoplemesh.config.AppConfig;
+import org.peoplemesh.domain.exception.NotFoundBusinessException;
 import org.peoplemesh.service.ClusteringScheduler;
 import org.peoplemesh.service.GdprService;
 import org.peoplemesh.service.JdbcConsentTokenStore;
-import org.peoplemesh.service.LdapImportService;
 import org.peoplemesh.service.MaintenanceService;
-import org.peoplemesh.service.NodeEmbeddingMaintenanceService;
 
-import java.util.Map;
-import java.util.UUID;
-
-/**
- * Maintenance endpoint for scheduled tasks.
- * Protected by a shared secret (API key) and optional IP allowlist so it can be called by
- * external schedulers (AWS EventBridge, cron, Lambda) without a user session.
- */
 @Path("/api/v1/maintenance")
 @Produces(MediaType.APPLICATION_JSON)
 @Blocking
 public class MaintenanceResource {
 
-    private static final Logger LOG = Logger.getLogger(MaintenanceResource.class);
-
     @Inject
     AppConfig config;
+
+    @Inject
+    MaintenanceApplicationService maintenanceApplicationService;
 
     @Inject
     JdbcConsentTokenStore consentTokenStore;
@@ -57,12 +50,6 @@ public class MaintenanceResource {
     @Inject
     MaintenanceService maintenanceService;
 
-    @Inject
-    LdapImportService ldapImportService;
-
-    @Inject
-    NodeEmbeddingMaintenanceService nodeEmbeddingMaintenanceService;
-
     @Context
     HttpHeaders httpHeaders;
 
@@ -70,26 +57,36 @@ public class MaintenanceResource {
     @Path("/purge-consent-tokens")
     public Response purgeConsentTokens(@HeaderParam("X-Maintenance-Key") String key) {
         assertAuthorized(key);
-        int purged = consentTokenStore.purgeExpired();
-        LOG.infof("Maintenance: purged %d expired consent tokens", purged);
-        return Response.ok(Map.of("action", "purge-consent-tokens", "purged", purged)).build();
+        if (maintenanceApplicationService != null) {
+            return Response.ok(maintenanceApplicationService.purgeConsentTokens()).build();
+        }
+        return Response.ok(java.util.Map.of("action", "purge-consent-tokens", "purged", consentTokenStore.purgeExpired())).build();
     }
 
     @POST
     @Path("/enforce-retention")
     public Response enforceRetention(@HeaderParam("X-Maintenance-Key") String key) {
         assertAuthorized(key);
-        int deleted = gdprService.enforceRetention(config.retention().inactiveMonths());
-        LOG.infof("Maintenance: retention enforcement deleted %d inactive profiles", deleted);
-        return Response.ok(Map.of("action", "enforce-retention", "deleted", deleted)).build();
+        if (maintenanceApplicationService != null) {
+            return Response.ok(maintenanceApplicationService.enforceRetention()).build();
+        }
+        return Response.ok(java.util.Map.of(
+                "action",
+                "enforce-retention",
+                "deleted",
+                gdprService.enforceRetention(config.retention().inactiveMonths())
+        )).build();
     }
 
     @POST
     @Path("/run-clustering")
     public Response runClustering(@HeaderParam("X-Maintenance-Key") String key) {
         assertAuthorized(key);
+        if (maintenanceApplicationService != null) {
+            return Response.ok(maintenanceApplicationService.runClustering()).build();
+        }
         clusteringScheduler.runClustering();
-        return Response.ok(Map.of("action", "run-clustering", "status", "completed")).build();
+        return Response.ok(java.util.Map.of("action", "run-clustering", "status", "completed")).build();
     }
 
     @POST
@@ -98,10 +95,7 @@ public class MaintenanceResource {
                                 @QueryParam("limit") @DefaultValue("20") @Min(1) @Max(200) int limit) {
         assertAuthorized(key);
         try {
-            if (maintenanceService != null) {
-                return Response.ok(maintenanceService.previewLdapUsers(limit)).build();
-            }
-            return Response.ok(ldapImportService.preview(Math.min(limit, 200))).build();
+            return Response.ok(maintenanceService.previewLdapUsers(limit)).build();
         } catch (IllegalStateException e) {
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity(ProblemDetail.of(400, "Configuration Error", "LDAP configuration is invalid"))
@@ -114,11 +108,7 @@ public class MaintenanceResource {
     public Response ldapImport(@HeaderParam("X-Maintenance-Key") String key) {
         assertAuthorized(key);
         try {
-            if (maintenanceService != null) {
-                return Response.ok(maintenanceService.importFromLdap()).build();
-            }
-            UUID actorId = UUID.fromString("00000000-0000-0000-0000-000000000001");
-            return Response.ok(ldapImportService.importFromLdap(actorId)).build();
+            return Response.ok(maintenanceService.importFromLdap()).build();
         } catch (IllegalStateException e) {
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity(ProblemDetail.of(400, "Configuration Error", "LDAP configuration is invalid"))
@@ -129,23 +119,16 @@ public class MaintenanceResource {
     @POST
     @Path("/regenerate-embeddings")
     public Response regenerateEmbeddings(@HeaderParam("X-Maintenance-Key") String key,
-                                         @QueryParam("nodeType") String nodeTypeParam,
+                                         @QueryParam("nodeType")
+                                         @Pattern(regexp = "^[A-Za-z_]*$", message = "nodeType must be alphabetic")
+                                         String nodeTypeParam,
                                          @QueryParam("onlyMissing") @DefaultValue("true") boolean onlyMissing,
                                          @QueryParam("batchSize") @DefaultValue("1") @Min(1) @Max(1000) int batchSize) {
         assertAuthorized(key);
         try {
-            if (maintenanceService != null) {
-                var status = maintenanceService.startEmbeddingRegeneration(nodeTypeParam, onlyMissing, batchSize);
-                return Response.accepted(status).build();
-            }
-            UUID actorId = UUID.fromString("00000000-0000-0000-0000-000000000001");
-            var status = nodeEmbeddingMaintenanceService.startRegenerationEmbeddings(
-                    actorId,
-                    parseNodeType(nodeTypeParam),
-                    onlyMissing,
-                    batchSize
-            );
-            return Response.accepted(status).build();
+            return Response.accepted(maintenanceService.startEmbeddingRegeneration(
+                    nodeTypeParam, onlyMissing, batchSize
+            )).build();
         } catch (IllegalArgumentException e) {
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity(ProblemDetail.of(400, "Validation Error", "Invalid maintenance request"))
@@ -156,37 +139,22 @@ public class MaintenanceResource {
     @GET
     @Path("/regenerate-embeddings/{jobId}")
     public Response regenerateEmbeddingsStatus(@HeaderParam("X-Maintenance-Key") String key,
-                                               @PathParam("jobId") String jobIdParam) {
+                                               @PathParam("jobId")
+                                               @Pattern(regexp = "^[0-9a-fA-F\\-]{36}$", message = "jobId must be a UUID")
+                                               String jobIdParam) {
         assertAuthorized(key);
         try {
-            if (maintenanceService != null) {
-                return maintenanceService.getEmbeddingRegenerationStatus(jobIdParam)
-                        .<Response>map(status -> Response.ok(status).build())
-                        .orElseGet(() -> Response.status(Response.Status.NOT_FOUND)
-                                .entity(ProblemDetail.of(404, "Not Found", "Embedding job not found"))
-                                .build());
-            }
-            UUID jobId = UUID.fromString(jobIdParam);
-            return nodeEmbeddingMaintenanceService.getRegenerationJobStatus(jobId)
-                    .<Response>map(status -> Response.ok(status).build())
-                    .orElseGet(() -> Response.status(Response.Status.NOT_FOUND)
-                            .entity(ProblemDetail.of(404, "Not Found", "Embedding job not found"))
-                            .build());
+            var status = maintenanceService.getEmbeddingRegenerationStatus(jobIdParam)
+                    .orElseThrow(() -> new NotFoundBusinessException("Embedding job not found"));
+            return Response.ok(status).build();
+        } catch (NotFoundBusinessException e) {
+            return Response.status(Response.Status.NOT_FOUND)
+                    .entity(ProblemDetail.of(404, "Not Found", e.publicDetail()))
+                    .build();
         } catch (IllegalArgumentException e) {
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity(ProblemDetail.of(400, "Validation Error", "Invalid jobId format"))
                     .build();
-        }
-    }
-
-    private org.peoplemesh.domain.enums.NodeType parseNodeType(String nodeTypeParam) {
-        if (nodeTypeParam == null || nodeTypeParam.isBlank()) {
-            return null;
-        }
-        try {
-            return org.peoplemesh.domain.enums.NodeType.valueOf(nodeTypeParam.trim().toUpperCase());
-        } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Invalid nodeType");
         }
     }
 

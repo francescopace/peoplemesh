@@ -85,14 +85,19 @@ async function renderAdminOverview(container) {
       stats: overview?.timings?.llmInference,
     },
     {
-      label: "Embedding",
-      icon: "neurology",
-      stats: overview?.timings?.embeddingInference,
-    },
-    {
       label: "HNSW search",
       icon: "travel_explore",
       stats: overview?.timings?.hnswSearch,
+    },
+    {
+      label: "Embedding (single)",
+      icon: "neurology",
+      stats: overview?.timings?.embeddingInferenceSingle,
+    },
+    {
+      label: "Embedding (batch)",
+      icon: "hub",
+      stats: overview?.timings?.embeddingInferenceBatch,
     },
   ];
 

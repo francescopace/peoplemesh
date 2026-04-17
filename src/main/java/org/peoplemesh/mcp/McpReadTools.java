@@ -61,7 +61,7 @@ public class McpReadTools {
                     })
                     .orElse(new TextContent("No profile found. Create one via the PeopleMesh web UI."));
         } catch (SecurityException e) {
-            return new TextContent("Error: " + e.getMessage());
+            return new TextContent("Error: access denied.");
         } catch (Exception e) {
             LOG.errorf(e, "Error retrieving profile");
             return McpToolHelper.error("retrieve your profile");
@@ -81,19 +81,22 @@ public class McpReadTools {
             }
             ProfileSchema schema = McpToolHelper.parsePayload(
                     profileJson, ProfileSchema.class, MAX_PAYLOAD_SIZE, objectMapper);
-            float[] embedding = embeddingService.generateEmbedding(
-                    org.peoplemesh.service.EmbeddingTextBuilder.buildFromSchema(schema));
-            if (embedding == null) {
-                return new TextContent("Error: Embedding input was empty.");
-            }
             UUID userId = userResolver.resolveUserId();
-            List<MeshMatchResult> results = matchesService != null
-                    ? matchesService.matchFromSchema(userId, schema, type, country)
-                    : matchingService.findAllMatches(userId, embedding, type, country);
+            List<MeshMatchResult> results;
+            if (matchesService != null) {
+                results = matchesService.matchFromSchema(userId, schema, type, country);
+            } else {
+                float[] embedding = embeddingService.generateEmbedding(
+                        org.peoplemesh.service.EmbeddingTextBuilder.buildFromSchema(schema));
+                if (embedding == null) {
+                    return new TextContent("Error: Embedding input was empty.");
+                }
+                results = matchingService.findAllMatches(userId, embedding, type, country);
+            }
             String json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(results);
             return new TextContent(json);
         } catch (SecurityException e) {
-            return new TextContent("Error: " + e.getMessage());
+            return new TextContent("Error: access denied.");
         } catch (IllegalArgumentException e) {
             return new TextContent("Error: invalid profile payload.");
         } catch (BusinessException e) {
@@ -116,7 +119,7 @@ public class McpReadTools {
             String json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(results);
             return new TextContent(json);
         } catch (SecurityException e) {
-            return new TextContent("Error: " + e.getMessage());
+            return new TextContent("Error: access denied.");
         } catch (BusinessException e) {
             return new TextContent("Error: " + e.publicDetail());
         } catch (Exception e) {
@@ -140,23 +143,20 @@ public class McpReadTools {
                 return new TextContent("Error: Invalid nodeId format.");
             }
             UUID userId = userResolver.resolveUserId();
-            List<MeshMatchResult> results;
-            if (matchesService != null) {
-                results = matchesService.matchFromNode(userId, id, type, country);
-            } else {
-                MeshNode node = nodeRepository.findById(id).orElse(null);
-                if (node == null || node.embedding == null) {
-                    return new TextContent("Node not found or has no embedding.");
-                }
-                if (!nodeAccessPolicyService.canReadNode(userId, node)) {
-                    return new TextContent("Error: You do not have access to this node.");
-                }
-                results = matchingService.findAllMatches(userId, node.embedding, type, country);
+            MeshNode node = nodeRepository.findById(id).orElse(null);
+            if (node == null || node.embedding == null) {
+                return new TextContent("Node not found or has no embedding.");
             }
+            if (!nodeAccessPolicyService.canReadNode(userId, node)) {
+                return new TextContent("Error: access denied.");
+            }
+            List<MeshMatchResult> results = matchesService != null
+                    ? matchesService.matchFromNode(userId, id, type, country)
+                    : matchingService.findAllMatches(userId, node.embedding, type, country);
             String json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(results);
             return new TextContent(json);
         } catch (SecurityException e) {
-            return new TextContent("Error: " + e.getMessage());
+            return new TextContent("Error: access denied.");
         } catch (BusinessException e) {
             return new TextContent("Error: " + e.publicDetail());
         } catch (Exception e) {

@@ -125,7 +125,7 @@ public class MeService {
     }
 
     public void validateConsentScope(String scope, Collection<String> allowedScopes) {
-        if (!allowedScopes.contains(scope)) {
+        if (scope == null || scope.isBlank() || !allowedScopes.contains(scope)) {
             throw new ValidationBusinessException("Invalid consent scope: " + scope);
         }
     }
