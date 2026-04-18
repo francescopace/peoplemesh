@@ -12,6 +12,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
 import org.peoplemesh.domain.dto.ProfileSchema;
+import org.peoplemesh.util.StringUtils;
 
 import java.time.Instant;
 import java.util.Iterator;
@@ -174,7 +175,7 @@ public class LlmProfileStructuring implements ProfileStructuringLlm {
         try {
             String repaired = runChat(
                     REPAIR_PROMPT,
-                    "Extraction UTC timestamp: " + extractionTimestamp + "\nMalformed JSON:\n" + MatchingUtils.stripMarkdownFences(content)
+                    "Extraction UTC timestamp: " + extractionTimestamp + "\nMalformed JSON:\n" + StringUtils.stripMarkdownFences(content)
             );
             Optional<ProfileSchema> repairedParsed = parseProfileSchema(repaired);
             if (repairedParsed.isPresent()) {
@@ -197,7 +198,7 @@ public class LlmProfileStructuring implements ProfileStructuringLlm {
 
     private Optional<ProfileSchema> parseProfileSchema(String content) {
         try {
-            String raw = MatchingUtils.stripMarkdownFences(content);
+            String raw = StringUtils.stripMarkdownFences(content);
             String jsonCandidate = extractJsonCandidate(raw);
             JsonNode root = objectMapper.readTree(jsonCandidate);
             if (!(root instanceof ObjectNode objectRoot)) {

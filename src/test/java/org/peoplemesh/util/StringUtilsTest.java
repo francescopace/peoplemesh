@@ -3,6 +3,7 @@ package org.peoplemesh.util;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 class StringUtilsTest {
@@ -60,5 +61,26 @@ class StringUtilsTest {
     @Test
     void firstNonBlank_firstValid_returnsFirst() {
         assertEquals("a", StringUtils.firstNonBlank("a", "b"));
+    }
+
+    @Test
+    void splitCommaSeparated_blank_returnsEmpty() {
+        assertTrue(StringUtils.splitCommaSeparated(" ").isEmpty());
+    }
+
+    @Test
+    void splitCommaSeparated_splitsAndTrims() {
+        assertEquals(java.util.List.of("a", "b", "c"), StringUtils.splitCommaSeparated("a, b , c"));
+    }
+
+    @Test
+    void round3_roundsToThreeDecimals() {
+        assertEquals(1.235, StringUtils.round3(1.23456));
+    }
+
+    @Test
+    void stripMarkdownFences_stripsJsonFence() {
+        String fenced = "```json\n{\"a\":1}\n```";
+        assertEquals("{\"a\":1}", StringUtils.stripMarkdownFences(fenced));
     }
 }

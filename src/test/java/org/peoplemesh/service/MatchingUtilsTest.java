@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 import org.peoplemesh.domain.enums.EmploymentType;
 import org.peoplemesh.domain.enums.WorkMode;
 import org.peoplemesh.domain.model.MeshNode;
+import org.peoplemesh.util.SqlParsingUtils;
+import org.peoplemesh.util.StringUtils;
 
 import java.sql.SQLException;
 import java.time.Instant;
@@ -13,114 +15,114 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class MatchingUtilsTest {
 
-    // === vectorToString ===
+    // === SqlParsingUtils.vectorToString ===
 
     @Test
     void vectorToString_formats() {
-        assertEquals("[1.0,2.5,3.0]", MatchingUtils.vectorToString(new float[]{1.0f, 2.5f, 3.0f}));
+        assertEquals("[1.0,2.5,3.0]", SqlParsingUtils.vectorToString(new float[]{1.0f, 2.5f, 3.0f}));
     }
 
     @Test
     void vectorToString_empty() {
-        assertEquals("[]", MatchingUtils.vectorToString(new float[]{}));
+        assertEquals("[]", SqlParsingUtils.vectorToString(new float[]{}));
     }
 
     @Test
     void vectorToString_single() {
-        assertEquals("[7.0]", MatchingUtils.vectorToString(new float[]{7.0f}));
+        assertEquals("[7.0]", SqlParsingUtils.vectorToString(new float[]{7.0f}));
     }
 
-    // === parseArray ===
+    // === SqlParsingUtils.parseArray ===
 
     @Test
     void parseArray_null_returnsEmpty() {
-        assertTrue(MatchingUtils.parseArray(null).isEmpty());
+        assertTrue(SqlParsingUtils.parseArray(null).isEmpty());
     }
 
     @Test
     void parseArray_stringArray_returnsList() {
         String[] arr = {"a", "b"};
-        assertEquals(List.of("a", "b"), MatchingUtils.parseArray(arr));
+        assertEquals(List.of("a", "b"), SqlParsingUtils.parseArray(arr));
     }
 
     @Test
     void parseArray_list_returnsList() {
         List<Object> list = List.of("x", 42);
-        assertEquals(List.of("x", "42"), MatchingUtils.parseArray(list));
+        assertEquals(List.of("x", "42"), SqlParsingUtils.parseArray(list));
     }
 
     @Test
     void parseArray_listWithNulls_filtersNulls() {
         List<Object> list = new ArrayList<>(Arrays.asList("a", null, "b"));
-        assertEquals(List.of("a", "b"), MatchingUtils.parseArray(list));
+        assertEquals(List.of("a", "b"), SqlParsingUtils.parseArray(list));
     }
 
     @Test
     void parseArray_sqlArray_success() throws SQLException {
         java.sql.Array sqlArray = new StubSqlArray(new String[]{"x", "y"});
-        assertEquals(List.of("x", "y"), MatchingUtils.parseArray(sqlArray));
+        assertEquals(List.of("x", "y"), SqlParsingUtils.parseArray(sqlArray));
     }
 
     @Test
     void parseArray_sqlArray_exception_returnsEmpty() {
         java.sql.Array sqlArray = new StubSqlArray(null);
-        assertTrue(MatchingUtils.parseArray(sqlArray).isEmpty());
+        assertTrue(SqlParsingUtils.parseArray(sqlArray).isEmpty());
     }
 
     @Test
     void parseArray_unknownType_returnsEmpty() {
-        assertTrue(MatchingUtils.parseArray(42).isEmpty());
+        assertTrue(SqlParsingUtils.parseArray(42).isEmpty());
     }
 
-    // === parseEnum ===
+    // === SqlParsingUtils.parseEnum ===
 
     enum Color { RED, GREEN, BLUE }
 
     @Test
     void parseEnum_valid() {
-        assertEquals(Color.RED, MatchingUtils.parseEnum(Color.class, "RED"));
+        assertEquals(Color.RED, SqlParsingUtils.parseEnum(Color.class, "RED"));
     }
 
     @Test
     void parseEnum_invalid_returnsNull() {
-        assertNull(MatchingUtils.parseEnum(Color.class, "PURPLE"));
+        assertNull(SqlParsingUtils.parseEnum(Color.class, "PURPLE"));
     }
 
     @Test
     void parseEnum_null_returnsNull() {
-        assertNull(MatchingUtils.parseEnum(Color.class, null));
+        assertNull(SqlParsingUtils.parseEnum(Color.class, null));
     }
 
-    // === toInstant ===
+    // === SqlParsingUtils.toInstant ===
 
     @Test
     void toInstant_null_returnsNull() {
-        assertNull(MatchingUtils.toInstant(null));
+        assertNull(SqlParsingUtils.toInstant(null));
     }
 
     @Test
     void toInstant_instant_returnsSame() {
         Instant now = Instant.now();
-        assertSame(now, MatchingUtils.toInstant(now));
+        assertSame(now, SqlParsingUtils.toInstant(now));
     }
 
     @Test
     void toInstant_timestamp_converts() {
         Instant now = Instant.now();
         java.sql.Timestamp ts = java.sql.Timestamp.from(now);
-        assertEquals(now, MatchingUtils.toInstant(ts));
+        assertEquals(now, SqlParsingUtils.toInstant(ts));
     }
 
     @Test
     void toInstant_utilDate_converts() {
         Instant now = Instant.ofEpochMilli(1000000);
         java.util.Date date = java.util.Date.from(now);
-        assertEquals(now, MatchingUtils.toInstant(date));
+        assertEquals(now, SqlParsingUtils.toInstant(date));
     }
 
     @Test
     void toInstant_unsupportedType_throws() {
-        assertThrows(IllegalArgumentException.class, () -> MatchingUtils.toInstant("not-a-date"));
+        assertThrows(IllegalArgumentException.class, () -> SqlParsingUtils.toInstant("not-a-date"));
     }
 
     // === combineLists ===
@@ -222,55 +224,55 @@ class MatchingUtilsTest {
         assertEquals(List.of("Java"), result);
     }
 
-    // === splitCommaSeparated ===
+    // === StringUtils.splitCommaSeparated ===
 
     @Test
     void splitCommaSeparated_normal() {
-        assertEquals(List.of("a", "b", "c"), MatchingUtils.splitCommaSeparated("a, b , c"));
+        assertEquals(List.of("a", "b", "c"), StringUtils.splitCommaSeparated("a, b , c"));
     }
 
     @Test
     void splitCommaSeparated_nullOrBlank() {
-        assertTrue(MatchingUtils.splitCommaSeparated(null).isEmpty());
-        assertTrue(MatchingUtils.splitCommaSeparated("  ").isEmpty());
+        assertTrue(StringUtils.splitCommaSeparated(null).isEmpty());
+        assertTrue(StringUtils.splitCommaSeparated("  ").isEmpty());
     }
 
     @Test
     void splitCommaSeparated_emptySegments() {
-        assertEquals(List.of("a", "b"), MatchingUtils.splitCommaSeparated("a,,b"));
+        assertEquals(List.of("a", "b"), StringUtils.splitCommaSeparated("a,,b"));
     }
 
-    // === round3 ===
+    // === StringUtils.round3 ===
 
     @Test
     void round3_roundsCorrectly() {
-        assertEquals(0.333, MatchingUtils.round3(0.33333333));
-        assertEquals(1.0, MatchingUtils.round3(1.0));
-        assertEquals(0.0, MatchingUtils.round3(0.0));
+        assertEquals(0.333, StringUtils.round3(0.33333333));
+        assertEquals(1.0, StringUtils.round3(1.0));
+        assertEquals(0.0, StringUtils.round3(0.0));
     }
 
-    // === stripMarkdownFences ===
+    // === StringUtils.stripMarkdownFences ===
 
     @Test
     void stripMarkdownFences_null_returnsNull() {
-        assertNull(MatchingUtils.stripMarkdownFences(null));
+        assertNull(StringUtils.stripMarkdownFences(null));
     }
 
     @Test
     void stripMarkdownFences_withFences_strips() {
         String input = "```json\n{\"key\": \"value\"}\n```";
-        assertEquals("{\"key\": \"value\"}", MatchingUtils.stripMarkdownFences(input));
+        assertEquals("{\"key\": \"value\"}", StringUtils.stripMarkdownFences(input));
     }
 
     @Test
     void stripMarkdownFences_withoutFences_returnsStripped() {
-        assertEquals("hello world", MatchingUtils.stripMarkdownFences("  hello world  "));
+        assertEquals("hello world", StringUtils.stripMarkdownFences("  hello world  "));
     }
 
     @Test
     void stripMarkdownFences_fencesNoLang_strips() {
         String input = "```\ncontent\n```";
-        assertEquals("content", MatchingUtils.stripMarkdownFences(input));
+        assertEquals("content", StringUtils.stripMarkdownFences(input));
     }
 
     // === structuredWorkMode ===

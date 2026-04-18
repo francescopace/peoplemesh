@@ -1,7 +1,7 @@
 package org.peoplemesh.util;
 
 import org.junit.jupiter.api.Test;
-import org.peoplemesh.service.ClusterNamingLlm;
+import org.peoplemesh.domain.dto.ClusterName;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -29,9 +29,9 @@ class ClusterNamingHeuristicsTest {
     @Test
     void fromTraits_singleSkill_buildsTitleDescriptionAndTags() {
         Map<String, List<String>> traits = Map.of("skills", List.of("java"));
-        Optional<ClusterNamingLlm.ClusterName> result = ClusterNamingHeuristics.fromTraits(traits);
+        Optional<ClusterName> result = ClusterNamingHeuristics.fromTraits(traits);
         assertTrue(result.isPresent());
-        ClusterNamingLlm.ClusterName name = result.get();
+        ClusterName name = result.get();
         assertEquals("Java Community", name.title());
         assertEquals("An auto-discovered community of people interested in java.", name.description());
         assertEquals(List.of("java"), name.tags());
@@ -42,9 +42,9 @@ class ClusterNamingHeuristicsTest {
         Map<String, List<String>> traits = new LinkedHashMap<>();
         traits.put("skills", List.of("java"));
         traits.put("hobbies", List.of("photography"));
-        Optional<ClusterNamingLlm.ClusterName> result = ClusterNamingHeuristics.fromTraits(traits);
+        Optional<ClusterName> result = ClusterNamingHeuristics.fromTraits(traits);
         assertTrue(result.isPresent());
-        ClusterNamingLlm.ClusterName name = result.get();
+        ClusterName name = result.get();
         assertEquals("Java, Photography Community", name.title());
         assertEquals("An auto-discovered community of people interested in java, photography.", name.description());
         assertEquals(List.of("java", "photography"), name.tags());
@@ -55,9 +55,9 @@ class ClusterNamingHeuristicsTest {
         Map<String, List<String>> traits = new LinkedHashMap<>();
         traits.put("skills", List.of("a", "b", "c"));
         traits.put("hobbies", List.of("d", "e", "f"));
-        Optional<ClusterNamingLlm.ClusterName> result = ClusterNamingHeuristics.fromTraits(traits);
+        Optional<ClusterName> result = ClusterNamingHeuristics.fromTraits(traits);
         assertTrue(result.isPresent());
-        ClusterNamingLlm.ClusterName name = result.get();
+        ClusterName name = result.get();
         assertEquals("A, B, C Community", name.title());
         assertEquals(List.of("a", "b", "c", "d", "e"), name.tags());
     }
@@ -68,7 +68,7 @@ class ClusterNamingHeuristicsTest {
         traits.put("skills", List.of("1", "2", "3"));
         traits.put("hobbies", List.of("4", "5", "6"));
         traits.put("topics", List.of("7"));
-        Optional<ClusterNamingLlm.ClusterName> result = ClusterNamingHeuristics.fromTraits(traits);
+        Optional<ClusterName> result = ClusterNamingHeuristics.fromTraits(traits);
         assertTrue(result.isPresent());
         assertEquals(List.of("1", "2", "3", "4", "5"), result.get().tags());
     }

@@ -9,7 +9,9 @@ import io.micrometer.core.annotation.Timed;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
+import org.peoplemesh.domain.dto.ClusterName;
 import org.peoplemesh.util.ClusterNamingHeuristics;
+import org.peoplemesh.util.StringUtils;
 
 import java.util.*;
 
@@ -54,7 +56,7 @@ public class LlmClusterNaming implements ClusterNamingLlm {
         }
 
         try {
-            JsonNode parsed = objectMapper.readTree(MatchingUtils.stripMarkdownFences(content));
+            JsonNode parsed = objectMapper.readTree(StringUtils.stripMarkdownFences(content));
 
             String title = parsed.path("title").asText();
             String description = parsed.path("description").asText();

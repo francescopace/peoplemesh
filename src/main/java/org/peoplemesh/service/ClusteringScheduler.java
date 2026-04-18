@@ -5,6 +5,7 @@ import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 import org.peoplemesh.config.AppConfig;
+import org.peoplemesh.domain.dto.ClusterName;
 import org.peoplemesh.domain.enums.NodeType;
 import org.peoplemesh.domain.model.MeshNode;
 import org.peoplemesh.repository.NodeRepository;
@@ -58,10 +59,10 @@ public class ClusteringScheduler {
             List<MeshNode> existingCommunities = loadCommunityNodes();
             for (ClusterResult cluster : clusters) {
                 Map<String, List<String>> traits = clusteringService.extractClusterTraits(cluster.memberUserIds(), 10);
-                Optional<ClusterNamingLlm.ClusterName> nameOpt = clusterNamingLlm.generateName(traits);
+                Optional<ClusterName> nameOpt = clusterNamingLlm.generateName(traits);
                 if (nameOpt.isEmpty()) continue;
 
-                ClusterNamingLlm.ClusterName name = nameOpt.get();
+                ClusterName name = nameOpt.get();
 
                 MeshNode existing = findExistingAutoNode(name.tags(), existingCommunities);
                 if (existing != null) {
@@ -82,7 +83,7 @@ public class ClusteringScheduler {
     }
 
     @Transactional
-    MeshNode createAutoNode(ClusterNamingLlm.ClusterName name, ClusterResult cluster) {
+    MeshNode createAutoNode(ClusterName name, ClusterResult cluster) {
         MeshNode node = newCommunityNode();
         node.createdBy = cluster.memberUserIds().get(0);
         node.nodeType = NodeType.COMMUNITY;
@@ -100,7 +101,7 @@ public class ClusteringScheduler {
     }
 
     @Transactional
-    void updateAutoNode(MeshNode node, ClusterNamingLlm.ClusterName name, ClusterResult cluster) {
+    void updateAutoNode(MeshNode node, ClusterName name, ClusterResult cluster) {
         node.title = name.title();
         node.description = name.description();
         node.tags = name.tags();
@@ -114,7 +115,7 @@ public class ClusteringScheduler {
         persistNode(node);
     }
 
-    private static String buildCommunityEmbeddingText(ClusterNamingLlm.ClusterName name) {
+    private static String buildCommunityEmbeddingText(ClusterName name) {
         return "Type: COMMUNITY. Title: " + name.title() + ". Description: " + name.description()
                 + ". Tags: " + String.join(", ", name.tags());
     }

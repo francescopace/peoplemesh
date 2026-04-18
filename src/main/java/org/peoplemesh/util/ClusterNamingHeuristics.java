@@ -1,6 +1,6 @@
 package org.peoplemesh.util;
 
-import org.peoplemesh.service.ClusterNamingLlm;
+import org.peoplemesh.domain.dto.ClusterName;
 
 import java.util.*;
 
@@ -14,7 +14,7 @@ public final class ClusterNamingHeuristics {
 
     private ClusterNamingHeuristics() {}
 
-    public static Optional<ClusterNamingLlm.ClusterName> fromTraits(Map<String, List<String>> traits) {
+    public static Optional<ClusterName> fromTraits(Map<String, List<String>> traits) {
         List<String> keywords = new ArrayList<>();
         for (String key : TRAIT_KEYS) {
             List<String> vals = traits.getOrDefault(key, Collections.emptyList());
@@ -30,7 +30,7 @@ public final class ClusterNamingHeuristics {
         String title = joined + " Community";
         String description = "An auto-discovered community of people interested in " + joined.toLowerCase() + ".";
         List<String> tags = unique.stream().limit(5).toList();
-        return Optional.of(new ClusterNamingLlm.ClusterName(title, description, tags));
+        return Optional.of(new ClusterName(title, description, tags));
     }
 
     static String titleCase(String s) {

@@ -7,6 +7,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.peoplemesh.config.AppConfig;
+import org.peoplemesh.domain.dto.ClusterName;
 import org.peoplemesh.domain.enums.NodeType;
 import org.peoplemesh.domain.model.MeshNode;
 import org.peoplemesh.repository.NodeRepository;
@@ -136,7 +137,7 @@ class ClusteringSchedulerTest {
         when(clusteringService.kMeans(anyList(), eq(1), eq(100))).thenReturn(List.of(cluster));
         when(clusteringService.extractClusterTraits(anyList(), eq(10))).thenReturn(Map.of("skills", List.of("java")));
         when(clusterNamingLlm.generateName(anyMap())).thenReturn(Optional.of(
-                new ClusterNamingLlm.ClusterName("Java Guild", "Community", List.of("java", "backend"))
+                new ClusterName("Java Guild", "Community", List.of("java", "backend"))
         ));
         when(embeddingService.generateEmbedding(anyString())).thenReturn(new float[]{0.1f});
 
@@ -171,7 +172,7 @@ class ClusteringSchedulerTest {
         when(clusteringService.kMeans(anyList(), eq(1), eq(100))).thenReturn(List.of(cluster));
         when(clusteringService.extractClusterTraits(anyList(), eq(10))).thenReturn(Map.of("skills", List.of("java")));
         when(clusterNamingLlm.generateName(anyMap())).thenReturn(Optional.of(
-                new ClusterNamingLlm.ClusterName("Java Builders", "Updated", List.of("java", "backend"))
+                new ClusterName("Java Builders", "Updated", List.of("java", "backend"))
         ));
         when(embeddingService.generateEmbedding(anyString())).thenReturn(new float[]{0.2f});
 

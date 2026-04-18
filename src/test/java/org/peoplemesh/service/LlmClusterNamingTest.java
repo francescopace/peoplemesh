@@ -10,7 +10,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.peoplemesh.service.ClusterNamingLlm.ClusterName;
+import org.peoplemesh.domain.dto.ClusterName;
 
 import java.util.List;
 import java.util.Map;

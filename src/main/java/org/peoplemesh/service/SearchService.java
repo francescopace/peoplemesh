@@ -9,6 +9,9 @@ import jakarta.inject.Inject;
 import org.peoplemesh.repository.MeshNodeSearchRepository;
 import org.jboss.logging.Logger;
 import org.peoplemesh.config.AppConfig;
+import org.peoplemesh.util.GeographyUtils;
+import org.peoplemesh.util.SqlParsingUtils;
+import org.peoplemesh.util.StringUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.peoplemesh.domain.dto.*;
@@ -17,7 +20,6 @@ import org.peoplemesh.domain.enums.NodeType;
 import org.peoplemesh.domain.enums.Seniority;
 import org.peoplemesh.domain.enums.WorkMode;
 import java.time.Instant;
-import java.util.regex.Pattern;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -34,12 +36,7 @@ public class SearchService {
 
     private static final int VECTOR_POOL_SIZE = 100;
     private static final int DEFAULT_RESULT_LIMIT = 20;
-    private static final Pattern TOKEN_TRIM_PATTERN = Pattern.compile("^[^\\p{Alnum}]+|[^\\p{Alnum}]+$");
-    private static final Set<String> ISO_COUNTRIES = Set.of(Locale.getISOCountries());
-    private static final Map<String, String> COUNTRY_NAME_TO_ISO = buildCountryNameToIsoIndex();
-    private static final Set<String> LOCATION_WORDS_TO_IGNORE = Set.of(
-            "europe", "eu", "european union", "asia", "africa", "north america", "south america", "oceania", "worldwide", "global"
-    );
+    private static final HeuristicSearchQueryParser FALLBACK_QUERY_PARSER = new HeuristicSearchQueryParser();
 
     @Inject @All
     List<SearchQueryParser> queryParsers;
@@ -75,12 +72,10 @@ public class SearchService {
         }
 
         SearchQueryParser parser = selectQueryParser().orElse(null);
-        ParsedSearchQuery parsedQuery;
-        if (parser != null) {
-            parsedQuery = parser.parse(queryText).orElse(fallbackParse(queryText));
-        } else {
-            parsedQuery = fallbackParse(queryText);
-        }
+        SearchQueryParser effectiveParser = parser != null ? parser : FALLBACK_QUERY_PARSER;
+        ParsedSearchQuery parsedQuery = effectiveParser.parse(queryText)
+                .or(() -> FALLBACK_QUERY_PARSER.parse(queryText))
+                .orElse(new ParsedSearchQuery(null, null, "unknown", null, Collections.emptyList(), queryText));
 
         String embeddingText = parsedQuery.embeddingText();
         if (embeddingText == null || embeddingText.isBlank()) {
@@ -123,7 +118,7 @@ public class SearchService {
         for (Object[] row : rows) {
             String sdRaw = row[7] != null ? row[7].toString() : null;
             Map<String, Object> sd = null;
-            NodeType nodeType = MatchingUtils.parseEnum(NodeType.class, (String) row[1]);
+            NodeType nodeType = SqlParsingUtils.parseEnum(NodeType.class, (String) row[1]);
             if (nodeType == NodeType.USER && sdRaw != null) {
                 try {
                     sd = objectMapper.readValue(sdRaw, new TypeReference<>() {});
@@ -136,9 +131,9 @@ public class SearchService {
                     nodeType,
                     (String) row[2],
                     (String) row[3],
-                    MatchingUtils.parseArray(row[4]),
+                    SqlParsingUtils.parseArray(row[4]),
                     (String) row[5],
-                    MatchingUtils.toInstant(row[6]),
+                    SqlParsingUtils.toInstant(row[6]),
                     sd,
                     ((Number) row[8]).doubleValue()
             ));
@@ -211,10 +206,10 @@ public class SearchService {
                 .distinct()
                 .toList();
         Set<String> matchedMustNormalized = matchedMust.stream()
-                .map(SearchService::normalizeTerm)
+                .map(MatchingUtils::normalizeTerm)
                 .collect(Collectors.toSet());
         List<String> missingMust = mustHaveSkills.stream()
-                .filter(s -> !matchedMustNormalized.contains(normalizeTerm(s)))
+                .filter(s -> !matchedMustNormalized.contains(MatchingUtils.normalizeTerm(s)))
                 .toList();
         double mustHaveCoverage = mustHaveSkills.isEmpty() ? 1.0
                 : (double) matchedMust.size() / mustHaveSkills.size();
@@ -278,12 +273,12 @@ public class SearchService {
         if (industryScore > 0) reasonCodes.add("INDUSTRY_MATCH");
 
         SearchMatchBreakdown breakdown = new SearchMatchBreakdown(
-                MatchingUtils.round3(c.cosineSim),
-                MatchingUtils.round3(mustHaveCoverage),
-                MatchingUtils.round3(niceToHaveBonus),
-                MatchingUtils.round3(languageScore),
-                MatchingUtils.round3(industryScore),
-                MatchingUtils.round3(rawScore),
+                StringUtils.round3(c.cosineSim),
+                StringUtils.round3(mustHaveCoverage),
+                StringUtils.round3(niceToHaveBonus),
+                StringUtils.round3(languageScore),
+                StringUtils.round3(industryScore),
+                StringUtils.round3(rawScore),
                 matchedMust,
                 matchedNice,
                 missingMust,
@@ -318,10 +313,10 @@ public class SearchService {
         List<String> matchedMust = deduplicateTerms(
                 MatchingUtils.combineLists(matchedMustSemantic, matchedMustText));
         Set<String> matchedMustNormalized = matchedMust.stream()
-                .map(SearchService::normalizeTerm)
+                .map(MatchingUtils::normalizeTerm)
                 .collect(Collectors.toSet());
         List<String> missingMust = mustHaveSkills.stream()
-                .filter(s -> !matchedMustNormalized.contains(normalizeTerm(s)))
+                .filter(s -> !matchedMustNormalized.contains(MatchingUtils.normalizeTerm(s)))
                 .toList();
 
         double mustHaveCoverage = mustHaveSkills.isEmpty() ? 1.0
@@ -359,11 +354,11 @@ public class SearchService {
         reasonCodes.add("NODE_" + c.nodeType.name());
 
         SearchMatchBreakdown breakdown = new SearchMatchBreakdown(
-                MatchingUtils.round3(c.cosineSim),
-                MatchingUtils.round3(mustHaveCoverage),
-                MatchingUtils.round3(niceToHaveBonus),
+                StringUtils.round3(c.cosineSim),
+                StringUtils.round3(mustHaveCoverage),
+                StringUtils.round3(niceToHaveBonus),
                 0, 0,
-                MatchingUtils.round3(rawScore),
+                StringUtils.round3(rawScore),
                 matchedMust,
                 matchedNice,
                 missingMust,
@@ -377,7 +372,7 @@ public class SearchService {
         String targetSeniority = parsed.seniority();
         Seniority target = (targetSeniority == null || "unknown".equalsIgnoreCase(targetSeniority))
                 ? null
-                : MatchingUtils.parseEnum(Seniority.class, targetSeniority.toUpperCase());
+                : SqlParsingUtils.parseEnum(Seniority.class, targetSeniority.toUpperCase());
         if (target == null) {
             return candidates;
         }
@@ -389,7 +384,7 @@ public class SearchService {
             double adjusted = sc.score;
 
             String seniorityStr = sdString(sc.node.structuredData, "seniority");
-            Seniority candidateSeniority = MatchingUtils.parseEnum(Seniority.class, seniorityStr);
+            Seniority candidateSeniority = SqlParsingUtils.parseEnum(Seniority.class, seniorityStr);
             if (candidateSeniority == target) {
                 adjusted *= 1.05;
             } else if (candidateSeniority != null) {
@@ -419,11 +414,11 @@ public class SearchService {
                 String telegramHandle = sdString(c.structuredData, "telegram_handle");
                 String mobilePhone = sdString(c.structuredData, "mobile_phone");
                 List<String> languagesSpoken = sdListOrEmpty(c.structuredData, "languages_spoken");
-                Seniority seniority = MatchingUtils.parseEnum(Seniority.class,
+                Seniority seniority = SqlParsingUtils.parseEnum(Seniority.class,
                         sdString(c.structuredData, "seniority"));
-                WorkMode workMode = MatchingUtils.parseEnum(WorkMode.class,
+                WorkMode workMode = SqlParsingUtils.parseEnum(WorkMode.class,
                         sdString(c.structuredData, "work_mode"));
-                EmploymentType employmentType = MatchingUtils.parseEnum(EmploymentType.class,
+                EmploymentType employmentType = SqlParsingUtils.parseEnum(EmploymentType.class,
                         sdString(c.structuredData, "employment_type"));
                 List<String> toolsAndTech = sdListOrEmpty(c.structuredData, "tools_and_tech");
                 String avatarUrl = sdString(c.structuredData, "avatar_url");
@@ -431,7 +426,7 @@ public class SearchService {
                 Map<String, Integer> skillLevels = skillLevelsByNodeId.get(c.nodeId);
 
                 items.add(SearchResultItem.profile(
-                        c.nodeId, MatchingUtils.round3(sc.score),
+                        c.nodeId, StringUtils.round3(sc.score),
                         c.title, avatarUrl, roles, seniority,
                         c.tags, toolsAndTech,
                         languagesSpoken, c.country, city,
@@ -441,7 +436,7 @@ public class SearchService {
                 ));
             } else {
                 items.add(SearchResultItem.node(
-                        c.nodeId, MatchingUtils.round3(sc.score),
+                        c.nodeId, StringUtils.round3(sc.score),
                         c.nodeType, c.title, c.description,
                         c.tags, c.country,
                         sc.breakdown
@@ -454,14 +449,7 @@ public class SearchService {
     // === Helpers ===
 
     private static List<String> splitCommaSeparated(String plain) {
-        return MatchingUtils.splitCommaSeparated(plain);
-    }
-
-    private static String normalizeTerm(String raw) {
-        if (raw == null) {
-            return "";
-        }
-        return raw.toLowerCase(Locale.ROOT).trim();
+        return StringUtils.splitCommaSeparated(plain);
     }
 
     private static List<String> deduplicateTerms(List<String> values) {
@@ -474,7 +462,7 @@ public class SearchService {
             if (value == null || value.isBlank()) {
                 continue;
             }
-            String key = normalizeTerm(value);
+            String key = MatchingUtils.normalizeTerm(value);
             if (seen.add(key)) {
                 deduplicated.add(value.trim());
             }
@@ -505,155 +493,12 @@ public class SearchService {
             return null;
         }
         for (String rawLocation : parsed.mustHave().location()) {
-            String mapped = mapLocationToCountryCode(rawLocation);
+            String mapped = GeographyUtils.mapLocationToCountryCode(rawLocation);
             if (mapped != null) {
                 return mapped;
             }
         }
         return null;
-    }
-
-    private static String mapLocationToCountryCode(String rawLocation) {
-        if (rawLocation == null || rawLocation.isBlank()) {
-            return null;
-        }
-        String cleaned = rawLocation.trim();
-        if (cleaned.length() == 2) {
-            String cc = cleaned.toUpperCase(Locale.ROOT);
-            if (ISO_COUNTRIES.contains(cc)) {
-                return cc;
-            }
-        }
-        String normalized = cleaned.toLowerCase(Locale.ROOT)
-                .replaceAll("[^\\p{L}\\p{N}]+", " ")
-                .trim()
-                .replaceAll("\\s+", " ");
-        if (normalized.isBlank() || LOCATION_WORDS_TO_IGNORE.contains(normalized)) {
-            return null;
-        }
-        return COUNTRY_NAME_TO_ISO.get(normalized);
-    }
-
-    private static Map<String, String> buildCountryNameToIsoIndex() {
-        Map<String, String> index = new HashMap<>();
-        for (String code : Locale.getISOCountries()) {
-            Locale locale = Locale.of("", code);
-            index.put(code.toLowerCase(Locale.ROOT), code);
-            index.put(locale.getDisplayCountry(Locale.ENGLISH).toLowerCase(Locale.ROOT), code);
-            index.put(locale.getDisplayCountry(Locale.ITALIAN).toLowerCase(Locale.ROOT), code);
-        }
-        index.put("uk", "GB");
-        index.put("england", "GB");
-        return Map.copyOf(index);
-    }
-
-    private static final Set<String> STOP_WORDS = Set.of(
-            "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
-            "of", "with", "by", "from", "as", "is", "was", "are", "were", "be",
-            "been", "being", "have", "has", "had", "do", "does", "did", "will",
-            "would", "could", "should", "may", "might", "can", "shall", "must",
-            "need", "not", "no", "nor", "so", "if", "then", "than", "that",
-            "this", "these", "those", "it", "its", "i", "we", "you", "he", "she",
-            "they", "me", "him", "her", "us", "them", "my", "your", "his", "our",
-            "their", "who", "whom", "which", "what", "where", "when", "how", "why",
-            "all", "each", "every", "both", "few", "more", "most", "some", "any",
-            "such", "only", "very", "just", "also", "about", "up", "out", "into",
-            "over", "after", "before", "between", "under", "above", "below",
-            "looking", "find", "search", "want", "needed", "required",
-            "experience", "experienced", "expertise", "expert", "proficient",
-            "knowledge", "familiar", "background", "developer", "engineer",
-            "consultant", "specialist", "professional", "person", "someone",
-            "anybody", "people", "team", "work", "working", "role"
-    );
-
-    private static final Set<String> CONTEXT_KEYWORDS = Set.of(
-            "community", "communities", "event", "events", "job", "jobs",
-            "opportunity", "opportunities", "networking", "meetup", "meetups",
-            "conference", "conferences"
-    );
-
-    private static final Map<String, String> ROLE_WORD_ALIASES = Map.ofEntries(
-            Map.entry("developer", "developer"),
-            Map.entry("dev", "developer"),
-            Map.entry("engineer", "engineer"),
-            Map.entry("architect", "architect"),
-            Map.entry("analyst", "analyst"),
-            Map.entry("designer", "designer"),
-            Map.entry("manager", "manager"),
-            Map.entry("consultant", "consultant"),
-            Map.entry("specialist", "specialist"),
-            Map.entry("lead", "lead")
-    );
-
-    private static final Map<String, String> LANGUAGE_ALIASES = Map.ofEntries(
-            Map.entry("english", "English"),
-            Map.entry("italian", "Italian"),
-            Map.entry("italiano", "Italian"),
-            Map.entry("french", "French"),
-            Map.entry("francese", "French"),
-            Map.entry("spanish", "Spanish"),
-            Map.entry("spagnolo", "Spanish"),
-            Map.entry("german", "German"),
-            Map.entry("tedesco", "German"),
-            Map.entry("portuguese", "Portuguese"),
-            Map.entry("portoghese", "Portuguese"),
-            Map.entry("dutch", "Dutch"),
-            Map.entry("polish", "Polish"),
-            Map.entry("swedish", "Swedish"),
-            Map.entry("norwegian", "Norwegian"),
-            Map.entry("danish", "Danish"),
-            Map.entry("finnish", "Finnish"),
-            Map.entry("romanian", "Romanian"),
-            Map.entry("russian", "Russian"),
-            Map.entry("ukrainian", "Ukrainian"),
-            Map.entry("arabic", "Arabic"),
-            Map.entry("hindi", "Hindi"),
-            Map.entry("chinese", "Chinese"),
-            Map.entry("mandarin", "Chinese"),
-            Map.entry("japanese", "Japanese"),
-            Map.entry("korean", "Korean"),
-            Map.entry("turkish", "Turkish")
-    );
-
-    private ParsedSearchQuery fallbackParse(String queryText) {
-        List<String> skills = new ArrayList<>();
-        Set<String> roles = new LinkedHashSet<>();
-        Set<String> keywords = new LinkedHashSet<>();
-        Set<String> languages = new LinkedHashSet<>();
-        for (String rawToken : queryText.split("\\s+")) {
-            String token = TOKEN_TRIM_PATTERN.matcher(rawToken).replaceAll("").trim();
-            if (token.length() <= 1) {
-                continue;
-            }
-            String normalized = token.toLowerCase(Locale.ROOT);
-            String canonicalRole = ROLE_WORD_ALIASES.get(normalized);
-            if (canonicalRole != null) {
-                roles.add(canonicalRole);
-                keywords.add(canonicalRole);
-                continue;
-            }
-            if (STOP_WORDS.contains(normalized)) {
-                continue;
-            }
-            String canonicalLanguage = LANGUAGE_ALIASES.get(normalized);
-            if (canonicalLanguage != null) {
-                languages.add(canonicalLanguage);
-                continue;
-            }
-            if (CONTEXT_KEYWORDS.contains(normalized)) {
-                keywords.add(token);
-                continue;
-            }
-            skills.add(token);
-            keywords.add(token);
-        }
-        return new ParsedSearchQuery(
-                new ParsedSearchQuery.MustHaveFilters(skills, null, new ArrayList<>(roles),
-                        new ArrayList<>(languages), Collections.emptyList(), Collections.emptyList()),
-                new ParsedSearchQuery.NiceToHaveFilters(Collections.emptyList(), null,
-                        Collections.emptyList(), Collections.emptyList()),
-                "unknown", null, new ArrayList<>(keywords), queryText
-        );
     }
 
     private SkillLevelContext loadSkillLevelsContext(List<RawNodeCandidate> candidates) {
@@ -680,6 +525,13 @@ public class SearchService {
     private Optional<SearchQueryParser> selectQueryParser() {
         if (queryParsers == null || queryParsers.isEmpty()) {
             return Optional.empty();
+        }
+        Optional<SearchQueryParser> nonHeuristic = queryParsers.stream()
+                .filter(Objects::nonNull)
+                .filter(parser -> !(parser instanceof HeuristicSearchQueryParser))
+                .findFirst();
+        if (nonHeuristic.isPresent()) {
+            return nonHeuristic;
         }
         return queryParsers.stream()
                 .filter(Objects::nonNull)

@@ -11,6 +11,7 @@ import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
 import org.peoplemesh.domain.dto.ParsedSearchQuery;
 import org.peoplemesh.domain.dto.SkillWithLevel;
+import org.peoplemesh.util.StringUtils;
 
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -128,7 +129,7 @@ public class LlmSearchQueryParser implements SearchQueryParser {
                     .configure(DeserializationFeature.ACCEPT_SINGLE_VALUE_AS_ARRAY, true)
                     .configure(DeserializationFeature.ACCEPT_EMPTY_STRING_AS_NULL_OBJECT, true)
                     .configure(DeserializationFeature.ACCEPT_EMPTY_ARRAY_AS_NULL_OBJECT, true);
-            ParsedSearchQuery parsed = lenient.readValue(MatchingUtils.stripMarkdownFences(content), ParsedSearchQuery.class);
+            ParsedSearchQuery parsed = lenient.readValue(StringUtils.stripMarkdownFences(content), ParsedSearchQuery.class);
             ParsedSearchQuery normalized = normalizeParsedQuery(parsed, userQuery);
             LOG.debugf("Parsed search query: skills=%s, seniority=%s",
                     normalized.mustHave().skills(),

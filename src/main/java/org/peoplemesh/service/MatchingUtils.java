@@ -4,8 +4,8 @@ import org.peoplemesh.domain.dto.SkillWithLevel;
 import org.peoplemesh.domain.enums.EmploymentType;
 import org.peoplemesh.domain.enums.WorkMode;
 import org.peoplemesh.domain.model.MeshNode;
+import org.peoplemesh.util.SqlParsingUtils;
 
-import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -22,56 +22,6 @@ public final class MatchingUtils {
     );
 
     private MatchingUtils() {}
-
-    public static String vectorToString(float[] vec) {
-        StringBuilder sb = new StringBuilder("[");
-        for (int i = 0; i < vec.length; i++) {
-            if (i > 0) sb.append(",");
-            sb.append(vec[i]);
-        }
-        sb.append("]");
-        return sb.toString();
-    }
-
-    static List<String> parseArray(Object obj) {
-        if (obj == null) return Collections.emptyList();
-        if (obj instanceof String[] arr) return List.of(arr);
-        if (obj instanceof java.sql.Array sqlArray) {
-            try {
-                Object value = sqlArray.getArray();
-                if (value instanceof String[] arr) {
-                    return List.of(arr);
-                }
-            } catch (Exception ignored) {
-                return Collections.emptyList();
-            }
-        }
-        if (obj instanceof List<?> list) {
-            return list.stream()
-                    .filter(Objects::nonNull)
-                    .map(Object::toString)
-                    .toList();
-        }
-        return Collections.emptyList();
-    }
-
-    @SuppressWarnings("null")
-    static <E extends Enum<E>> E parseEnum(Class<E> enumClass, String value) {
-        if (value == null) return null;
-        try {
-            return Enum.valueOf(enumClass, value);
-        } catch (IllegalArgumentException e) {
-            return null;
-        }
-    }
-
-    static Instant toInstant(Object value) {
-        if (value == null) return null;
-        if (value instanceof Instant instant) return instant;
-        if (value instanceof java.sql.Timestamp timestamp) return timestamp.toInstant();
-        if (value instanceof java.util.Date date) return date.toInstant();
-        throw new IllegalArgumentException("Unsupported timestamp type: " + value.getClass().getName());
-    }
 
     static List<String> combineLists(List<String> a, List<String> b) {
         List<String> combined = new ArrayList<>();
@@ -168,7 +118,7 @@ public final class MatchingUtils {
         return EXCLUSIVE_TOKEN_PAIRS.contains(a + "|" + b);
     }
 
-    private static String normalizeTerm(String raw) {
+    public static String normalizeTerm(String raw) {
         if (raw == null) return "";
         String normalized = raw.toLowerCase(Locale.ROOT).trim();
         normalized = normalized
@@ -179,14 +129,6 @@ public final class MatchingUtils {
                 .replace("node.js", "nodejs");
         normalized = normalized.replaceAll("[^\\p{Alnum}]+", " ").trim();
         return normalized.replaceAll("\\s+", " ");
-    }
-
-    static List<String> splitCommaSeparated(String plain) {
-        if (plain == null || plain.isBlank()) return Collections.emptyList();
-        return Arrays.stream(plain.split(","))
-                .map(String::trim)
-                .filter(s -> !s.isEmpty())
-                .toList();
     }
 
     /**
@@ -225,16 +167,12 @@ public final class MatchingUtils {
         return totalWeight == 0 ? 0 : matchedWeight / totalWeight;
     }
 
-    static double round3(double value) {
-        return Math.round(value * 1000.0) / 1000.0;
-    }
-
     static WorkMode structuredWorkMode(MeshNode n) {
         if (n == null || n.structuredData == null) {
             return null;
         }
         Object v = n.structuredData.get("work_mode");
-        return v == null ? null : parseEnum(WorkMode.class, v.toString());
+        return v == null ? null : SqlParsingUtils.parseEnum(WorkMode.class, v.toString());
     }
 
     static EmploymentType structuredEmploymentType(MeshNode n) {
@@ -242,16 +180,6 @@ public final class MatchingUtils {
             return null;
         }
         Object v = n.structuredData.get("employment_type");
-        return v == null ? null : parseEnum(EmploymentType.class, v.toString());
-    }
-
-    private static final java.util.regex.Pattern MARKDOWN_FENCE =
-            java.util.regex.Pattern.compile("^\\s*```(?:\\w+)?\\s*\\n?(.*?)\\n?\\s*```\\s*$",
-                    java.util.regex.Pattern.DOTALL);
-
-    static String stripMarkdownFences(String text) {
-        if (text == null) return null;
-        var m = MARKDOWN_FENCE.matcher(text.strip());
-        return m.matches() ? m.group(1).strip() : text.strip();
+        return v == null ? null : SqlParsingUtils.parseEnum(EmploymentType.class, v.toString());
     }
 }

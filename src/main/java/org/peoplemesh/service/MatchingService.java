@@ -15,6 +15,9 @@ import org.peoplemesh.repository.NodeRepository;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
+import org.peoplemesh.util.GeographyUtils;
+import org.peoplemesh.util.SqlParsingUtils;
+import org.peoplemesh.util.StringUtils;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -28,20 +31,6 @@ public class MatchingService {
     private static final double WEIGHT_EMBEDDING = 0.55;
     private static final double WEIGHT_SKILLS = 0.30;
     private static final double WEIGHT_GEOGRAPHY = 0.15;
-
-    private static final Map<String, String> CONTINENT_MAP = Map.ofEntries(
-            Map.entry("IT", "EU"), Map.entry("DE", "EU"), Map.entry("FR", "EU"),
-            Map.entry("ES", "EU"), Map.entry("NL", "EU"), Map.entry("PT", "EU"),
-            Map.entry("BE", "EU"), Map.entry("AT", "EU"), Map.entry("CH", "EU"),
-            Map.entry("GB", "EU"), Map.entry("IE", "EU"), Map.entry("PL", "EU"),
-            Map.entry("SE", "EU"), Map.entry("NO", "EU"), Map.entry("DK", "EU"),
-            Map.entry("FI", "EU"), Map.entry("CZ", "EU"), Map.entry("RO", "EU"),
-            Map.entry("US", "NA"), Map.entry("CA", "NA"), Map.entry("MX", "NA"),
-            Map.entry("BR", "SA"), Map.entry("AR", "SA"), Map.entry("CL", "SA"),
-            Map.entry("JP", "AS"), Map.entry("KR", "AS"), Map.entry("CN", "AS"),
-            Map.entry("IN", "AS"), Map.entry("SG", "AS"), Map.entry("TH", "AS"),
-            Map.entry("AU", "OC"), Map.entry("NZ", "OC")
-    );
 
     record CandidateRow(
             UUID nodeId, UUID userId, Seniority seniority,
@@ -61,17 +50,17 @@ public class MatchingService {
         static CandidateRow fromNativeRow(Object[] row) {
             return new CandidateRow(
                     (UUID) row[0], (UUID) row[1],
-                    MatchingUtils.parseEnum(Seniority.class, (String) row[2]),
-                    MatchingUtils.parseArray(row[3]), MatchingUtils.parseArray(row[4]), MatchingUtils.parseArray(row[5]),
-                    MatchingUtils.parseEnum(WorkMode.class, (String) row[6]),
-                    MatchingUtils.parseEnum(EmploymentType.class, (String) row[7]),
-                    MatchingUtils.parseArray(row[8]), MatchingUtils.parseArray(row[9]),
-                    (String) row[10], (String) row[11], MatchingUtils.toInstant(row[12]),
+                    SqlParsingUtils.parseEnum(Seniority.class, (String) row[2]),
+                    SqlParsingUtils.parseArray(row[3]), SqlParsingUtils.parseArray(row[4]), SqlParsingUtils.parseArray(row[5]),
+                    SqlParsingUtils.parseEnum(WorkMode.class, (String) row[6]),
+                    SqlParsingUtils.parseEnum(EmploymentType.class, (String) row[7]),
+                    SqlParsingUtils.parseArray(row[8]), SqlParsingUtils.parseArray(row[9]),
+                    (String) row[10], (String) row[11], SqlParsingUtils.toInstant(row[12]),
                     (String) row[13],
                     ((Number) row[14]).doubleValue(),
                     (String) row[15], (String) row[16],
-                    MatchingUtils.parseArray(row[17]), MatchingUtils.parseArray(row[18]),
-                    MatchingUtils.parseArray(row[19]),
+                    SqlParsingUtils.parseArray(row[17]), SqlParsingUtils.parseArray(row[18]),
+                    SqlParsingUtils.parseArray(row[19]),
                     (String) row[20],
                     (String) row[21], (String) row[22],
                     (String) row[23], (String) row[24]
@@ -102,7 +91,7 @@ public class MatchingService {
     SemanticSkillMatcher semanticSkillMatcher;
 
     private static List<String> parseCommaSeparatedRoles(String plain) {
-        return MatchingUtils.splitCommaSeparated(plain);
+        return StringUtils.splitCommaSeparated(plain);
     }
 
 
@@ -143,7 +132,7 @@ public class MatchingService {
                 skillsOverlap = Math.max(skillsOverlap, levelScore);
             }
 
-            double geoScore = geographyScore(referenceCountry, c.country(), referenceWorkMode);
+            double geoScore = GeographyUtils.geographyScore(referenceCountry, c.country(), referenceWorkMode);
 
             if (filters != null && !passesFilters(filters, c.skillsTechnical(),
                     c.workMode(), c.employmentType(), c.country())) {
@@ -157,7 +146,7 @@ public class MatchingService {
             double decayedScore = applyDecay(rawScore, c.updatedAt());
             double decayMultiplier = rawScore == 0.0 ? 1.0 : decayedScore / rawScore;
 
-            String geographyReason = geographyReason(referenceCountry, c.country(), referenceWorkMode);
+            String geographyReason = GeographyUtils.geographyReason(referenceCountry, c.country(), referenceWorkMode);
             List<String> reasonCodes = new ArrayList<>(buildReasonCodes(c.cosineSim(), matchedSkills, geoScore, decayMultiplier));
             if (referenceEmploymentType != null) {
                 double employmentMatch = employmentCompatibility(c.employmentType(), referenceEmploymentType);
@@ -168,7 +157,7 @@ public class MatchingService {
 
             results.add(new MatchResult(
                     c.nodeId(),
-                    MatchingUtils.round3(decayedScore),
+                    StringUtils.round3(decayedScore),
                     c.displayName(),
                     c.avatarUrl(),
                     parseCommaSeparatedRoles(c.roles()),
@@ -191,12 +180,12 @@ public class MatchingService {
                     c.telegramHandle(),
                     c.mobilePhone(),
                     new MatchScoreBreakdown(
-                            MatchingUtils.round3(c.cosineSim()),
-                            MatchingUtils.round3(skillsOverlap),
-                            MatchingUtils.round3(geoScore),
-                            MatchingUtils.round3(rawScore),
-                            MatchingUtils.round3(decayMultiplier),
-                            MatchingUtils.round3(decayedScore),
+                            StringUtils.round3(c.cosineSim()),
+                            StringUtils.round3(skillsOverlap),
+                            StringUtils.round3(geoScore),
+                            StringUtils.round3(rawScore),
+                            StringUtils.round3(decayMultiplier),
+                            StringUtils.round3(decayedScore),
                             matchedSkills,
                             geographyReason,
                             reasonCodes
@@ -433,18 +422,18 @@ public class MatchingService {
             }
 
             double cosineSim = ((Number) row[7]).doubleValue();
-            List<String> nodeTags = MatchingUtils.parseArray(row[4]);
+            List<String> nodeTags = SqlParsingUtils.parseArray(row[4]);
             double tagsOverlap = MatchingUtils.jaccardSimilarity(tagPool, nodeTags);
-            double geoScore = geographyScore(myCountry, nodeCountry, myWorkMode);
+            double geoScore = GeographyUtils.geographyScore(myCountry, nodeCountry, myWorkMode);
 
             double rawScore = cosineSim * WEIGHT_EMBEDDING + tagsOverlap * WEIGHT_SKILLS + geoScore * WEIGHT_GEOGRAPHY;
 
-            Instant updatedAt = MatchingUtils.toInstant(row[6]);
+            Instant updatedAt = SqlParsingUtils.toInstant(row[6]);
             double decayedScore = applyDecay(rawScore, updatedAt);
             double decayMultiplier = rawScore == 0.0 ? 1.0 : decayedScore / rawScore;
 
             List<String> matchedTags = MatchingUtils.intersectCaseInsensitive(tagPool, nodeTags);
-            String geoReason = geographyReason(myCountry, nodeCountry, myWorkMode);
+            String geoReason = GeographyUtils.geographyReason(myCountry, nodeCountry, myWorkMode);
             List<String> reasonCodes = new ArrayList<>();
             if (cosineSim >= 0.65) reasonCodes.add("SEMANTIC_SIMILARITY");
             if (!matchedTags.isEmpty()) reasonCodes.add("TAGS_OVERLAP");
@@ -453,19 +442,19 @@ public class MatchingService {
 
             results.add(new NodeMatchResult(
                     (UUID) row[0],
-                    MatchingUtils.parseEnum(NodeType.class, (String) row[1]),
+                    SqlParsingUtils.parseEnum(NodeType.class, (String) row[1]),
                     (String) row[2],
                     (String) row[3],
                     nodeTags,
                     nodeCountry,
-                    MatchingUtils.round3(decayedScore),
+                    StringUtils.round3(decayedScore),
                     new NodeMatchBreakdown(
-                            MatchingUtils.round3(cosineSim),
-                            MatchingUtils.round3(tagsOverlap),
-                            MatchingUtils.round3(geoScore),
-                            MatchingUtils.round3(rawScore),
-                            MatchingUtils.round3(decayMultiplier),
-                            MatchingUtils.round3(decayedScore),
+                            StringUtils.round3(cosineSim),
+                            StringUtils.round3(tagsOverlap),
+                            StringUtils.round3(geoScore),
+                            StringUtils.round3(rawScore),
+                            StringUtils.round3(decayMultiplier),
+                            StringUtils.round3(decayedScore),
                             matchedTags,
                             geoReason,
                             reasonCodes
@@ -488,14 +477,10 @@ public class MatchingService {
         return all.subList(safeOffset, toIndex);
     }
 
-
     double geographyScore(String myCountry, String theirCountry, WorkMode myWorkMode) {
-        if (myWorkMode == WorkMode.REMOTE) return 1.0;
-        if (myCountry == null || theirCountry == null) return 0.0;
-        if (myCountry.equalsIgnoreCase(theirCountry)) return 1.0;
-        if (sameContinent(myCountry, theirCountry)) return 0.5;
-        return 0.0;
+        return GeographyUtils.geographyScore(myCountry, theirCountry, myWorkMode);
     }
+
 
     double applyDecay(double score, Instant updatedAt) {
         if (updatedAt == null) return score;
@@ -533,22 +518,6 @@ public class MatchingService {
         return true;
     }
 
-
-    private String geographyReason(String myCountry, String theirCountry, WorkMode myWorkMode) {
-        if (myWorkMode == WorkMode.REMOTE) return "remote_friendly";
-        if (myCountry == null || theirCountry == null) return "location_unknown";
-        if (myCountry.equalsIgnoreCase(theirCountry)) return "same_country";
-        if (sameContinent(myCountry, theirCountry)) return "same_continent";
-        return "different_region";
-    }
-
-
-    private boolean sameContinent(String a, String b) {
-        String contA = CONTINENT_MAP.getOrDefault(a.toUpperCase(), "XX");
-        String contB = CONTINENT_MAP.getOrDefault(b.toUpperCase(), "YY");
-        return contA.equals(contB);
-    }
-
     private static List<String> buildReasonCodes(double cosineSim, List<String> matchedSkills,
                                                    double geoScore, double decayMultiplier) {
         List<String> codes = new ArrayList<>();
@@ -569,7 +538,7 @@ public class MatchingService {
             if (value == null || value.isBlank()) {
                 continue;
             }
-            String normalized = value.toLowerCase(Locale.ROOT).trim();
+            String normalized = MatchingUtils.normalizeTerm(value);
             if (seen.add(normalized)) {
                 out.add(value.trim());
             }

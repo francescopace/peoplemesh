@@ -4,6 +4,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.peoplemesh.domain.model.SkillDefinition;
 import org.peoplemesh.repository.SkillDefinitionRepository;
+import org.peoplemesh.util.SqlParsingUtils;
 import org.peoplemesh.util.VectorMath;
 
 import java.time.Duration;
@@ -98,7 +99,7 @@ public class SemanticSkillMatcher {
         for (Object[] row : similar) {
             UUID skillId = (UUID) row[0];
             String skillName = row[1] != null ? row[1].toString() : null;
-            List<String> aliases = MatchingUtils.parseArray(row[2]);
+            List<String> aliases = SqlParsingUtils.parseArray(row[2]);
             double similarity = row[3] instanceof Number n ? n.doubleValue() : 0.0;
             if (skillName == null || similarity < threshold) {
                 continue;

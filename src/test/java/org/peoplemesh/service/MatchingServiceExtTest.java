@@ -7,6 +7,9 @@ import org.peoplemesh.domain.dto.MatchFilters;
 import org.peoplemesh.domain.enums.EmploymentType;
 import org.peoplemesh.domain.enums.Seniority;
 import org.peoplemesh.domain.enums.WorkMode;
+import org.peoplemesh.util.GeographyUtils;
+import org.peoplemesh.util.SqlParsingUtils;
+import org.peoplemesh.util.StringUtils;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -138,47 +141,47 @@ class MatchingServiceExtTest {
     }
 
     @Test
-    void geographyReason_remote_returnsRemoteFriendly() throws Exception {
-        assertEquals("remote_friendly", invokeGeographyReason("US", "JP", WorkMode.REMOTE));
+    void geographyReason_remote_returnsRemoteFriendly() {
+        assertEquals("remote_friendly", GeographyUtils.geographyReason("US", "JP", WorkMode.REMOTE));
     }
 
     @Test
-    void geographyReason_nullCountry_returnsLocationUnknown() throws Exception {
-        assertEquals("location_unknown", invokeGeographyReason(null, "US", WorkMode.HYBRID));
-        assertEquals("location_unknown", invokeGeographyReason("US", null, WorkMode.HYBRID));
+    void geographyReason_nullCountry_returnsLocationUnknown() {
+        assertEquals("location_unknown", GeographyUtils.geographyReason(null, "US", WorkMode.HYBRID));
+        assertEquals("location_unknown", GeographyUtils.geographyReason("US", null, WorkMode.HYBRID));
     }
 
     @Test
-    void geographyReason_sameCountry_returnsSameCountry() throws Exception {
-        assertEquals("same_country", invokeGeographyReason("us", "US", WorkMode.HYBRID));
+    void geographyReason_sameCountry_returnsSameCountry() {
+        assertEquals("same_country", GeographyUtils.geographyReason("us", "US", WorkMode.HYBRID));
     }
 
     @Test
-    void geographyReason_sameContinent_returnsSameContinent() throws Exception {
-        assertEquals("same_continent", invokeGeographyReason("US", "CA", WorkMode.HYBRID));
+    void geographyReason_sameContinent_returnsSameContinent() {
+        assertEquals("same_continent", GeographyUtils.geographyReason("US", "CA", WorkMode.HYBRID));
     }
 
     @Test
-    void geographyReason_differentRegion_returnsDifferentRegion() throws Exception {
-        assertEquals("different_region", invokeGeographyReason("US", "JP", WorkMode.HYBRID));
+    void geographyReason_differentRegion_returnsDifferentRegion() {
+        assertEquals("different_region", GeographyUtils.geographyReason("US", "JP", WorkMode.HYBRID));
     }
 
     @Test
-    void sameContinent_knownPair_returnsTrue() throws Exception {
-        assertTrue(invokeSameContinent("US", "CA"));
-        assertTrue(invokeSameContinent("de", "FR"));
+    void sameContinent_knownPair_returnsTrue() {
+        assertTrue(GeographyUtils.sameContinent("US", "CA"));
+        assertTrue(GeographyUtils.sameContinent("de", "FR"));
     }
 
     @Test
-    void sameContinent_differentContinents_returnsFalse() throws Exception {
-        assertFalse(invokeSameContinent("US", "DE"));
+    void sameContinent_differentContinents_returnsFalse() {
+        assertFalse(GeographyUtils.sameContinent("US", "DE"));
     }
 
     @Test
-    void sameContinent_unknownCountries_useAsymmetricDefaults_returnsFalse() throws Exception {
+    void sameContinent_unknownCountries_useAsymmetricDefaults_returnsFalse() {
         // CONTINENT_MAP misses use "XX" for a and "YY" for b, so unknown pairs never match.
-        assertFalse(invokeSameContinent("ZZ", "ZZ"));
-        assertFalse(invokeSameContinent("ZZ", "AA"));
+        assertFalse(GeographyUtils.sameContinent("ZZ", "ZZ"));
+        assertFalse(GeographyUtils.sameContinent("ZZ", "AA"));
     }
 
     @Test
@@ -259,75 +262,53 @@ class MatchingServiceExtTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void parseArray_null_returnsEmptyList() throws Exception {
-        Method m = MatchingUtils.class.getDeclaredMethod("parseArray", Object.class);
-        m.setAccessible(true);
-        List<String> result = (List<String>) m.invoke(null, (Object) null);
+        List<String> result = SqlParsingUtils.parseArray(null);
         assertTrue(result.isEmpty());
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void parseArray_stringArray_returnsList() throws Exception {
-        Method m = MatchingUtils.class.getDeclaredMethod("parseArray", Object.class);
-        m.setAccessible(true);
-        List<String> result = (List<String>) m.invoke(null, (Object) new String[]{"a", "b"});
+        List<String> result = SqlParsingUtils.parseArray(new String[]{"a", "b"});
         assertEquals(List.of("a", "b"), result);
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void parseArray_list_returnsList() throws Exception {
-        Method m = MatchingUtils.class.getDeclaredMethod("parseArray", Object.class);
-        m.setAccessible(true);
         List<String> input = List.of("x", "y");
-        List<String> result = (List<String>) m.invoke(null, input);
+        List<String> result = SqlParsingUtils.parseArray(input);
         assertEquals(input, result);
     }
 
     @Test
     void toInstant_null_returnsNull() throws Exception {
-        Method m = MatchingUtils.class.getDeclaredMethod("toInstant", Object.class);
-        m.setAccessible(true);
-        Instant result = (Instant) m.invoke(null, (Object) null);
+        Instant result = SqlParsingUtils.toInstant(null);
         assertNull(result);
     }
 
     @Test
     void toInstant_instant_returnsSame() throws Exception {
-        Method m = MatchingUtils.class.getDeclaredMethod("toInstant", Object.class);
-        m.setAccessible(true);
         Instant fixed = Instant.parse("2024-03-15T12:00:00Z");
-        assertSame(fixed, m.invoke(null, fixed));
+        assertSame(fixed, SqlParsingUtils.toInstant(fixed));
     }
 
     @Test
     void toInstant_timestamp_convertsToInstant() throws Exception {
-        Method m = MatchingUtils.class.getDeclaredMethod("toInstant", Object.class);
-        m.setAccessible(true);
         Timestamp ts = Timestamp.from(Instant.parse("2023-07-01T08:30:00Z"));
-        Instant result = (Instant) m.invoke(null, ts);
+        Instant result = SqlParsingUtils.toInstant(ts);
         assertEquals(ts.toInstant(), result);
     }
 
     @Test
     void toInstant_date_convertsToInstant() throws Exception {
-        Method m = MatchingUtils.class.getDeclaredMethod("toInstant", Object.class);
-        m.setAccessible(true);
         Date date = Date.from(Instant.parse("2022-11-20T00:00:00Z"));
-        Instant result = (Instant) m.invoke(null, date);
+        Instant result = SqlParsingUtils.toInstant(date);
         assertEquals(date.toInstant(), result);
     }
 
     @Test
     void toInstant_unsupportedType_throwsIAE() throws Exception {
-        Method m = MatchingUtils.class.getDeclaredMethod("toInstant", Object.class);
-        m.setAccessible(true);
-        Exception wrapper = assertThrows(Exception.class, () -> m.invoke(null, "not-a-time"));
-        Throwable cause = wrapper instanceof java.lang.reflect.InvocationTargetException ite
-                ? ite.getCause()
-                : wrapper;
+        Exception cause = assertThrows(IllegalArgumentException.class, () -> SqlParsingUtils.toInstant("not-a-time"));
         assertTrue(cause instanceof IllegalArgumentException);
         assertTrue(cause.getMessage().contains("Unsupported timestamp type"));
     }
@@ -387,19 +368,6 @@ class MatchingServiceExtTest {
         return (double) m.invoke(service, candidate, required);
     }
 
-    private String invokeGeographyReason(String myCountry, String theirCountry, WorkMode workMode) throws Exception {
-        Method m = MatchingService.class.getDeclaredMethod(
-                "geographyReason", String.class, String.class, WorkMode.class);
-        m.setAccessible(true);
-        return (String) m.invoke(service, myCountry, theirCountry, workMode);
-    }
-
-    private boolean invokeSameContinent(String a, String b) throws Exception {
-        Method m = MatchingService.class.getDeclaredMethod("sameContinent", String.class, String.class);
-        m.setAccessible(true);
-        return (boolean) m.invoke(service, a, b);
-    }
-
     @SuppressWarnings("unchecked")
     private List<String> invokeBuildReasonCodes(
             double cosineSim,
@@ -417,16 +385,11 @@ class MatchingServiceExtTest {
     }
 
     private double invokeRound3(double value) throws Exception {
-        Method m = MatchingUtils.class.getDeclaredMethod("round3", double.class);
-        m.setAccessible(true);
-        return (double) m.invoke(null, value);
+        return StringUtils.round3(value);
     }
 
-    @SuppressWarnings("unchecked")
     private <E extends Enum<E>> E invokeParseEnum(Class<E> enumClass, String value) throws Exception {
-        Method m = MatchingUtils.class.getDeclaredMethod("parseEnum", Class.class, String.class);
-        m.setAccessible(true);
-        return (E) m.invoke(null, enumClass, value);
+        return SqlParsingUtils.parseEnum(enumClass, value);
     }
 
     @SuppressWarnings("unchecked")

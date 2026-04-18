@@ -10,6 +10,7 @@ import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.peoplemesh.domain.dto.MeshMatchResult;
 import org.peoplemesh.domain.dto.ProfileSchema;
+import org.peoplemesh.domain.exception.ForbiddenBusinessException;
 import org.peoplemesh.domain.exception.NotFoundBusinessException;
 import org.peoplemesh.service.CurrentUserService;
 import org.peoplemesh.service.MatchesService;
@@ -109,6 +110,17 @@ class McpReadToolsTest {
         assertTrue(result.text().contains("access denied"));
     }
 
+    @Test
+    void match_businessException_returnsPublicDetail() {
+        UUID userId = UUID.randomUUID();
+        when(currentUserService.resolveUserId()).thenReturn(userId);
+        when(matchesService.matchFromSchema(eq(userId), any(ProfileSchema.class), isNull(), isNull()))
+                .thenThrow(new ForbiddenBusinessException("not allowed"));
+
+        TextContent result = mcpReadTools.match("{\"professional\":{\"roles\":[\"X\"]}}", null, null);
+        assertTrue(result.text().contains("not allowed"));
+    }
+
     // === matchMe ===
 
     @Test
@@ -133,6 +145,24 @@ class McpReadToolsTest {
         TextContent result = mcpReadTools.matchMe(null, "DE");
 
         assertTrue(result.text().contains(one.title()));
+    }
+
+    @Test
+    void matchMe_businessException_returnsError() {
+        UUID userId = UUID.randomUUID();
+        when(currentUserService.resolveUserId()).thenReturn(userId);
+        when(matchesService.matchMyProfile(userId, null, null))
+                .thenThrow(new ForbiddenBusinessException("forbidden"));
+
+        TextContent result = mcpReadTools.matchMe(null, null);
+        assertTrue(result.text().contains("forbidden"));
+    }
+
+    @Test
+    void matchMe_securityException_returnsAccessDenied() {
+        when(currentUserService.resolveUserId()).thenThrow(new SecurityException("x"));
+        TextContent result = mcpReadTools.matchMe(null, null);
+        assertTrue(result.text().contains("access denied"));
     }
 
     // === matchNode ===
@@ -170,6 +200,24 @@ class McpReadToolsTest {
                 .thenReturn(List.of(one));
         TextContent result = mcpReadTools.matchNode(nodeUuid.toString(), null, null);
         assertTrue(result.text().contains(one.title()));
+    }
+
+    @Test
+    void matchNode_securityException_returnsAccessDenied() {
+        when(currentUserService.resolveUserId()).thenThrow(new SecurityException("x"));
+        TextContent result = mcpReadTools.matchNode(UUID.randomUUID().toString(), null, null);
+        assertTrue(result.text().contains("access denied"));
+    }
+
+    @Test
+    void matchNode_unexpectedException_returnsGenericError() {
+        UUID userId = UUID.randomUUID();
+        UUID nodeId = UUID.randomUUID();
+        when(currentUserService.resolveUserId()).thenReturn(userId);
+        when(matchesService.matchFromNode(userId, nodeId, null, null)).thenThrow(new RuntimeException("boom"));
+
+        TextContent result = mcpReadTools.matchNode(nodeId.toString(), null, null);
+        assertTrue(result.text().contains("Failed to match from node"));
     }
 
     private static MeshMatchResult sampleMatch() {

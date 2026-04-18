@@ -119,7 +119,7 @@ class SearchServiceTest {
         parsersField.set(searchService, List.of(parser));
         ParsedSearchQuery parsed = new ParsedSearchQuery(
                 new ParsedSearchQuery.MustHaveFilters(List.of(), null, List.of(), List.of(), List.of("Italy"), List.of()),
-                null, "unknown", null, List.of(), "query");
+                null, "unknown", null, List.of(), "query", null);
         when(parser.parse("query")).thenReturn(Optional.of(parsed));
 
         when(consentService.hasActiveConsent(userId, "professional_matching")).thenReturn(true);
@@ -142,7 +142,7 @@ class SearchServiceTest {
         parsersField.set(searchService, List.of(parser));
 
         ParsedSearchQuery parsed = new ParsedSearchQuery(null, null, "unknown", null,
-                List.of("java"), "java developer");
+                List.of("java"), "java developer", "jobs");
         when(parser.parse("java developer")).thenReturn(Optional.of(parsed));
 
         when(consentService.hasActiveConsent(userId, "professional_matching")).thenReturn(true);
@@ -155,6 +155,8 @@ class SearchServiceTest {
 
         verify(parser).parse("java developer");
         assertNotNull(response);
+        assertNotNull(response.parsedQuery());
+        assertEquals("jobs", response.parsedQuery().resultScope());
     }
 
     @Test
@@ -235,7 +237,7 @@ class SearchServiceTest {
         ParsedSearchQuery parsed = new ParsedSearchQuery(
                 new ParsedSearchQuery.MustHaveFilters(List.of("Java", "Python"),
                         List.of("Developer"), List.of(), List.of(), List.of()),
-                null, "senior", null, List.of("Java", "Python"), "java python developer");
+                null, "senior", null, List.of("Java", "Python"), "java python developer", null);
         when(parser.parse("java python developer")).thenReturn(Optional.of(parsed));
 
         when(consentService.hasActiveConsent(userId, "professional_matching")).thenReturn(true);
@@ -268,7 +270,7 @@ class SearchServiceTest {
         parsersField.set(searchService, List.of(parser));
 
         ParsedSearchQuery parsed = new ParsedSearchQuery(
-                null, null, "SENIOR", null, List.of("devops"), "devops");
+                null, null, "SENIOR", null, List.of("devops"), "devops", null);
         when(parser.parse("senior devops")).thenReturn(Optional.of(parsed));
 
         when(consentService.hasActiveConsent(userId, "professional_matching")).thenReturn(true);
@@ -327,7 +329,7 @@ class SearchServiceTest {
                         List.of(), List.of(), List.of(), List.of()),
                 new ParsedSearchQuery.NiceToHaveFilters(List.of("Docker", "Kubernetes"),
                         List.of(), List.of()),
-                "unknown", null, List.of("Java"), "java docker kubernetes");
+                "unknown", null, List.of("Java"), "java docker kubernetes", null);
         when(parser.parse("java with docker")).thenReturn(Optional.of(parsed));
 
         when(consentService.hasActiveConsent(userId, "professional_matching")).thenReturn(true);
@@ -361,7 +363,7 @@ class SearchServiceTest {
         ParsedSearchQuery parsed = new ParsedSearchQuery(
                 new ParsedSearchQuery.MustHaveFilters(List.of("Python"),
                         List.of(), List.of(), List.of(), List.of("Finance")),
-                null, "unknown", null, List.of("Python"), "python finance");
+                null, "unknown", null, List.of("Python"), "python finance", null);
         when(parser.parse("python in finance")).thenReturn(Optional.of(parsed));
 
         when(consentService.hasActiveConsent(userId, "professional_matching")).thenReturn(true);
@@ -448,7 +450,7 @@ class SearchServiceTest {
         ParsedSearchQuery parsed = new ParsedSearchQuery(
                 new ParsedSearchQuery.MustHaveFilters(List.of(), List.of(),
                         List.of("Italian"), List.of(), List.of()),
-                null, "unknown", null, List.of(), "Italian speaker");
+                null, "unknown", null, List.of(), "Italian speaker", null);
         when(parser.parse("Italian speaker")).thenReturn(Optional.of(parsed));
 
         when(consentService.hasActiveConsent(userId, "professional_matching")).thenReturn(true);
