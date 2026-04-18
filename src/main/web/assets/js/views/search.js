@@ -272,7 +272,12 @@ function renderProfileCard(result) {
     card.appendChild(tagsArea);
   }
 
-  const actions = contactFooter(result.slackHandle, result.email);
+  const actions = contactFooter(
+    result.slackHandle,
+    result.email,
+    result.telegramHandle,
+    result.mobilePhone
+  );
   if (actions) card.appendChild(actions);
 
   return card;

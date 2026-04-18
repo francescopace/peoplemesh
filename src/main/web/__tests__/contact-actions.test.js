@@ -1,5 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
-import { slackButton, copyEmailButton, contactFooter } from "../assets/js/contact-actions.js";
+import {
+  slackButton,
+  copyEmailButton,
+  telegramButton,
+  mobileButton,
+  contactFooter,
+} from "../assets/js/contact-actions.js";
 
 describe("slackButton()", () => {
   it("creates an anchor element", () => {
@@ -29,9 +35,9 @@ describe("slackButton()", () => {
     expect(btn.getAttribute("target")).toBe("_blank");
   });
 
-  it("contains Slack text", () => {
+  it("has accessibility label for slack", () => {
     const btn = slackButton("eve");
-    expect(btn.textContent).toContain("Slack");
+    expect(btn.getAttribute("aria-label")).toBe("Contact on Slack");
   });
 });
 
@@ -41,9 +47,9 @@ describe("copyEmailButton()", () => {
     expect(btn.tagName).toBe("BUTTON");
   });
 
-  it("contains Email text", () => {
+  it("has accessibility label for email", () => {
     const btn = copyEmailButton("test@example.com");
-    expect(btn.textContent).toContain("Email");
+    expect(btn.getAttribute("aria-label")).toBe("Copy email");
   });
 
   it("copies email to clipboard on click", async () => {
@@ -57,31 +63,65 @@ describe("copyEmailButton()", () => {
   });
 });
 
+describe("telegramButton()", () => {
+  it("creates an anchor element", () => {
+    const btn = telegramButton("@alice");
+    expect(btn.tagName).toBe("A");
+  });
+
+  it("sets t.me href and strips @", () => {
+    const btn = telegramButton("@alice");
+    expect(btn.getAttribute("href")).toBe("https://t.me/alice");
+  });
+});
+
+describe("mobileButton()", () => {
+  it("creates an anchor element", () => {
+    const btn = mobileButton("+39 123 456");
+    expect(btn.tagName).toBe("A");
+  });
+
+  it("sets tel href with normalized whitespace", () => {
+    const btn = mobileButton("+39 123 456");
+    expect(btn.getAttribute("href")).toBe("tel:+39123456");
+  });
+});
+
 describe("contactFooter()", () => {
   it("returns element with slack button when handle provided", () => {
-    const footer = contactFooter("alice", null);
+    const footer = contactFooter("alice", null, null, null);
     expect(footer).not.toBeNull();
     expect(footer.querySelector("a")).not.toBeNull();
   });
 
   it("returns element with email button when email provided", () => {
-    const footer = contactFooter(null, "test@test.com");
+    const footer = contactFooter(null, "test@test.com", null, null);
     expect(footer).not.toBeNull();
     expect(footer.querySelector("button")).not.toBeNull();
   });
 
-  it("returns element with both when both provided", () => {
-    const footer = contactFooter("alice", "alice@test.com");
-    expect(footer.children.length).toBe(2);
+  it("returns element with all contact actions when provided", () => {
+    const footer = contactFooter("alice", "alice@test.com", "@alice_tg", "+39 123 456");
+    expect(footer.children.length).toBe(4);
   });
 
   it("returns null when neither provided", () => {
-    const footer = contactFooter(null, null);
+    const footer = contactFooter(null, null, null, null);
     expect(footer).toBeNull();
   });
 
   it("returns null for empty strings", () => {
-    const footer = contactFooter("", "");
+    const footer = contactFooter("", "", "", "");
+    expect(footer).toBeNull();
+  });
+
+  it("ignores whitespace-only contact values", () => {
+    const footer = contactFooter("   ", "\n\t", "  ", " ");
+    expect(footer).toBeNull();
+  });
+
+  it("ignores literal null/undefined string values", () => {
+    const footer = contactFooter("null", "undefined", " NULL ", " Undefined ");
     expect(footer).toBeNull();
   });
 });

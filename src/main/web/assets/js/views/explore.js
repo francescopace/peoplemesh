@@ -247,7 +247,12 @@ export async function renderExplore(container) {
     }
 
     if (isPerson) {
-      const actions = contactFooter(m.person?.slackHandle, m.person?.email);
+      const actions = contactFooter(
+        m.person?.slackHandle,
+        m.person?.email,
+        m.person?.telegramHandle,
+        m.person?.mobilePhone
+      );
       if (actions) card.appendChild(actions);
     }
 

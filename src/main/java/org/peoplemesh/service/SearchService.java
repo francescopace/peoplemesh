@@ -329,6 +329,8 @@ public class SearchService {
                 String city = sdString(c.structuredData, "city");
                 String email = sdString(c.structuredData, "email");
                 String slackHandle = sdString(c.structuredData, "slack_handle");
+                String telegramHandle = sdString(c.structuredData, "telegram_handle");
+                String mobilePhone = sdString(c.structuredData, "mobile_phone");
                 List<String> languagesSpoken = sdListOrEmpty(c.structuredData, "languages_spoken");
                 Seniority seniority = MatchingUtils.parseEnum(Seniority.class,
                         sdString(c.structuredData, "seniority"));
@@ -347,7 +349,7 @@ public class SearchService {
                         c.tags, toolsAndTech,
                         languagesSpoken, c.country, city,
                         workMode, employmentType,
-                        slackHandle, email,
+                        slackHandle, email, telegramHandle, mobilePhone,
                         sc.breakdown, skillLevels
                 ));
             } else {

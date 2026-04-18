@@ -39,7 +39,9 @@ public record MeshMatchResult(
             String city,
             String timezone,
             String slackHandle,
-            String email
+            String email,
+            String telegramHandle,
+            String mobilePhone
     ) {}
 
     public record MeshMatchBreakdown(

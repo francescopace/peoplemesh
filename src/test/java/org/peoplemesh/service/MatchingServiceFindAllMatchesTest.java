@@ -99,7 +99,7 @@ class MatchingServiceFindAllMatchesTest {
                 "HYBRID", "EMPLOYED", List.of(), List.of(),
                 "IT", "Europe/Rome", Instant.now(), "Rome", 0.9d,
                 "Jane", "Engineer,Developer", List.of(), List.of(), List.of(),
-                "https://img", "@jane", "jane@example.com"
+                "https://img", "@jane", "jane@example.com", "@jane_tg", "+39123456789"
         };
 
         Object[] nodeRow = new Object[]{

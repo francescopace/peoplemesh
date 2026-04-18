@@ -28,7 +28,7 @@ class SearchResultItemTest {
                 List.of("Java", "Python"), List.of("Docker"),
                 List.of("English"), "US", "NYC",
                 WorkMode.REMOTE, EmploymentType.EMPLOYED,
-                "alice-slack", "alice@example.com",
+                "alice-slack", "alice@example.com", "alice_tg", "+39123456789",
                 breakdown, levels);
 
         assertEquals(id, item.id());
@@ -47,6 +47,8 @@ class SearchResultItemTest {
         assertEquals(EmploymentType.EMPLOYED, item.employmentType());
         assertEquals("alice-slack", item.slackHandle());
         assertEquals("alice@example.com", item.email());
+        assertEquals("alice_tg", item.telegramHandle());
+        assertEquals("+39123456789", item.mobilePhone());
         assertNull(item.nodeType());
         assertNull(item.title());
         assertNull(item.description());
@@ -87,6 +89,8 @@ class SearchResultItemTest {
         assertNull(item.employmentType());
         assertNull(item.slackHandle());
         assertNull(item.email());
+        assertNull(item.telegramHandle());
+        assertNull(item.mobilePhone());
         assertNull(item.skillLevels());
     }
 
@@ -96,7 +100,7 @@ class SearchResultItemTest {
         SearchResultItem item = SearchResultItem.profile(
                 id, 0.5, null, null,
                 null, null, null, null, null, null, null,
-                null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null);
 
         assertEquals("profile", item.resultType());
         assertNull(item.displayName());

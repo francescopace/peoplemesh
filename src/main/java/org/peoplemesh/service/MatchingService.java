@@ -55,7 +55,8 @@ public class MatchingService {
             List<String> hobbies, List<String> sports,
             List<String> causes,
             String avatarUrl,
-            String slackHandle, String email
+            String slackHandle, String email,
+            String telegramHandle, String mobilePhone
     ) {
         static CandidateRow fromNativeRow(Object[] row) {
             return new CandidateRow(
@@ -72,7 +73,8 @@ public class MatchingService {
                     MatchingUtils.parseArray(row[17]), MatchingUtils.parseArray(row[18]),
                     MatchingUtils.parseArray(row[19]),
                     (String) row[20],
-                    (String) row[21], (String) row[22]
+                    (String) row[21], (String) row[22],
+                    (String) row[23], (String) row[24]
             );
         }
 
@@ -180,6 +182,8 @@ public class MatchingService {
                     c.timezone(),
                     c.slackHandle(),
                     c.email(),
+                    c.telegramHandle(),
+                    c.mobilePhone(),
                     new MatchScoreBreakdown(
                             MatchingUtils.round3(c.cosineSim()),
                             MatchingUtils.round3(skillsOverlap),
@@ -333,7 +337,9 @@ public class MatchingService {
                                 m.city(),
                                 m.timezone(),
                                 m.slackHandle(),
-                                m.email()
+                                m.email(),
+                                m.telegramHandle(),
+                                m.mobilePhone()
                         )
                 ));
             }
@@ -532,7 +538,7 @@ public class MatchingService {
             List<String> topicsFrequent, List<String> learningAreas,
             List<String> hobbies, List<String> sports, List<String> causes,
             String country, String city, String timezone,
-            String slackHandle, String email,
+            String slackHandle, String email, String telegramHandle, String mobilePhone,
             MatchScoreBreakdown breakdown
     ) {}
 
