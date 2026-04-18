@@ -43,3 +43,6 @@ logs/
 __pycache__/
 *.pyc
 
+# Large data files (download manually, see docs/how-to/generate-synthetic-data.md)
+tools/stack-overflow/survey_results_public.csv
+

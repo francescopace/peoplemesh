@@ -22,6 +22,7 @@ This is the canonical index for technical documentation under `docs/`.
 - Purge consent tokens: [`how-to/purge-consent-tokens.md`](how-to/purge-consent-tokens.md)
 - Enforce data retention: [`how-to/enforce-retention.md`](how-to/enforce-retention.md)
 - Configure community auto-clustering: [`how-to/configure-community-auto-clustering.md`](how-to/configure-community-auto-clustering.md)
+- Generate synthetic data for dev/demos: [`how-to/generate-synthetic-data.md`](how-to/generate-synthetic-data.md)
 - More procedures and template: [`how-to/README.md`](how-to/README.md)
 
 ## Technical Reference
