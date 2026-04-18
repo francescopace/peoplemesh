@@ -23,7 +23,7 @@ public class DoclingCvParser {
     public Optional<String> parseToMarkdown(InputStream fileStream, String filename) {
         long start = System.currentTimeMillis();
         try {
-            LOG.infof("Docling parse started: file=%s", filename);
+            LOG.infof("Docling parse started: hasFilename=%s", filename != null && !filename.isBlank());
             ConvertDocumentResponse response = doclingService.convertFromInputStream(fileStream, filename,
                     OutputFormat.MARKDOWN);
             Optional<String> markdown = Optional.empty();
@@ -35,8 +35,7 @@ public class DoclingCvParser {
             }
 
             LOG.infof(
-                    "Docling parse completed: file=%s success=%s markdownSize=%d elapsedMs=%d",
-                    filename,
+                    "Docling parse completed: success=%s markdownSize=%d elapsedMs=%d",
                     markdown.isPresent(),
                     markdown.map(String::length).orElse(0),
                     System.currentTimeMillis() - start

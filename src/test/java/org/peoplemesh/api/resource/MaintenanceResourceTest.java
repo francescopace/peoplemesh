@@ -11,7 +11,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.peoplemesh.config.AppConfig;
 import org.peoplemesh.domain.dto.LdapImportResult;
 import org.peoplemesh.domain.dto.LdapUserPreview;
-import org.peoplemesh.domain.exception.BusinessException;
 import org.peoplemesh.domain.exception.NotFoundBusinessException;
 import org.peoplemesh.domain.exception.ValidationBusinessException;
 import org.peoplemesh.service.MaintenanceService;
@@ -138,9 +137,10 @@ class MaintenanceResourceTest {
         when(maintenanceService.importFromLdap())
                 .thenThrow(new ValidationBusinessException("LDAP configuration is invalid"));
 
-        BusinessException ex = assertThrows(BusinessException.class, () -> resource.ldapImport("valid-key"));
-        assertEquals(400, ex.status());
-        assertEquals("Configuration Error", ex.title());
+        ValidationBusinessException ex = assertThrows(
+                ValidationBusinessException.class,
+                () -> resource.ldapImport("valid-key"));
+        assertEquals("LDAP configuration is invalid", ex.publicDetail());
     }
 
     @Test
@@ -215,11 +215,10 @@ class MaintenanceResourceTest {
         when(maintenanceService.startEmbeddingRegeneration("not-valid", false, 1))
                 .thenThrow(new ValidationBusinessException("Invalid nodeType"));
 
-        BusinessException ex = assertThrows(
-                BusinessException.class,
+        ValidationBusinessException ex = assertThrows(
+                ValidationBusinessException.class,
                 () -> resource.regenerateEmbeddings("valid-key", "not-valid", false, 1));
-        assertEquals(400, ex.status());
-        assertEquals("Validation Error", ex.title());
+        assertEquals("Invalid nodeType", ex.publicDetail());
         verify(maintenanceService).startEmbeddingRegeneration("not-valid", false, 1);
     }
 
@@ -231,11 +230,10 @@ class MaintenanceResourceTest {
         when(maintenanceService.startEmbeddingRegeneration(null, true, 64))
                 .thenThrow(new ValidationBusinessException("batchSize must be between 1 and 32"));
 
-        BusinessException ex = assertThrows(
-                BusinessException.class,
+        ValidationBusinessException ex = assertThrows(
+                ValidationBusinessException.class,
                 () -> resource.regenerateEmbeddings("valid-key", null, true, 64));
-        assertEquals(400, ex.status());
-        assertEquals("Validation Error", ex.title());
+        assertEquals("batchSize must be between 1 and 32", ex.publicDetail());
     }
 
     @Test
@@ -288,11 +286,10 @@ class MaintenanceResourceTest {
         when(maintenanceService.getEmbeddingRegenerationStatus("not-a-uuid"))
                 .thenThrow(new ValidationBusinessException("Invalid jobId format"));
 
-        BusinessException ex = assertThrows(
-                BusinessException.class,
+        ValidationBusinessException ex = assertThrows(
+                ValidationBusinessException.class,
                 () -> resource.regenerateEmbeddingsStatus("valid-key", "not-a-uuid"));
-        assertEquals(400, ex.status());
-        assertEquals("Validation Error", ex.title());
+        assertEquals("Invalid jobId format", ex.publicDetail());
         verify(maintenanceService).getEmbeddingRegenerationStatus("not-a-uuid");
     }
 }

@@ -7,11 +7,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.mockito.MockedStatic;
 import org.peoplemesh.config.AppConfig;
 import org.peoplemesh.domain.dto.SearchQuery;
 import org.peoplemesh.domain.dto.SearchResponse;
-import org.peoplemesh.domain.model.SkillAssessment;
 
 import java.lang.reflect.Field;
 import java.sql.Timestamp;
@@ -200,18 +198,14 @@ class SearchServiceTest {
         when(searchRepository.unifiedVectorSearch(any(float[].class), eq(userId),
                 any(), any(), anyInt())).thenReturn(rowList(userRow));
 
-        try (MockedStatic<SkillAssessment> sa = mockStatic(SkillAssessment.class)) {
-            sa.when(() -> SkillAssessment.findByNode(any())).thenReturn(Collections.emptyList());
+        SearchResponse response = searchService.search(userId, "java developer");
 
-            SearchResponse response = searchService.search(userId, "java developer");
-
-            assertNotNull(response);
-            assertFalse(response.results().isEmpty());
-            assertEquals(nodeId, response.results().get(0).id());
-            assertEquals("profile", response.results().get(0).resultType());
-            assertEquals("https://linkedin.com/in/alice", response.results().get(0).linkedinUrl());
-            assertTrue(response.results().get(0).score() > 0);
-        }
+        assertNotNull(response);
+        assertFalse(response.results().isEmpty());
+        assertEquals(nodeId, response.results().get(0).id());
+        assertEquals("profile", response.results().get(0).resultType());
+        assertEquals("https://linkedin.com/in/alice", response.results().get(0).linkedinUrl());
+        assertTrue(response.results().get(0).score() > 0);
     }
 
     @Test
@@ -294,12 +288,9 @@ class SearchServiceTest {
         when(searchRepository.unifiedVectorSearch(any(float[].class), eq(userId),
                 any(), any(), anyInt())).thenReturn(rowList(row));
 
-        try (MockedStatic<SkillAssessment> sa = mockStatic(SkillAssessment.class)) {
-            sa.when(() -> SkillAssessment.findByNode(any())).thenReturn(Collections.emptyList());
-            SearchResponse response = searchService.search(userId, "java python developer");
-            assertNotNull(response);
-            assertFalse(response.results().isEmpty());
-        }
+        SearchResponse response = searchService.search(userId, "java python developer");
+        assertNotNull(response);
+        assertFalse(response.results().isEmpty());
     }
 
     @Test
@@ -327,11 +318,8 @@ class SearchServiceTest {
         when(searchRepository.unifiedVectorSearch(any(float[].class), eq(userId),
                 any(), any(), anyInt())).thenReturn(rowList(row));
 
-        try (MockedStatic<SkillAssessment> sa = mockStatic(SkillAssessment.class)) {
-            sa.when(() -> SkillAssessment.findByNode(any())).thenReturn(Collections.emptyList());
-            SearchResponse response = searchService.search(userId, "senior devops");
-            assertNotNull(response);
-        }
+        SearchResponse response = searchService.search(userId, "senior devops");
+        assertNotNull(response);
     }
 
     @Test
@@ -350,11 +338,8 @@ class SearchServiceTest {
         when(searchRepository.unifiedVectorSearch(any(float[].class), eq(userId),
                 any(), any(), anyInt())).thenReturn(rowList(row));
 
-        try (MockedStatic<SkillAssessment> sa = mockStatic(SkillAssessment.class)) {
-            sa.when(() -> SkillAssessment.findByNode(any())).thenReturn(Collections.emptyList());
-            SearchResponse response = searchService.search(userId, "test");
-            assertNotNull(response);
-        }
+        SearchResponse response = searchService.search(userId, "test");
+        assertNotNull(response);
     }
 
     @Test
@@ -386,11 +371,8 @@ class SearchServiceTest {
         when(searchRepository.unifiedVectorSearch(any(float[].class), eq(userId),
                 any(), any(), anyInt())).thenReturn(rowList(row));
 
-        try (MockedStatic<SkillAssessment> sa = mockStatic(SkillAssessment.class)) {
-            sa.when(() -> SkillAssessment.findByNode(any())).thenReturn(Collections.emptyList());
-            SearchResponse response = searchService.search(userId, "java with docker");
-            assertFalse(response.results().isEmpty());
-        }
+        SearchResponse response = searchService.search(userId, "java with docker");
+        assertFalse(response.results().isEmpty());
     }
 
     @Test
@@ -420,11 +402,8 @@ class SearchServiceTest {
         when(searchRepository.unifiedVectorSearch(any(float[].class), eq(userId),
                 any(), any(), anyInt())).thenReturn(rowList(row));
 
-        try (MockedStatic<SkillAssessment> sa = mockStatic(SkillAssessment.class)) {
-            sa.when(() -> SkillAssessment.findByNode(any())).thenReturn(Collections.emptyList());
-            SearchResponse response = searchService.search(userId, "python in finance");
-            assertFalse(response.results().isEmpty());
-        }
+        SearchResponse response = searchService.search(userId, "python in finance");
+        assertFalse(response.results().isEmpty());
     }
 
     @Test
@@ -445,14 +424,11 @@ class SearchServiceTest {
         when(searchRepository.unifiedVectorSearch(any(float[].class), eq(userId),
                 any(), any(), anyInt())).thenReturn(rows);
 
-        try (MockedStatic<SkillAssessment> sa = mockStatic(SkillAssessment.class)) {
-            sa.when(() -> SkillAssessment.findByNode(any())).thenReturn(Collections.emptyList());
-            SearchResponse response = searchService.search(userId, "test");
-            assertNotNull(response);
-            assertTrue(response.results().size() <= 20);
-            for (int i = 1; i < response.results().size(); i++) {
-                assertTrue(response.results().get(i - 1).score() >= response.results().get(i).score());
-            }
+        SearchResponse response = searchService.search(userId, "test");
+        assertNotNull(response);
+        assertTrue(response.results().size() <= 20);
+        for (int i = 1; i < response.results().size(); i++) {
+            assertTrue(response.results().get(i - 1).score() >= response.results().get(i).score());
         }
     }
 
@@ -472,12 +448,9 @@ class SearchServiceTest {
         when(searchRepository.unifiedVectorSearch(any(float[].class), eq(userId),
                 any(), any(), anyInt())).thenReturn(rows);
 
-        try (MockedStatic<SkillAssessment> sa = mockStatic(SkillAssessment.class)) {
-            sa.when(() -> SkillAssessment.findByNode(any())).thenReturn(Collections.emptyList());
-            SearchResponse response = searchService.search(userId, "test", 1, 1);
-            assertEquals(1, response.results().size());
-            assertEquals(id1, response.results().get(0).id());
-        }
+        SearchResponse response = searchService.search(userId, "test", 1, 1);
+        assertEquals(1, response.results().size());
+        assertEquals(id1, response.results().get(0).id());
     }
 
     @Test

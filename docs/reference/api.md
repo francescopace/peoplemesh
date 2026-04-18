@@ -90,6 +90,10 @@ Import-apply merge behavior:
 
 `{scope}` must match `^[a-z_]+$`.
 
+Default consent scopes exposed by `GET /api/v1/me/consents`:
+- `professional_matching`
+- `embedding_processing`
+
 ### Skills & Notifications
 
 | Method | Path | Description |
@@ -166,6 +170,7 @@ Country filter behavior:
 - Prompt search derives country hard-filtering from parsed `must_have.location` when a country is clearly mappable to an ISO code.
 - `SearchRequest` for prompt search contains only `query`; country filtering is parser-driven.
 - Structured matches (`POST /api/v1/matches`) accept a direct `SearchQuery` body and reuse prompt-scoring logic for follow-up filtered requests without reparsing via LLM.
+- `SearchQuery` input is validated at boundary level (nested arrays/fields, level bounds, enums) and invalid payloads return standard `400 Bad Request` problem details.
 - Prompt and structured matching both include geography scoring in result breakdown.
 - Prompt and schema match endpoints support `limit/offset`; if omitted, server defaults are applied (`limit=20`, `offset=0`).
 - In the current web UI (`search` view):
@@ -250,7 +255,7 @@ Skill catalog management — definitions, categories, and CSV import.
 | `PUT /api/v1/skills/{catalogId}` | Body: JSON |
 | `DELETE /api/v1/skills/{catalogId}` | Returns 204 |
 | `POST /api/v1/skills/{catalogId}/import` | Body: raw CSV (`application/octet-stream`) |
-| `GET /api/v1/skills/{catalogId}/definitions` | `?category`, `?page` (default 0), `?size` (default 50, max 200) |
+| `GET /api/v1/skills/{catalogId}/definitions` | `?category` (max 100 chars), `?page` (default 0), `?size` (default 50, max 200) |
 
 ---
 
@@ -278,6 +283,7 @@ Each block provides `sampleCount`, `avgMs`, `p95Ms`, and `maxMs`.
 ## Maintenance
 
 Protected operations for platform operators. All endpoints require the `X-Maintenance-Key` header and may enforce IP/CIDR restrictions (see [configuration.md](configuration.md)).
+The maintenance key header is validated at API boundary (`max 256` chars).
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -296,6 +302,8 @@ Protected operations for platform operators. All endpoints require the `X-Mainte
 | `POST .../regenerate-embeddings` | `?nodeType`, `?onlyMissing` (default true), `?batchSize` (1..1000, default 1). Returns 202 |
 | `GET .../regenerate-embeddings/{jobId}` | `{jobId}` is a UUID |
 | `POST .../ldap-import/preview` | `?limit` (1..200, default 20) |
+
+Validation/configuration failures in maintenance endpoints now follow the shared validation mapping strategy and return standard `400 Bad Request` problem details.
 
 ---
 

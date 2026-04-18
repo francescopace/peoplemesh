@@ -6,6 +6,8 @@ import org.peoplemesh.domain.dto.CatalogCreateRequest;
 import org.peoplemesh.domain.dto.SkillCatalogDto;
 import org.peoplemesh.domain.dto.SkillDefinitionDto;
 import org.peoplemesh.domain.exception.ForbiddenBusinessException;
+import org.peoplemesh.domain.exception.NotFoundBusinessException;
+import org.peoplemesh.domain.exception.ValidationBusinessException;
 import org.peoplemesh.domain.model.SkillCatalog;
 import org.peoplemesh.domain.model.SkillDefinition;
 
@@ -54,11 +56,14 @@ public class SkillsService {
     public SkillCatalogDto getCatalog(UUID catalogId) {
         return catalogService.getCatalog(catalogId)
                 .map(c -> toCatalogDto(c, catalogService.countSkillsByCatalog(c.id)))
-                .orElse(null);
+                .orElseThrow(() -> new NotFoundBusinessException("Catalog not found"));
     }
 
     public int importCsv(UUID userId, UUID catalogId, InputStream csvStream) throws IOException {
         ensureIsAdmin(userId);
+        if (csvStream == null) {
+            throw new ValidationBusinessException("Missing CSV payload");
+        }
         int count = catalogService.importFromCsv(catalogId, csvStream);
         catalogService.generateEmbeddings(catalogId);
         return count;

@@ -19,7 +19,7 @@ public class ValidationExceptionMapper implements ExceptionMapper<ConstraintViol
         String detail = e.getConstraintViolations().stream()
                 .map(this::formatViolation)
                 .collect(Collectors.joining("; "));
-        LOG.debugf("Validation failed: %s", detail);
+        LOG.debugf("Validation failed: violationCount=%d", e.getConstraintViolations().size());
         return Response.status(400)
                 .entity(ProblemDetail.of(400, "Bad Request", detail))
                 .build();

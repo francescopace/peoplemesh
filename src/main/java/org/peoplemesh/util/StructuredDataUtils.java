@@ -20,6 +20,24 @@ public final class StructuredDataUtils {
         return Collections.emptyList();
     }
 
+    public static List<String> sdStringListOrEmpty(Map<String, Object> sd, String key) {
+        if (sd == null) {
+            return Collections.emptyList();
+        }
+        Object raw = sd.get(key);
+        if (raw instanceof List<?> list) {
+            return list.stream()
+                    .map(v -> v == null ? null : v.toString())
+                    .filter(value -> value != null && !value.isBlank())
+                    .map(String::trim)
+                    .toList();
+        }
+        if (raw instanceof String value && !value.isBlank()) {
+            return StringUtils.splitCommaSeparated(value);
+        }
+        return Collections.emptyList();
+    }
+
     public static List<String> sdListOrNull(Map<String, Object> sd, String key) {
         if (sd == null) return null;
         Object v = sd.get(key);

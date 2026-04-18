@@ -5,6 +5,7 @@ import jakarta.inject.Inject;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Size;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
@@ -17,7 +18,6 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
-import org.peoplemesh.api.error.ProblemDetail;
 import org.peoplemesh.domain.dto.CatalogCreateRequest;
 import org.peoplemesh.domain.dto.SkillCatalogDto;
 import org.peoplemesh.domain.dto.SkillDefinitionDto;
@@ -68,11 +68,6 @@ public class SkillsResource {
     @Path("/{catalogId}")
     public Response getCatalog(@PathParam("catalogId") UUID catalogId) {
         SkillCatalogDto catalog = skillsService.getCatalog(catalogId);
-        if (catalog == null) {
-            return Response.status(404)
-                    .entity(ProblemDetail.of(404, "Not Found", "Catalog not found"))
-                    .build();
-        }
         return Response.ok(catalog).build();
     }
 
@@ -80,11 +75,6 @@ public class SkillsResource {
     @Path("/{catalogId}/import")
     @Consumes(MediaType.APPLICATION_OCTET_STREAM)
     public Response importCsv(@PathParam("catalogId") UUID catalogId, InputStream csvStream) throws IOException {
-        if (csvStream == null) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(ProblemDetail.of(400, "Bad Request", "Missing CSV payload"))
-                    .build();
-        }
         UUID userId = currentUserService.resolveUserId();
         int count = skillsService.importCsv(userId, catalogId, csvStream);
         return Response.ok(Map.of("imported", count)).build();
@@ -93,7 +83,7 @@ public class SkillsResource {
     @GET
     @Path("/{catalogId}/definitions")
     public Response listSkills(@PathParam("catalogId") UUID catalogId,
-                               @QueryParam("category") String category,
+                               @QueryParam("category") @Size(max = 100) String category,
                                @QueryParam("page") @DefaultValue("0") @Min(0) int page,
                                @QueryParam("size") @DefaultValue("50") @Min(1) @Max(200) int size) {
         List<SkillDefinitionDto> skills = skillsService.listSkills(catalogId, category, page, size);

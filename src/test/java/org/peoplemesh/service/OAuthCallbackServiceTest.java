@@ -97,9 +97,9 @@ class OAuthCallbackServiceTest {
 
     @Test
     void defaultConsentScopes_containsExpectedValues() {
-        assertTrue(OAuthCallbackService.DEFAULT_CONSENT_SCOPES.contains("professional_matching"));
-        assertTrue(OAuthCallbackService.DEFAULT_CONSENT_SCOPES.contains("embedding_processing"));
-        assertEquals(2, OAuthCallbackService.DEFAULT_CONSENT_SCOPES.size());
+        assertTrue(ConsentService.DEFAULT_CONSENT_SCOPES.contains("professional_matching"));
+        assertTrue(ConsentService.DEFAULT_CONSENT_SCOPES.contains("embedding_processing"));
+        assertEquals(2, ConsentService.DEFAULT_CONSENT_SCOPES.size());
     }
 
     @Test

@@ -5,6 +5,7 @@ import jakarta.inject.Inject;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import jakarta.ws.rs.Consumes;
@@ -40,7 +41,7 @@ public class MatchesResource {
     @POST
     @Consumes(MediaType.APPLICATION_JSON)
     public Response matchFromSchema(
-            @Valid SearchQuery parsedQuery,
+            @NotNull @Valid SearchQuery parsedQuery,
             @QueryParam("type") @Size(max = 40) @Pattern(regexp = "^[A-Za-z_]*$") String type,
             @QueryParam("country") @Pattern(regexp = "^[A-Za-z]{2}$|^$") String country,
             @QueryParam("limit") @Min(1) @Max(100) Integer limit,

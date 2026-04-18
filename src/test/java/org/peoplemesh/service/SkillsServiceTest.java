@@ -9,6 +9,7 @@ import org.peoplemesh.domain.dto.CatalogCreateRequest;
 import org.peoplemesh.domain.dto.SkillCatalogDto;
 import org.peoplemesh.domain.dto.SkillDefinitionDto;
 import org.peoplemesh.domain.exception.ForbiddenBusinessException;
+import org.peoplemesh.domain.exception.NotFoundBusinessException;
 import org.peoplemesh.domain.model.SkillCatalog;
 import org.peoplemesh.domain.model.SkillDefinition;
 
@@ -76,10 +77,10 @@ class SkillsServiceTest {
     }
 
     @Test
-    void getCatalog_whenAbsent_returnsNull() {
+    void getCatalog_whenAbsent_throwsNotFound() {
         UUID catalogId = UUID.randomUUID();
         when(catalogService.getCatalog(catalogId)).thenReturn(Optional.empty());
-        assertEquals(null, service.getCatalog(catalogId));
+        assertThrows(NotFoundBusinessException.class, () -> service.getCatalog(catalogId));
     }
 
     @Test

@@ -3,8 +3,6 @@ package org.peoplemesh.domain.model;
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.*;
 import java.time.Instant;
-import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 @Entity
@@ -30,12 +28,4 @@ public class UserIdentity extends PanacheEntityBase {
     @Column(name = "last_active_at")
     public Instant lastActiveAt;
 
-    public static Optional<UserIdentity> findByOauth(String provider, String subject) {
-        return find("oauthProvider = ?1 and oauthSubject = ?2",
-                provider, subject).firstResultOptional();
-    }
-
-    public static List<UserIdentity> findByNodeId(UUID nodeId) {
-        return list("nodeId", nodeId);
-    }
 }

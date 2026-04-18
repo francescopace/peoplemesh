@@ -7,13 +7,11 @@ import org.peoplemesh.domain.enums.NodeType;
 import org.peoplemesh.domain.enums.Seniority;
 import org.peoplemesh.domain.enums.WorkMode;
 import org.peoplemesh.domain.model.MeshNode;
-import org.peoplemesh.domain.model.SkillAssessment;
 
 import java.time.Instant;
 import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
 
 class EmbeddingTextBuilderTest {
 
@@ -33,15 +31,8 @@ class EmbeddingTextBuilderTest {
         UUID nodeId = UUID.randomUUID();
         MeshNode node = userNode("Dev", List.of("React"));
         node.id = nodeId;
-
-        try (var assessmentMock = mockStatic(SkillAssessment.class)) {
-            assessmentMock.when(() -> SkillAssessment.findByNode(nodeId))
-                    .thenReturn(Collections.emptyList());
-
-            String text = EmbeddingTextBuilder.buildText(node);
-
-            assertTrue(text.contains("React"));
-        }
+        String text = EmbeddingTextBuilder.buildText(node);
+        assertTrue(text.contains("React"));
     }
 
     @Test

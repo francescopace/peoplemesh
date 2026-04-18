@@ -27,7 +27,6 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.NewCookie;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriInfo;
-import org.jboss.logging.Logger;
 import org.jboss.resteasy.reactive.RestForm;
 import org.jboss.resteasy.reactive.multipart.FileUpload;
 import org.peoplemesh.api.error.ProblemDetail;
@@ -35,21 +34,17 @@ import org.peoplemesh.config.AppConfig;
 import org.peoplemesh.domain.dto.ProfileSchema;
 import org.peoplemesh.domain.dto.SkillAssessmentDto;
 import org.peoplemesh.domain.dto.UserNotificationDto;
-import org.peoplemesh.domain.exception.BusinessException;
-import org.peoplemesh.domain.exception.ValidationBusinessException;
 import org.peoplemesh.service.CurrentUserService;
 import org.peoplemesh.service.CvImportService;
 import org.peoplemesh.service.GdprService;
 import org.peoplemesh.service.MeService;
-import org.peoplemesh.service.OAuthCallbackService;
+import org.peoplemesh.service.ConsentService;
 import org.peoplemesh.service.ProfileService;
 import org.peoplemesh.service.SessionService;
 import org.peoplemesh.service.UserNotificationService;
 import org.peoplemesh.util.ClientIpResolver;
 import org.peoplemesh.util.HashUtils;
 
-import java.io.InputStream;
-import java.nio.file.Files;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -58,8 +53,6 @@ import java.util.UUID;
 @Produces(MediaType.APPLICATION_JSON)
 @Blocking
 public class MeResource {
-
-    private static final Logger LOG = Logger.getLogger(MeResource.class);
 
     @Inject
     SecurityIdentity identity;
@@ -199,9 +192,13 @@ public class MeResource {
     @Path("/cv-import")
     @Consumes(MediaType.MULTIPART_FORM_DATA)
     public Response uploadCv(@RestForm("file") FileUpload file) {
-        validateCvUpload(file);
         UUID userId = currentUserService.resolveUserId();
-        CvImportService.CvImportResult result = parseCvUpload(file, userId);
+        CvImportService.CvImportResult result = cvImportService.importFromUpload(
+                file != null ? file.filePath() : null,
+                file != null ? file.fileName() : null,
+                file != null ? file.size() : 0L,
+                appConfig.cvImport().maxFileSize(),
+                userId);
         return Response.ok(Map.of("imported", result.schema(), "source", result.source())).build();
     }
 
@@ -211,7 +208,7 @@ public class MeResource {
     public Response getConsents() {
         UUID userId = currentUserService.resolveUserId();
         List<String> active = meService.getActiveConsentScopes(userId);
-        return Response.ok(Map.of("scopes", OAuthCallbackService.DEFAULT_CONSENT_SCOPES, "active", active)).build();
+        return Response.ok(Map.of("scopes", ConsentService.DEFAULT_CONSENT_SCOPES, "active", active)).build();
     }
 
     @POST
@@ -228,7 +225,7 @@ public class MeResource {
         meService.grantConsent(
                 userId,
                 scope,
-                OAuthCallbackService.DEFAULT_CONSENT_SCOPES,
+                ConsentService.DEFAULT_CONSENT_SCOPES,
                 resolveClientIpHash(headers));
         return Response.ok(Map.of("scope", scope, "status", "granted")).build();
     }
@@ -242,7 +239,7 @@ public class MeResource {
             String scope
     ) {
         UUID userId = currentUserService.resolveUserId();
-        meService.revokeConsent(userId, scope, OAuthCallbackService.DEFAULT_CONSENT_SCOPES);
+        meService.revokeConsent(userId, scope, ConsentService.DEFAULT_CONSENT_SCOPES);
         return Response.ok(Map.of("scope", scope, "status", "revoked")).build();
     }
 
@@ -252,30 +249,6 @@ public class MeResource {
     public Response getPrivacyDashboard() {
         UUID userId = currentUserService.resolveUserId();
         return Response.ok(gdprService.getPrivacyDashboard(userId)).build();
-    }
-
-    private void validateCvUpload(FileUpload file) {
-        if (file == null) {
-            throw new ValidationBusinessException("Missing file");
-        }
-        if (file.size() > appConfig.cvImport().maxFileSize()) {
-            throw new BusinessException(413, "Payload Too Large", "File exceeds maximum size");
-        }
-    }
-
-    private CvImportService.CvImportResult parseCvUpload(FileUpload file, UUID userId) {
-        try (InputStream stream = Files.newInputStream(file.filePath())) {
-            return cvImportService.parseCv(
-                    stream,
-                    file.fileName(),
-                    file.size(),
-                    userId);
-        } catch (IllegalStateException e) {
-            throw new BusinessException(502, "Bad Gateway", "CV processing failed");
-        } catch (Exception e) {
-            LOG.error("CV upload processing failed", e);
-            throw new BusinessException(500, "Internal Server Error", "Error processing file");
-        }
     }
 
     private NewCookie buildClearCookie(boolean secure) {

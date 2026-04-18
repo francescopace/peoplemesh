@@ -12,6 +12,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
 import org.peoplemesh.util.GeographyUtils;
+import org.peoplemesh.util.SearchMatchingUtils;
 import org.peoplemesh.util.SqlParsingUtils;
 import org.peoplemesh.util.StringUtils;
 
@@ -85,11 +86,6 @@ public class MatchingService {
     @Inject
     SemanticSkillMatcher semanticSkillMatcher;
 
-    private static List<String> parseCommaSeparatedRoles(String plain) {
-        return StringUtils.splitCommaSeparated(plain);
-    }
-
-
     private List<MatchResult> findMatches(
             UUID excludeUserId,
             float[] queryEmbedding,
@@ -107,13 +103,13 @@ public class MatchingService {
                 queryEmbedding, excludeUserId, poolSize);
         Map<UUID, Map<String, Short>> skillLevelsByNode = loadSkillLevelsByNode(candidates, filters);
 
-        List<String> mySkillPool = deduplicateTerms(referenceSkillPool);
+        List<String> mySkillPool = SearchMatchingUtils.deduplicateTerms(referenceSkillPool);
         double semanticThreshold = config.search().skillMatchThreshold();
         List<MatchResult> results = new ArrayList<>();
 
         for (Object[] raw : candidates) {
             CandidateRow c = CandidateRow.fromNativeRow(raw);
-            List<String> candidateSkillPool = deduplicateTerms(
+            List<String> candidateSkillPool = SearchMatchingUtils.deduplicateTerms(
                     MatchingUtils.combineLists(c.combinedSkillsAndTools(), c.skillsSoft()));
 
             List<String> matchedSkills = matchSkills(mySkillPool, candidateSkillPool, semanticThreshold);
@@ -155,7 +151,7 @@ public class MatchingService {
                     StringUtils.round3(decayedScore),
                     c.displayName(),
                     c.avatarUrl(),
-                    parseCommaSeparatedRoles(c.roles()),
+                    StringUtils.splitCommaSeparated(c.roles()),
                     c.seniority(),
                     c.skillsTechnical(),
                     c.toolsAndTech(),
@@ -349,7 +345,7 @@ public class MatchingService {
         }
 
         all.sort(Comparator.comparingDouble(MeshMatchResult::score).reversed());
-        List<MeshMatchResult> result = applyPagination(all, limit, offset);
+        List<MeshMatchResult> result = SearchMatchingUtils.paginate(all, limit, offset, config.matching().resultLimit());
         LOG.debugf("action=matchAll userId=%s type=%s candidates=%d results=%d elapsedMs=%d",
                 excludeUserId, typeFilter, all.size(), result.size(), System.currentTimeMillis() - start);
         return result;
@@ -426,16 +422,6 @@ public class MatchingService {
                 .toList();
     }
 
-    private List<MeshMatchResult> applyPagination(List<MeshMatchResult> all, Integer requestedLimit, Integer requestedOffset) {
-        int safeOffset = requestedOffset != null ? Math.max(0, requestedOffset) : 0;
-        int safeLimit = requestedLimit != null ? Math.max(1, requestedLimit) : config.matching().resultLimit();
-        if (safeOffset >= all.size()) {
-            return Collections.emptyList();
-        }
-        int toIndex = Math.min(all.size(), safeOffset + safeLimit);
-        return all.subList(safeOffset, toIndex);
-    }
-
     double geographyScore(String myCountry, String theirCountry, WorkMode myWorkMode) {
         return GeographyUtils.geographyScore(myCountry, theirCountry, myWorkMode);
     }
@@ -485,24 +471,6 @@ public class MatchingService {
         if (geoScore > 0) codes.add("LOCATION_COMPATIBLE");
         if (decayMultiplier < 1.0) codes.add("RECENCY_DECAY_APPLIED");
         return codes;
-    }
-
-    private static List<String> deduplicateTerms(List<String> raw) {
-        if (raw == null || raw.isEmpty()) {
-            return Collections.emptyList();
-        }
-        Set<String> seen = new HashSet<>();
-        List<String> out = new ArrayList<>();
-        for (String value : raw) {
-            if (value == null || value.isBlank()) {
-                continue;
-            }
-            String normalized = MatchingUtils.normalizeTerm(value);
-            if (seen.add(normalized)) {
-                out.add(value.trim());
-            }
-        }
-        return out;
     }
 
     private List<String> matchSkills(List<String> querySkills, List<String> candidateSkills, double threshold) {

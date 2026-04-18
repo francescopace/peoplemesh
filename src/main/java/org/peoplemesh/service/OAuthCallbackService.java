@@ -17,14 +17,10 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 
 @ApplicationScoped
 public class OAuthCallbackService {
-
-    public static final Set<String> DEFAULT_CONSENT_SCOPES = Set.of(
-            "professional_matching", "embedding_processing");
 
     @Inject
     OAuthTokenExchangeService tokenExchangeService;
@@ -89,7 +85,7 @@ public class OAuthCallbackService {
         }
 
         if (isNewUser) {
-            for (String scope : DEFAULT_CONSENT_SCOPES) {
+            for (String scope : ConsentService.DEFAULT_CONSENT_SCOPES) {
                 recordConsent(userNode.id, scope);
             }
         }

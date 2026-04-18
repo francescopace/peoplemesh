@@ -1,6 +1,5 @@
 package org.peoplemesh.repository;
 
-import io.quarkus.panache.common.Page;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -29,10 +28,17 @@ public class AuditLogRepository {
     }
 
     public List<AuditLogEntry> findRecentNotifications(String userHash, Set<String> suppressedActions, int pageSize) {
-        return AuditLogEntry.find(
-                        "userIdHash = ?1 and action not in ?2 order by timestamp desc",
-                        userHash, suppressedActions)
-                .page(Page.ofSize(pageSize))
-                .list();
+        String query = "FROM AuditLogEntry a WHERE a.userIdHash = :userHash ";
+        if (suppressedActions != null && !suppressedActions.isEmpty()) {
+            query += "AND a.action NOT IN :suppressedActions ";
+        }
+        query += "ORDER BY a.timestamp DESC";
+        var typedQuery = em.createQuery(query, AuditLogEntry.class)
+                .setParameter("userHash", userHash)
+                .setMaxResults(pageSize);
+        if (suppressedActions != null && !suppressedActions.isEmpty()) {
+            typedQuery.setParameter("suppressedActions", suppressedActions);
+        }
+        return typedQuery.getResultList();
     }
 }

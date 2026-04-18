@@ -9,6 +9,7 @@ import org.peoplemesh.domain.dto.OperationTimingStatsDto;
 import org.peoplemesh.domain.dto.SystemStatisticsDto;
 import org.peoplemesh.domain.dto.TimingStatisticsDto;
 import org.peoplemesh.domain.enums.NodeType;
+import org.peoplemesh.domain.exception.ForbiddenBusinessException;
 import org.peoplemesh.repository.NodeRepository;
 import org.peoplemesh.repository.SkillDefinitionRepository;
 
@@ -16,6 +17,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
+import java.util.UUID;
 
 @ApplicationScoped
 public class SystemStatisticsService {
@@ -28,6 +30,9 @@ public class SystemStatisticsService {
 
     @Inject
     SkillDefinitionRepository skillDefinitionRepository;
+
+    @Inject
+    EntitlementService entitlementService;
 
     private static final String LLM_METRIC = "peoplemesh.llm.inference";
     private static final String EMBEDDING_SINGLE_METRIC = "peoplemesh.embedding.inference";
@@ -51,6 +56,13 @@ public class SystemStatisticsService {
         );
 
         return new SystemStatisticsDto(users, jobs, groups, skills, timings);
+    }
+
+    public SystemStatisticsDto loadStatisticsForUser(UUID userId) {
+        if (!entitlementService.isAdmin(userId)) {
+            throw new ForbiddenBusinessException("Missing entitlement is_admin");
+        }
+        return loadStatistics();
     }
 
     private OperationTimingStatsDto aggregateTimer(String metricName) {

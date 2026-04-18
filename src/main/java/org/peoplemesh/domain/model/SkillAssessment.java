@@ -5,7 +5,6 @@ import jakarta.persistence.*;
 
 import java.io.Serializable;
 import java.time.Instant;
-import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -37,18 +36,6 @@ public class SkillAssessment extends PanacheEntityBase {
     @PrePersist
     void onCreate() {
         if (assessedAt == null) assessedAt = Instant.now();
-    }
-
-    public static List<SkillAssessment> findByNode(UUID nodeId) {
-        return list("nodeId", nodeId);
-    }
-
-    public static List<SkillAssessment> findBySkillAndMinLevel(UUID skillId, int minLevel) {
-        return list("skillId = ?1 and level >= ?2", skillId, (short) minLevel);
-    }
-
-    public static void deleteByNode(UUID nodeId) {
-        delete("nodeId", nodeId);
     }
 
     public static class Key implements Serializable {

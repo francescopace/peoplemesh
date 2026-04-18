@@ -3,7 +3,6 @@ package org.peoplemesh.domain.model;
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.*;
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -36,28 +35,4 @@ public class MeshNodeConsent extends PanacheEntityBase {
         return revokedAt == null;
     }
 
-    public static List<MeshNodeConsent> findActiveByNodeId(UUID nodeId) {
-        return list("nodeId = ?1 and revokedAt is null", nodeId);
-    }
-
-    public static List<String> findActiveScopesByNodeId(UUID nodeId) {
-        return getEntityManager()
-                .createQuery(
-                        "SELECT DISTINCT c.scope FROM MeshNodeConsent c " +
-                                "WHERE c.nodeId = :nodeId AND c.revokedAt IS NULL " +
-                                "ORDER BY c.scope",
-                        String.class)
-                .setParameter("nodeId", nodeId)
-                .getResultList();
-    }
-
-    public static long revokeByNodeAndScope(UUID nodeId, String scope) {
-        return update("revokedAt = ?1 where nodeId = ?2 and scope = ?3 and revokedAt is null",
-                Instant.now(), nodeId, scope);
-    }
-
-    public static long revokeAllForNode(UUID nodeId) {
-        return update("revokedAt = ?1 where nodeId = ?2 and revokedAt is null",
-                Instant.now(), nodeId);
-    }
 }

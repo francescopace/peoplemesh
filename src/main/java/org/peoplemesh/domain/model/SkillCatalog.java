@@ -6,9 +6,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 
 @Entity
@@ -49,11 +47,4 @@ public class SkillCatalog extends PanacheEntityBase {
         updatedAt = Instant.now();
     }
 
-    public static List<SkillCatalog> findAllSorted() {
-        return list("ORDER BY name");
-    }
-
-    public static Optional<SkillCatalog> findByIdOptional(UUID id) {
-        return find("id", id).firstResultOptional();
-    }
 }

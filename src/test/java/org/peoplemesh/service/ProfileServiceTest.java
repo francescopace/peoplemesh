@@ -8,7 +8,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.peoplemesh.domain.dto.ProfileSchema;
 import org.peoplemesh.domain.enums.NodeType;
 import org.peoplemesh.domain.model.MeshNode;
-import org.peoplemesh.domain.model.SkillAssessment;
 import org.peoplemesh.repository.NodeRepository;
 
 import java.time.Instant;
@@ -191,17 +190,14 @@ class ProfileServiceTest {
         when(consentService.hasActiveConsent(eq(userId), anyString())).thenReturn(true);
         when(embeddingService.generateEmbedding(anyString())).thenReturn(new float[]{0.1f, 0.2f});
         when(nodeRepository.findPublishedUserNode(userId)).thenReturn(Optional.of(node));
-        try (var skillsMock = mockStatic(SkillAssessment.class)) {
-            skillsMock.when(() -> SkillAssessment.findByNode(userId)).thenReturn(List.of());
 
-            profileService.applySelectiveImport(userId, selected, "manual");
+        profileService.applySelectiveImport(userId, selected, "manual");
 
-            assertEquals("Berlin", node.structuredData.get("city"));
-            assertEquals("1988-05-17", node.structuredData.get("birth_date"));
-            assertEquals("DE", node.country);
-            assertTrue(node.searchable);
-            assertNotNull(node.embedding);
-        }
+        assertEquals("Berlin", node.structuredData.get("city"));
+        assertEquals("1988-05-17", node.structuredData.get("birth_date"));
+        assertEquals("DE", node.country);
+        assertTrue(node.searchable);
+        assertNotNull(node.embedding);
     }
 
     @Test

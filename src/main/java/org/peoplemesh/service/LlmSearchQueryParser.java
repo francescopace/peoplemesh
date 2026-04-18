@@ -144,9 +144,13 @@ public class LlmSearchQueryParser implements SearchQueryParser {
                     .configure(DeserializationFeature.ACCEPT_EMPTY_ARRAY_AS_NULL_OBJECT, true);
             SearchQuery parsed = lenient.readValue(StringUtils.stripMarkdownFences(content), SearchQuery.class);
             SearchQuery normalized = normalizeParsedQuery(parsed, userQuery);
-            LOG.debugf("Parsed search query: skills=%s, seniority=%s",
-                    normalized.mustHave().skills(),
-                    normalized.seniority());
+            int skillCount = normalized.mustHave() != null && normalized.mustHave().skills() != null
+                    ? normalized.mustHave().skills().size()
+                    : 0;
+            LOG.debugf("Parsed search query successfully: skillCount=%d seniority=%s scope=%s",
+                    skillCount,
+                    normalized.seniority(),
+                    normalized.resultScope());
             return Optional.of(normalized);
         } catch (Exception e) {
             LOG.warnf("Failed to parse LLM response: %s", e.getMessage());

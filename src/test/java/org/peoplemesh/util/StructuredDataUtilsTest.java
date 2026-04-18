@@ -77,4 +77,16 @@ class StructuredDataUtilsTest {
     void sdString_numericValue_returnsToString() {
         assertEquals("42", StructuredDataUtils.sdString(Map.of("count", 42), "count"));
     }
+
+    @Test
+    void sdStringListOrEmpty_stringValue_splitsAndTrims() {
+        Map<String, Object> sd = Map.of("industries", "Finance, Banking ,  ");
+        assertEquals(List.of("Finance", "Banking"), StructuredDataUtils.sdStringListOrEmpty(sd, "industries"));
+    }
+
+    @Test
+    void sdStringListOrEmpty_listValue_returnsStrings() {
+        Map<String, Object> sd = Map.of("industries", List.of("Finance", "Health"));
+        assertEquals(List.of("Finance", "Health"), StructuredDataUtils.sdStringListOrEmpty(sd, "industries"));
+    }
 }

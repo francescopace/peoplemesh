@@ -449,7 +449,6 @@ public class LlmProfileStructuring implements ProfileStructuringLlm {
             return;
         }
         var p = schema.professional();
-        var g = schema.geography();
         int roles = p != null && p.roles() != null ? p.roles().size() : 0;
         int industries = p != null && p.industries() != null ? p.industries().size() : 0;
         int skillsTech = p != null && p.skillsTechnical() != null ? p.skillsTechnical().size() : 0;
@@ -457,12 +456,10 @@ public class LlmProfileStructuring implements ProfileStructuringLlm {
         int tools = p != null && p.toolsAndTech() != null ? p.toolsAndTech().size() : 0;
         int langs = p != null && p.languagesSpoken() != null ? p.languagesSpoken().size() : 0;
         String seniority = p != null && p.seniority() != null ? p.seniority().name() : "null";
-        String country = g != null ? g.country() : null;
-        String city = g != null ? g.city() : null;
 
-        LOG.infof(
-                "Profile structuring LLM extraction summary: roles=%d industries=%d skillsTech=%d skillsSoft=%d tools=%d langs=%d seniority=%s country=%s city=%s",
-                roles, industries, skillsTech, skillsSoft, tools, langs, seniority, country, city
+        LOG.debugf(
+                "Profile structuring LLM extraction summary: roles=%d industries=%d skillsTech=%d skillsSoft=%d tools=%d langs=%d seniority=%s",
+                roles, industries, skillsTech, skillsSoft, tools, langs, seniority
         );
     }
 

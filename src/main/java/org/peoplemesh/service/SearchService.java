@@ -1,6 +1,7 @@
 package org.peoplemesh.service;
 
 import static org.peoplemesh.util.StructuredDataUtils.sdListOrEmpty;
+import static org.peoplemesh.util.StructuredDataUtils.sdStringListOrEmpty;
 import static org.peoplemesh.util.StructuredDataUtils.sdString;
 
 import io.quarkus.arc.All;
@@ -10,6 +11,7 @@ import org.peoplemesh.repository.MeshNodeSearchRepository;
 import org.jboss.logging.Logger;
 import org.peoplemesh.config.AppConfig;
 import org.peoplemesh.util.GeographyUtils;
+import org.peoplemesh.util.SearchMatchingUtils;
 import org.peoplemesh.util.SqlParsingUtils;
 import org.peoplemesh.util.StringUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -138,7 +140,7 @@ public class SearchService {
         List<ScoredCandidate> filtered = allScored.stream()
                 .filter(sc -> sc.score >= minScore)
                 .toList();
-        List<ScoredCandidate> paged = applyPagination(filtered, limit, offset);
+        List<ScoredCandidate> paged = SearchMatchingUtils.paginate(filtered, limit, offset, DEFAULT_RESULT_LIMIT);
 
         List<SearchResultItem> results = toResultItems(paged, skillLevelContext.levelsByNodeForResult());
 
@@ -267,7 +269,7 @@ public class SearchService {
         if (cachedLevelsBySkillName != null && !cachedLevelsBySkillName.isEmpty()) {
             candidateSkills.addAll(cachedLevelsBySkillName.keySet());
         }
-        candidateSkills = deduplicateTerms(candidateSkills);
+        candidateSkills = SearchMatchingUtils.deduplicateTerms(candidateSkills);
 
         double skillMatchThreshold = config.search().skillMatchThreshold();
         List<String> matchedMust = semanticSkillMatcher.matchSkills(mustHaveSkills, candidateSkills, skillMatchThreshold).stream()
@@ -306,7 +308,7 @@ public class SearchService {
         List<String> allIndustries = MatchingUtils.combineLists(mustHaveIndustries, niceToHaveIndustries);
         double industryScore = 0.0;
         if (!allIndustries.isEmpty()) {
-            List<String> candidateIndustries = structuredStringList(c.structuredData, "industries");
+            List<String> candidateIndustries = sdStringListOrEmpty(c.structuredData, "industries");
             if (!candidateIndustries.isEmpty()) {
                 List<String> matched = MatchingUtils.intersectCaseInsensitive(allIndustries, candidateIndustries);
                 industryScore = (double) matched.size() / allIndustries.size();
@@ -388,7 +390,7 @@ public class SearchService {
 
         List<String> matchedKeywordTerms = MatchingUtils.intersectCaseInsensitive(keywords, nodeText);
         List<String> matchedMustText = MatchingUtils.intersectCaseInsensitive(mustHaveSkills, nodeText);
-        List<String> matchedMust = deduplicateTerms(
+        List<String> matchedMust = SearchMatchingUtils.deduplicateTerms(
                 MatchingUtils.combineLists(matchedMustSemantic, matchedMustText));
         Set<String> matchedMustNormalized = matchedMust.stream()
                 .map(MatchingUtils::normalizeTerm)
@@ -494,7 +496,7 @@ public class SearchService {
         for (ScoredCandidate sc : scored) {
             RawNodeCandidate c = sc.node;
             if (c.nodeType == NodeType.USER) {
-                List<String> roles = splitCommaSeparated(c.description);
+                List<String> roles = StringUtils.splitCommaSeparated(c.description);
                 String city = sdString(c.structuredData, "city");
                 String email = sdString(c.structuredData, "email");
                 String slackHandle = sdString(c.structuredData, "slack_handle");
@@ -536,38 +538,6 @@ public class SearchService {
 
     // === Helpers ===
 
-    private static List<String> splitCommaSeparated(String plain) {
-        return StringUtils.splitCommaSeparated(plain);
-    }
-
-    private static List<String> deduplicateTerms(List<String> values) {
-        if (values == null || values.isEmpty()) {
-            return Collections.emptyList();
-        }
-        Set<String> seen = new HashSet<>();
-        List<String> deduplicated = new ArrayList<>();
-        for (String value : values) {
-            if (value == null || value.isBlank()) {
-                continue;
-            }
-            String key = MatchingUtils.normalizeTerm(value);
-            if (seen.add(key)) {
-                deduplicated.add(value.trim());
-            }
-        }
-        return deduplicated;
-    }
-
-    private List<ScoredCandidate> applyPagination(List<ScoredCandidate> all, Integer requestedLimit, Integer requestedOffset) {
-        int safeOffset = requestedOffset != null ? Math.max(0, requestedOffset) : 0;
-        int safeLimit = requestedLimit != null ? Math.max(1, requestedLimit) : DEFAULT_RESULT_LIMIT;
-        if (safeOffset >= all.size()) {
-            return Collections.emptyList();
-        }
-        int toIndex = Math.min(all.size(), safeOffset + safeLimit);
-        return all.subList(safeOffset, toIndex);
-    }
-
     private String buildEmbeddingQueryText(String embeddingText) {
         String prefix = config.search().queryPrefix().orElse("");
         if (prefix == null || prefix.isBlank()) {
@@ -587,28 +557,6 @@ public class SearchService {
             }
         }
         return null;
-    }
-
-    private List<String> structuredStringList(Map<String, Object> structuredData, String key) {
-        if (structuredData == null) {
-            return Collections.emptyList();
-        }
-        Object raw = structuredData.get(key);
-        if (raw instanceof List<?> list) {
-            return list.stream().map(Object::toString).toList();
-        }
-        if (raw instanceof String str && !str.isBlank()) {
-            String[] split = str.split(",");
-            List<String> out = new ArrayList<>(split.length);
-            for (String token : split) {
-                String trimmed = token != null ? token.trim() : "";
-                if (!trimmed.isEmpty()) {
-                    out.add(trimmed);
-                }
-            }
-            return out;
-        }
-        return Collections.emptyList();
     }
 
     private SkillLevelContext loadSkillLevelsContext(List<RawNodeCandidate> candidates) {

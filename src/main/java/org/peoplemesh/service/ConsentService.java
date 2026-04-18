@@ -13,6 +13,7 @@ import org.jboss.logging.Logger;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -24,6 +25,9 @@ public class ConsentService {
 
     private static final Logger LOG = Logger.getLogger(ConsentService.class);
     private static final String CURRENT_POLICY_VERSION = "1.0";
+    public static final Set<String> DEFAULT_CONSENT_SCOPES = Set.of(
+            "professional_matching",
+            "embedding_processing");
 
     @Inject
     AppConfig config;

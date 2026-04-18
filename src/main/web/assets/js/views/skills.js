@@ -315,7 +315,9 @@ async function openCatalogDetailModal(cat, canManage, onDeleted, onUpdated, onDa
 
     try {
       const query = { page, size: 50 };
-      if (category) query.category = category;
+      if (category) {
+        query.category = String(category).trim().slice(0, 100);
+      }
       const skills = await api.get(`/api/v1/skills/${cat.id}/definitions`, query);
       if (closed) return;
       skillsArea.querySelector(".spinner")?.remove();

@@ -5,6 +5,7 @@ import jakarta.inject.Inject;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.HeaderParam;
@@ -17,14 +18,10 @@ import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
-import org.peoplemesh.domain.exception.BusinessException;
 import org.peoplemesh.config.AppConfig;
 import org.peoplemesh.domain.exception.NotFoundBusinessException;
-import org.peoplemesh.domain.exception.ValidationBusinessException;
 import org.peoplemesh.security.MaintenanceAccessGuard;
 import org.peoplemesh.service.MaintenanceService;
-
-import java.util.function.Supplier;
 
 @Path("/api/v1/maintenance")
 @Produces(MediaType.APPLICATION_JSON)
@@ -42,86 +39,64 @@ public class MaintenanceResource {
 
     @POST
     @Path("/purge-consent-tokens")
-    public Response purgeConsentTokens(@HeaderParam("X-Maintenance-Key") String key) {
+    public Response purgeConsentTokens(@HeaderParam("X-Maintenance-Key") @Size(max = 256) String key) {
         assertAuthorized(key);
         return Response.ok(maintenanceService.purgeConsentTokens()).build();
     }
 
     @POST
     @Path("/enforce-retention")
-    public Response enforceRetention(@HeaderParam("X-Maintenance-Key") String key) {
+    public Response enforceRetention(@HeaderParam("X-Maintenance-Key") @Size(max = 256) String key) {
         assertAuthorized(key);
         return Response.ok(maintenanceService.enforceRetention()).build();
     }
 
     @POST
     @Path("/run-clustering")
-    public Response runClustering(@HeaderParam("X-Maintenance-Key") String key) {
+    public Response runClustering(@HeaderParam("X-Maintenance-Key") @Size(max = 256) String key) {
         assertAuthorized(key);
         return Response.ok(maintenanceService.runClustering()).build();
     }
 
     @POST
     @Path("/ldap-import/preview")
-    public Response ldapPreview(@HeaderParam("X-Maintenance-Key") String key,
+    public Response ldapPreview(@HeaderParam("X-Maintenance-Key") @Size(max = 256) String key,
                                 @QueryParam("limit") @DefaultValue("20") @Min(1) @Max(200) int limit) {
         assertAuthorized(key);
-        return mapValidationError(
-                () -> Response.ok(maintenanceService.previewLdapUsers(limit)).build(),
-                "Configuration Error",
-                "LDAP configuration is invalid");
+        return Response.ok(maintenanceService.previewLdapUsers(limit)).build();
     }
 
     @POST
     @Path("/ldap-import")
-    public Response ldapImport(@HeaderParam("X-Maintenance-Key") String key) {
+    public Response ldapImport(@HeaderParam("X-Maintenance-Key") @Size(max = 256) String key) {
         assertAuthorized(key);
-        return mapValidationError(
-                () -> Response.ok(maintenanceService.importFromLdap()).build(),
-                "Configuration Error",
-                "LDAP configuration is invalid");
+        return Response.ok(maintenanceService.importFromLdap()).build();
     }
 
     @POST
     @Path("/regenerate-embeddings")
-    public Response regenerateEmbeddings(@HeaderParam("X-Maintenance-Key") String key,
+    public Response regenerateEmbeddings(@HeaderParam("X-Maintenance-Key") @Size(max = 256) String key,
                                          @QueryParam("nodeType")
                                          @Pattern(regexp = "^[A-Za-z_]*$", message = "nodeType must be alphabetic")
                                          String nodeTypeParam,
                                          @QueryParam("onlyMissing") @DefaultValue("true") boolean onlyMissing,
                                          @QueryParam("batchSize") @DefaultValue("1") @Min(1) @Max(1000) int batchSize) {
         assertAuthorized(key);
-        return mapValidationError(
-                () -> Response.accepted(maintenanceService.startEmbeddingRegeneration(
-                        nodeTypeParam, onlyMissing, batchSize
-                )).build(),
-                "Validation Error",
-                "Invalid maintenance request");
+        return Response.accepted(maintenanceService.startEmbeddingRegeneration(
+                nodeTypeParam, onlyMissing, batchSize
+        )).build();
     }
 
     @GET
     @Path("/regenerate-embeddings/{jobId}")
-    public Response regenerateEmbeddingsStatus(@HeaderParam("X-Maintenance-Key") String key,
+    public Response regenerateEmbeddingsStatus(@HeaderParam("X-Maintenance-Key") @Size(max = 256) String key,
                                                @PathParam("jobId")
                                                @Pattern(regexp = "^[0-9a-fA-F\\-]{36}$", message = "jobId must be a UUID")
                                                String jobIdParam) {
         assertAuthorized(key);
-        return mapValidationError(
-                () -> {
-                    var status = maintenanceService.getEmbeddingRegenerationStatus(jobIdParam)
-                            .orElseThrow(() -> new NotFoundBusinessException("Embedding job not found"));
-                    return Response.ok(status).build();
-                },
-                "Validation Error",
-                "Invalid jobId format");
-    }
-
-    private Response mapValidationError(Supplier<Response> action, String title, String detail) {
-        try {
-            return action.get();
-        } catch (ValidationBusinessException e) {
-            throw new BusinessException(400, title, detail);
-        }
+        var status = maintenanceService.getEmbeddingRegenerationStatus(jobIdParam)
+                .orElseThrow(() -> new NotFoundBusinessException("Embedding job not found"));
+        return Response.ok(status).build();
     }
 
     private void assertAuthorized(String key) {

@@ -11,7 +11,6 @@ import org.peoplemesh.domain.dto.SystemStatisticsDto;
 import org.peoplemesh.domain.dto.TimingStatisticsDto;
 import org.peoplemesh.domain.exception.ForbiddenBusinessException;
 import org.peoplemesh.service.CurrentUserService;
-import org.peoplemesh.service.EntitlementService;
 import org.peoplemesh.service.SystemStatisticsService;
 
 import java.util.UUID;
@@ -27,8 +26,6 @@ class SystemResourceTest {
     SystemStatisticsService systemStatisticsService;
     @Mock
     CurrentUserService currentUserService;
-    @Mock
-    EntitlementService entitlementService;
 
     @InjectMocks
     SystemResource resource;
@@ -37,7 +34,8 @@ class SystemResourceTest {
     void getStatistics_nonAdmin_throwsForbidden() {
         UUID userId = UUID.randomUUID();
         when(currentUserService.resolveUserId()).thenReturn(userId);
-        when(entitlementService.isAdmin(userId)).thenReturn(false);
+        when(systemStatisticsService.loadStatisticsForUser(userId))
+                .thenThrow(new ForbiddenBusinessException("Missing entitlement is_admin"));
 
         assertThrows(ForbiddenBusinessException.class, () -> resource.getStatistics());
     }
@@ -46,7 +44,6 @@ class SystemResourceTest {
     void getStatistics_admin_returns200() {
         UUID userId = UUID.randomUUID();
         when(currentUserService.resolveUserId()).thenReturn(userId);
-        when(entitlementService.isAdmin(userId)).thenReturn(true);
         SystemStatisticsDto statistics = new SystemStatisticsDto(
                 1L, 2L, 3L, 4L,
                 new TimingStatisticsDto(
@@ -56,7 +53,7 @@ class SystemResourceTest {
                         new OperationTimingStatsDto(0, 0, 0, 0)
                 )
         );
-        when(systemStatisticsService.loadStatistics()).thenReturn(statistics);
+        when(systemStatisticsService.loadStatisticsForUser(userId)).thenReturn(statistics);
 
         Response response = resource.getStatistics();
 

@@ -1,18 +1,18 @@
 package org.peoplemesh.service;
 
 import static org.peoplemesh.util.StructuredDataUtils.sdListOrEmpty;
+import static org.peoplemesh.util.StructuredDataUtils.sdStringListOrEmpty;
 import static org.peoplemesh.util.StructuredDataUtils.sdString;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import org.peoplemesh.domain.dto.SearchQuery;
 import org.peoplemesh.domain.model.MeshNode;
+import org.peoplemesh.util.SearchMatchingUtils;
 import org.peoplemesh.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 
 @ApplicationScoped
 public class ProfileSearchQueryBuilder {
@@ -22,22 +22,22 @@ public class ProfileSearchQueryBuilder {
         if (node == null) {
             return emptyQuery();
         }
-        List<String> profileSkills = dedupe(MatchingUtils.combineLists(
+        List<String> profileSkills = SearchMatchingUtils.deduplicateTerms(MatchingUtils.combineLists(
                 MatchingUtils.combineLists(node.tags, sdListOrEmpty(node.structuredData, "tools_and_tech")),
                 sdListOrEmpty(node.structuredData, "skills_soft")));
-        List<String> roles = dedupe(StringUtils.splitCommaSeparated(node.description));
-        List<String> languages = dedupe(sdListOrEmpty(node.structuredData, "languages_spoken"));
-        List<String> industries = dedupe(readIndustries(node));
+        List<String> roles = SearchMatchingUtils.deduplicateTerms(StringUtils.splitCommaSeparated(node.description));
+        List<String> languages = SearchMatchingUtils.deduplicateTerms(sdListOrEmpty(node.structuredData, "languages_spoken"));
+        List<String> industries = SearchMatchingUtils.deduplicateTerms(readIndustries(node));
         // Keep geography as a ranking signal via MatchContext, not as a hard SQL filter.
         // Setting must_have.location here would force country-filtering for /matches/me.
         List<String> location = Collections.emptyList();
 
-        List<String> niceSkills = capList(dedupe(MatchingUtils.combineLists(
+        List<String> niceSkills = capList(SearchMatchingUtils.deduplicateTerms(MatchingUtils.combineLists(
                 profileSkills,
                 MatchingUtils.combineLists(
                         sdListOrEmpty(node.structuredData, "topics_frequent"),
                         sdListOrEmpty(node.structuredData, "learning_areas")))), MAX_PROFILE_NICE_SKILLS);
-        List<String> keywords = dedupe(MatchingUtils.combineLists(
+        List<String> keywords = SearchMatchingUtils.deduplicateTerms(MatchingUtils.combineLists(
                 MatchingUtils.combineLists(profileSkills, roles),
                 niceSkills));
 
@@ -119,25 +119,7 @@ public class ProfileSearchQueryBuilder {
     }
 
     private List<String> readIndustries(MeshNode node) {
-        if (node == null || node.structuredData == null) {
-            return Collections.emptyList();
-        }
-        Object rawIndustries = node.structuredData.get("industries");
-        if (rawIndustries instanceof List<?> list) {
-            return list.stream().map(Object::toString).toList();
-        }
-        if (rawIndustries instanceof String value && !value.isBlank()) {
-            String[] split = value.split(",");
-            List<String> industries = new ArrayList<>(split.length);
-            for (String token : split) {
-                String trimmed = token != null ? token.trim() : "";
-                if (!trimmed.isEmpty()) {
-                    industries.add(trimmed);
-                }
-            }
-            return industries;
-        }
-        return Collections.emptyList();
+        return node == null ? Collections.emptyList() : sdStringListOrEmpty(node.structuredData, "industries");
     }
 
     private String normalizeSeniority(String seniority) {
@@ -145,24 +127,6 @@ public class ProfileSearchQueryBuilder {
             return "unknown";
         }
         return seniority.trim().toLowerCase();
-    }
-
-    private List<String> dedupe(List<String> raw) {
-        if (raw == null || raw.isEmpty()) {
-            return Collections.emptyList();
-        }
-        Set<String> seen = new LinkedHashSet<>();
-        List<String> out = new ArrayList<>();
-        for (String value : raw) {
-            if (value == null || value.isBlank()) {
-                continue;
-            }
-            String normalized = MatchingUtils.normalizeTerm(value);
-            if (seen.add(normalized)) {
-                out.add(value.trim());
-            }
-        }
-        return out;
     }
 
     private List<String> capList(List<String> values, int maxSize) {

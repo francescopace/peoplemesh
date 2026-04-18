@@ -108,6 +108,13 @@ class MeResourceTest {
 
     @Test
     void uploadCv_missingFile_throwsValidationBusinessException() {
+        UUID userId = UUID.randomUUID();
+        when(currentUserService.resolveUserId()).thenReturn(userId);
+        when(appConfig.cvImport()).thenReturn(cvImportConfig);
+        when(cvImportConfig.maxFileSize()).thenReturn(5L);
+        when(cvImportService.importFromUpload(null, null, 0L, 5L, userId))
+                .thenThrow(new ValidationBusinessException("Missing file"));
+
         ValidationBusinessException error = assertThrows(
                 ValidationBusinessException.class,
                 () -> resource.uploadCv(null));
@@ -117,9 +124,13 @@ class MeResourceTest {
     @Test
     void uploadCv_fileTooLarge_throwsPayloadTooLargeBusinessException() {
         FileUpload file = org.mockito.Mockito.mock(FileUpload.class);
+        UUID userId = UUID.randomUUID();
+        when(currentUserService.resolveUserId()).thenReturn(userId);
         when(file.size()).thenReturn(10L);
         when(appConfig.cvImport()).thenReturn(cvImportConfig);
         when(cvImportConfig.maxFileSize()).thenReturn(5L);
+        when(cvImportService.importFromUpload(null, null, 10L, 5L, userId))
+                .thenThrow(new BusinessException(413, "Payload Too Large", "File exceeds maximum size"));
 
         BusinessException error = assertThrows(
                 BusinessException.class,

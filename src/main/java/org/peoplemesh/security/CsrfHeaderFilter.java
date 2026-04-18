@@ -5,8 +5,8 @@ import jakarta.ws.rs.container.ContainerRequestFilter;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.Provider;
-import org.peoplemesh.api.error.ProblemDetail;
 
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -45,11 +45,11 @@ public class CsrfHeaderFilter implements ContainerRequestFilter {
         if (xrw == null || xrw.isBlank()) {
             request.abortWith(Response.status(Response.Status.FORBIDDEN)
                     .type(MediaType.APPLICATION_JSON_TYPE)
-                    .entity(ProblemDetail.of(
-                            Response.Status.FORBIDDEN.getStatusCode(),
-                            "Forbidden",
-                            "Missing X-Requested-With header",
-                            request.getUriInfo().getPath()
+                    .entity(Map.of(
+                            "status", Response.Status.FORBIDDEN.getStatusCode(),
+                            "title", "Forbidden",
+                            "detail", "Missing X-Requested-With header",
+                            "path", request.getUriInfo().getPath()
                     ))
                     .build());
         }
