@@ -3,6 +3,12 @@ import { el, spinner, emptyState, toast } from "../ui.js";
 import { NODE_TYPE_ICONS, NODE_TYPE_COLORS } from "../node-types.js";
 import { contactFooter } from "../contact-actions.js";
 import { termsMatch } from "../utils/term-matching.js";
+import {
+  adaptMatchesToSearchResponse,
+  buildProfileSchemaFromParsedQuery,
+  inferAutoTypeFromParsedQuery,
+  toMatchesTypeFilter,
+} from "../utils/search-query-mapper.js";
 
 const RESULT_TYPE_TABS = [
   { id: "",        label: "All",         icon: "layers" },
@@ -13,6 +19,7 @@ const RESULT_TYPE_TABS = [
   { id: "PROJECT", label: "Projects",    icon: "rocket_launch" },
   { id: "INTEREST_GROUP", label: "Groups", icon: "interests" },
 ];
+const SEARCH_PAGE_SIZE = 10;
 
 export async function renderSearch(container) {
   container.dataset.page = "search";
@@ -60,45 +67,144 @@ export async function renderSearch(container) {
   const resultsArea = el("div", { className: "search-results" });
   root.appendChild(resultsArea);
 
-  let lastData = null;
-  let lastElapsed = null;
+  let lastQueryText = "";
+  let lastParsedQuery = null;
+  let lastDerivedProfileSchema = null;
+  let loadedResults = [];
+  let currentOffset = 0;
+  let hasMore = false;
+  let activeBackendMode = "prompt";
+  let hasSearched = false;
+
+  function resetPagedState() {
+    loadedResults = [];
+    currentOffset = 0;
+    hasMore = false;
+  }
+
+  function renderCurrentResults() {
+    renderResults(
+      resultsArea,
+      loadedResults,
+      activeTypeFilter,
+      countrySelect.value,
+      hasMore,
+      hasSearched,
+      () => loadPagedResults(true)
+    );
+  }
+
+  async function loadPagedResults(append) {
+    if (append && !hasMore) return;
+
+    const mode = activeBackendMode;
+    if (append) {
+      renderCurrentResults();
+      const loadMoreBtn = resultsArea.querySelector(".search-load-more .btn");
+      if (loadMoreBtn) {
+        loadMoreBtn.disabled = true;
+        loadMoreBtn.textContent = "Loading...";
+      }
+    } else {
+      resultsArea.innerHTML = "";
+      resultsArea.appendChild(spinner());
+    }
+
+    try {
+      const t0 = performance.now();
+      let pageResults = [];
+
+      if (mode === "matches") {
+        const typeParam = toMatchesTypeFilter(activeTypeFilter);
+        const query = new URLSearchParams();
+        if (typeParam) query.set("type", typeParam);
+        if (countrySelect.value) query.set("country", countrySelect.value);
+        query.set("limit", String(SEARCH_PAGE_SIZE));
+        query.set("offset", String(currentOffset));
+        const path = `/api/v1/matches?${query.toString()}`;
+        const matches = await api.post(path, lastDerivedProfileSchema);
+        const adapted = adaptMatchesToSearchResponse(matches, lastParsedQuery);
+        pageResults = adapted.results || [];
+      } else {
+        const query = new URLSearchParams();
+        query.set("limit", String(SEARCH_PAGE_SIZE));
+        query.set("offset", String(currentOffset));
+        const data = await api.post(`/api/v1/matches/prompt?${query.toString()}`, { query: lastQueryText });
+        pageResults = data.results || [];
+        if (!lastParsedQuery && data.parsedQuery) {
+          lastParsedQuery = data.parsedQuery;
+          lastDerivedProfileSchema = buildProfileSchemaFromParsedQuery(lastParsedQuery);
+          const autoType = inferAutoTypeFromParsedQuery(lastParsedQuery);
+          if (autoType && RESULT_TYPE_TABS.some((t) => t.id === autoType)) {
+            activeTypeFilter = autoType;
+            typeTabs.querySelectorAll(".explore-type-tab").forEach((t) =>
+              t.classList.toggle("active", t.dataset.type === activeTypeFilter));
+          }
+        }
+      }
+
+      const elapsedMs = performance.now() - t0;
+      loadedResults = append ? loadedResults.concat(pageResults) : pageResults.slice();
+      hasMore = pageResults.length === SEARCH_PAGE_SIZE;
+      currentOffset += pageResults.length;
+
+      if (!countrySelect.value) {
+        populateCountryOptions(loadedResults);
+      }
+      // Keep filters available after a search even when current result set is empty,
+      // so users can change tab/country and retry without retyping the query.
+      filterBar.style.display = hasSearched ? "" : "none";
+      renderCurrentResults();
+
+      if (append) {
+        toast(`Loaded more search results in ${(elapsedMs / 1000).toFixed(1)}s`, "info", 2200);
+      } else if (mode === "matches") {
+        toast(`Search filters applied in ${(elapsedMs / 1000).toFixed(1)}s`, "info", 2200);
+      } else {
+        toast(`Search query completed in ${(elapsedMs / 1000).toFixed(1)}s`, "info", 2200);
+      }
+    } catch (err) {
+      resultsArea.innerHTML = "";
+      if (err.status === 429) {
+        resultsArea.appendChild(emptyState("Too many requests. Please wait a moment and try again."));
+      } else {
+        resultsArea.appendChild(emptyState("Something went wrong. Please try again."));
+      }
+      toast(err.message, "error");
+    }
+  }
 
   typeTabs.addEventListener("click", (e) => {
     const tab = e.target.closest(".explore-type-tab");
     if (!tab) return;
+    if (tab.dataset.type === activeTypeFilter) return;
     activeTypeFilter = tab.dataset.type;
     typeTabs.querySelectorAll(".explore-type-tab").forEach((t) =>
       t.classList.toggle("active", t.dataset.type === activeTypeFilter));
-    if (lastData) renderResults(resultsArea, lastData, activeTypeFilter, countrySelect.value, lastElapsed);
+    if (!hasSearched) return;
+    activeBackendMode = lastDerivedProfileSchema ? "matches" : "prompt";
+    resetPagedState();
+    loadPagedResults(false);
   });
 
   countrySelect.addEventListener("change", () => {
-    if (lastData) renderResults(resultsArea, lastData, activeTypeFilter, countrySelect.value, lastElapsed);
+    if (!hasSearched) return;
+    activeBackendMode = lastDerivedProfileSchema ? "matches" : "prompt";
+    resetPagedState();
+    loadPagedResults(false);
   });
 
   function populateCountryOptions(results) {
+    const selected = countrySelect.value;
     const countries = [...new Set(
       (results || []).map((r) => r.country).filter(Boolean)
     )].sort();
     countrySelect.innerHTML = "";
     countrySelect.appendChild(el("option", { value: "" }, "All Countries"));
     countries.forEach((c) => countrySelect.appendChild(el("option", { value: c }, c)));
-  }
-
-  function updateTabCounts(results) {
-    const counts = {};
-    (results || []).forEach((r) => {
-      const key = r.resultType === "profile" ? "profile" : (r.nodeType || "");
-      counts[key] = (counts[key] || 0) + 1;
-    });
-    typeTabs.querySelectorAll(".explore-type-tab").forEach((tab) => {
-      const id = tab.dataset.type;
-      const labelSpan = tab.querySelectorAll("span")[1];
-      const def = RESULT_TYPE_TABS.find((t) => t.id === id);
-      if (!def) return;
-      const count = id === "" ? (results || []).length : (counts[id] || 0);
-      labelSpan.textContent = count > 0 ? `${def.label} (${count})` : def.label;
-    });
+    if (selected && countries.includes(selected)) {
+      countrySelect.value = selected;
+    }
   }
 
   form.addEventListener("submit", async (e) => {
@@ -109,35 +215,17 @@ export async function renderSearch(container) {
     filterBar.style.display = "none";
     resultsArea.innerHTML = "";
     resultsArea.appendChild(spinner());
-    lastData = null;
+    lastQueryText = query;
+    hasSearched = true;
+    lastParsedQuery = null;
+    lastDerivedProfileSchema = null;
     activeTypeFilter = "";
+    activeBackendMode = "prompt";
+    resetPagedState();
     typeTabs.querySelectorAll(".explore-type-tab").forEach((t) =>
       t.classList.toggle("active", t.dataset.type === ""));
     countrySelect.value = "";
-
-    try {
-      const t0 = performance.now();
-      const data = await api.post("/api/v1/matches/prompt", { query, country: null });
-      const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
-      lastData = data;
-      lastElapsed = elapsed;
-
-      if (data.results?.length) {
-        populateCountryOptions(data.results);
-        updateTabCounts(data.results);
-        filterBar.style.display = "";
-      }
-
-      renderResults(resultsArea, data, activeTypeFilter, countrySelect.value, elapsed);
-    } catch (err) {
-      resultsArea.innerHTML = "";
-      if (err.status === 429) {
-        resultsArea.appendChild(emptyState("Too many requests. Please wait a moment and try again."));
-      } else {
-        resultsArea.appendChild(emptyState("Something went wrong. Please try again."));
-      }
-      toast(err.message, "error");
-    }
+    await loadPagedResults(false);
   });
 
   container.appendChild(root);
@@ -153,15 +241,19 @@ export async function renderSearch(container) {
   }
 }
 
-function renderResults(container, data, typeFilter, countryFilter, elapsed) {
+function renderResults(container, results, typeFilter, countryFilter, hasMore, hasSearched, onLoadMore) {
   container.innerHTML = "";
 
-  if (!data.results || data.results.length === 0) {
-    container.appendChild(emptyState("No results found. Try a different query."));
+  if (!results || results.length === 0) {
+    if (hasSearched && (typeFilter || countryFilter)) {
+      container.appendChild(emptyState("No results match the selected filters."));
+    } else {
+      container.appendChild(emptyState("No results found. Try a different query."));
+    }
     return;
   }
 
-  let filtered = data.results;
+  let filtered = results;
   if (typeFilter) {
     filtered = filtered.filter((r) =>
       typeFilter === "profile" ? r.resultType === "profile" : r.nodeType === typeFilter
@@ -176,10 +268,6 @@ function renderResults(container, data, typeFilter, countryFilter, elapsed) {
     return;
   }
 
-  const timePart = elapsed ? ` (${elapsed}s)` : "";
-  container.appendChild(el("p", { className: "search-result-count text-secondary" },
-    `${filtered.length} result${filtered.length !== 1 ? "s" : ""}${timePart}`));
-
   const grid = el("div", { className: "search-results-grid" });
   filtered.forEach((r) => {
     if (r.resultType === "profile") {
@@ -189,6 +277,15 @@ function renderResults(container, data, typeFilter, countryFilter, elapsed) {
     }
   });
   container.appendChild(grid);
+
+  if (hasMore) {
+    const loadMoreBtn = el("button", {
+      className: "btn btn-secondary",
+      type: "button",
+      onClick: onLoadMore,
+    }, "Load more");
+    container.appendChild(el("div", { className: "search-load-more" }, loadMoreBtn));
+  }
 }
 
 function renderProfileCard(result) {

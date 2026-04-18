@@ -35,20 +35,33 @@ public class MatchesService {
     NodeAccessPolicyService nodeAccessPolicyService;
 
     public List<MeshMatchResult> matchFromSchema(UUID userId, ProfileSchema profile, String type, String country) {
+        return matchFromSchema(userId, profile, type, country, null, null);
+    }
+
+    public List<MeshMatchResult> matchFromSchema(
+            UUID userId, ProfileSchema profile, String type, String country, Integer limit, Integer offset) {
         String text = EmbeddingTextBuilder.buildFromSchema(profile);
         float[] embedding = embeddingService.generateEmbedding(text);
         if (embedding == null) {
             throw new ValidationBusinessException("Embedding input was empty");
         }
-        return matchingService.findAllMatches(userId, embedding, type, country);
+        return matchingService.findAllMatches(userId, embedding, type, country, limit, offset);
     }
 
     public SearchResponse matchFromPrompt(UUID userId, SearchRequest request) {
-        return searchService.search(userId, request.query(), request.country());
+        return matchFromPrompt(userId, request, null, null);
+    }
+
+    public SearchResponse matchFromPrompt(UUID userId, SearchRequest request, Integer limit, Integer offset) {
+        return searchService.search(userId, request.query(), limit, offset);
     }
 
     public List<MeshMatchResult> matchMyProfile(UUID userId, String type, String country) {
-        return matchingService.findAllMatches(userId, type, country);
+        return matchMyProfile(userId, type, country, null, null);
+    }
+
+    public List<MeshMatchResult> matchMyProfile(UUID userId, String type, String country, Integer limit, Integer offset) {
+        return matchingService.findAllMatches(userId, type, country, limit, offset);
     }
 
     public List<MeshMatchResult> matchFromNode(UUID userId, UUID nodeId, String type, String country) {

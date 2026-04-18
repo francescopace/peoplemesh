@@ -133,9 +133,9 @@ Endpoints for finding similar profiles and nodes.
 
 | Endpoint | Parameters |
 |----------|-----------|
-| `POST /api/v1/matches/prompt` | Body: `SearchRequest` (JSON) |
-| `POST /api/v1/matches` | Body: `ProfileSchema` (JSON). `?type`, `?country` (validated) |
-| `GET /api/v1/matches/me` | `?type`, `?country` |
+| `POST /api/v1/matches/prompt` | Body: `SearchRequest` (JSON, `query` only). `?limit={1..100}`, `?offset={>=0}` |
+| `POST /api/v1/matches` | Body: `ProfileSchema` (JSON). `?type`, `?country` (validated), `?limit={1..100}`, `?offset={>=0}` |
+| `GET /api/v1/matches/me` | `?type`, `?country`, `?limit={1..100}`, `?offset={>=0}` |
 | `GET /api/v1/matches/{nodeId}` | `?type`, `?country`. `{nodeId}` is a UUID |
 
 ### Search matching details (`POST /api/v1/matches/prompt`)
@@ -159,6 +159,16 @@ Query parsing:
 - Preferred: LLM parser (`must_have`, `nice_to_have`, `keywords`, `embedding_text`)
 - Fallback: token parser with role/language/context separation
 
+Country filter behavior:
+- Prompt search derives country hard-filtering from parsed `must_have.location` when a country is clearly mappable to an ISO code.
+- `SearchRequest` for prompt search contains only `query`; country filtering is parser-driven.
+- Prompt and schema match endpoints support `limit/offset`; if omitted, server defaults are applied (`limit=20`, `offset=0`).
+- In the current web UI (`search` view):
+  - the initial request is `POST /api/v1/matches/prompt?limit=10&offset=0`
+  - subsequent type/country filter changes use `POST /api/v1/matches?type=...&country=...&limit=10&offset=0` with a frontend-derived `ProfileSchema` (skips LLM reparse)
+  - `Load more` uses progressive `offset` calls (`offset += page_size`) against the active endpoint
+  - the filter bar stays visible even when a search page returns zero results (to allow immediate filter changes)
+
 Tuning: see `peoplemesh.search.skill-match-threshold` in [configuration.md](configuration.md).
 
 ### My Mesh matching details (`GET /api/v1/matches/me`)
@@ -174,6 +184,12 @@ Candidate skill pool for PEOPLE results includes:
 
 Response shape note:
 - `breakdown.commonItems` contains matched overlap terms used for card highlighting and explanation.
+
+Current web UI behavior (`My Mesh` / `explore` view):
+- default tab is `People`
+- changing country triggers a new `GET /api/v1/matches/me?country=...` request
+- changing type triggers a new `GET /api/v1/matches/me?type=...` request
+- pagination is backend-driven (`limit=9`, progressive `offset`) with `Load more`
 
 ---
 

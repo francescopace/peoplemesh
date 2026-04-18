@@ -8,8 +8,7 @@ class SearchRequestTest {
 
     @Test
     void recordAccessors() {
-        SearchRequest req = new SearchRequest("java developer", "IT");
+        SearchRequest req = new SearchRequest("java developer");
         assertEquals("java developer", req.query());
-        assertEquals("IT", req.country());
     }
 }

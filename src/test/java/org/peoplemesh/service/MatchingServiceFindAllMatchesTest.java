@@ -137,6 +137,57 @@ class MatchingServiceFindAllMatchesTest {
     }
 
     @Test
+    void findAllMatches_withLimitAndOffset_returnsPagedSlice() {
+        UUID userId = UUID.randomUUID();
+        when(consentService.hasActiveConsent(userId, "professional_matching")).thenReturn(true);
+
+        MeshNode me = new MeshNode();
+        me.id = userId;
+        me.nodeType = NodeType.USER;
+        me.embedding = new float[]{0.2f, 0.3f};
+        me.tags = List.of("java");
+        me.country = "IT";
+        me.structuredData = new LinkedHashMap<>();
+        me.structuredData.put("work_mode", "HYBRID");
+        when(nodeRepository.findPublishedUserNode(userId)).thenReturn(Optional.of(me));
+
+        Object[] peopleA = new Object[]{
+                UUID.randomUUID(), UUID.randomUUID(), "MID",
+                List.of("Java"), List.of(), List.of("Quarkus"),
+                "HYBRID", "EMPLOYED", List.of(), List.of(),
+                "IT", "Europe/Rome", Instant.now(), "Rome", 0.95d,
+                "Alice", "Engineer", List.of(), List.of(), List.of(),
+                "https://img", "@alice", "alice@example.com", "@alice_tg", "+39111111111"
+        };
+        Object[] peopleB = new Object[]{
+                UUID.randomUUID(), UUID.randomUUID(), "MID",
+                List.of("Java"), List.of(), List.of("Quarkus"),
+                "HYBRID", "EMPLOYED", List.of(), List.of(),
+                "IT", "Europe/Rome", Instant.now(), "Rome", 0.90d,
+                "Bob", "Engineer", List.of(), List.of(), List.of(),
+                "https://img", "@bob", "bob@example.com", "@bob_tg", "+39222222222"
+        };
+        Object[] peopleC = new Object[]{
+                UUID.randomUUID(), UUID.randomUUID(), "MID",
+                List.of("Java"), List.of(), List.of("Quarkus"),
+                "HYBRID", "EMPLOYED", List.of(), List.of(),
+                "IT", "Europe/Rome", Instant.now(), "Rome", 0.85d,
+                "Carol", "Engineer", List.of(), List.of(), List.of(),
+                "https://img", "@carol", "carol@example.com", "@carol_tg", "+39333333333"
+        };
+
+        when(searchRepository.findUserCandidatesByEmbedding(any(float[].class), eq(userId), eq(50)))
+                .thenReturn(List.of(peopleA, peopleB, peopleC));
+        when(searchRepository.findNodeCandidatesByEmbedding(any(float[].class), eq(userId), eq(null), eq(50)))
+                .thenReturn(List.of());
+
+        List<MeshMatchResult> out = service.findAllMatches(userId, "PEOPLE", null, 1, 1);
+
+        assertEquals(1, out.size());
+        assertEquals("Bob", out.get(0).title());
+    }
+
+    @Test
     void findAllMatches_invalidNodeTypeFilter_returnsEmpty() {
         UUID userId = UUID.randomUUID();
         when(consentService.hasActiveConsent(userId, "professional_matching")).thenReturn(true);

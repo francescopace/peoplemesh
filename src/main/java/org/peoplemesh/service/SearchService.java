@@ -33,8 +33,13 @@ public class SearchService {
     private static final double W_INDUSTRY = 0.05;
 
     private static final int VECTOR_POOL_SIZE = 100;
-    private static final int RESULT_LIMIT = 20;
+    private static final int DEFAULT_RESULT_LIMIT = 20;
     private static final Pattern TOKEN_TRIM_PATTERN = Pattern.compile("^[^\\p{Alnum}]+|[^\\p{Alnum}]+$");
+    private static final Set<String> ISO_COUNTRIES = Set.of(Locale.getISOCountries());
+    private static final Map<String, String> COUNTRY_NAME_TO_ISO = buildCountryNameToIsoIndex();
+    private static final Set<String> LOCATION_WORDS_TO_IGNORE = Set.of(
+            "europe", "eu", "european union", "asia", "africa", "north america", "south america", "oceania", "worldwide", "global"
+    );
 
     @Inject @All
     List<SearchQueryParser> queryParsers;
@@ -60,7 +65,11 @@ public class SearchService {
     @Inject
     SemanticSkillMatcher semanticSkillMatcher;
 
-    public SearchResponse search(UUID userId, String queryText, String countryFilter) {
+    public SearchResponse search(UUID userId, String queryText) {
+        return search(userId, queryText, null, null);
+    }
+
+    public SearchResponse search(UUID userId, String queryText, Integer limit, Integer offset) {
         if (!consentService.hasActiveConsent(userId, "professional_matching")) {
             return new SearchResponse(null, Collections.emptyList());
         }
@@ -83,17 +92,18 @@ public class SearchService {
             return new SearchResponse(parsedQuery, Collections.emptyList());
         }
 
-        List<RawNodeCandidate> rawCandidates = unifiedVectorSearch(queryEmbedding, userId,
-                parsedQuery, countryFilter);
+        String countryFilter = extractCountryFilter(parsedQuery);
+        List<RawNodeCandidate> rawCandidates = unifiedVectorSearch(queryEmbedding, userId, parsedQuery, countryFilter);
         SkillLevelContext skillLevelContext = loadSkillLevelsContext(rawCandidates);
         List<ScoredCandidate> allScored = unifiedScore(rawCandidates, parsedQuery, skillLevelContext.levelsByNodeForScoring());
         allScored = rerank(allScored, parsedQuery);
         double minScore = config.search().minScore();
-        allScored = allScored.stream()
+        List<ScoredCandidate> filtered = allScored.stream()
                 .filter(sc -> sc.score >= minScore)
-                .limit(RESULT_LIMIT).toList();
+                .toList();
+        List<ScoredCandidate> paged = applyPagination(filtered, limit, offset);
 
-        List<SearchResultItem> results = toResultItems(allScored, skillLevelContext.levelsByNodeForResult());
+        List<SearchResultItem> results = toResultItems(paged, skillLevelContext.levelsByNodeForResult());
 
         return new SearchResponse(parsedQuery, results);
     }
@@ -169,7 +179,7 @@ public class SearchService {
                         mustHaveLanguages, mustHaveIndustries, niceToHaveIndustries,
                         mustHaveWithLevel, niceToHaveWithLevel, levelCacheByNode.get(c.nodeId), negativeSkills));
             } else {
-                scored.add(scoreGenericNode(c, keywords, mustHaveSkills, negativeSkills));
+                scored.add(scoreGenericNode(c, keywords, mustHaveSkills, niceToHaveSkills, negativeSkills));
             }
         }
 
@@ -284,23 +294,54 @@ public class SearchService {
     }
 
     private ScoredCandidate scoreGenericNode(RawNodeCandidate c,
-                                              List<String> keywords, List<String> mustHaveSkills,
-                                              List<String> negativeSkills) {
-        List<String> allSearchTerms = new ArrayList<>(keywords);
-        allSearchTerms.addAll(mustHaveSkills);
-
+                                             List<String> keywords,
+                                             List<String> mustHaveSkills,
+                                             List<String> niceToHaveSkills,
+                                             List<String> negativeSkills) {
         List<String> nodeTags = c.tags != null ? c.tags : Collections.emptyList();
+        double skillMatchThreshold = config.search().skillMatchThreshold();
+        List<String> matchedMustSemantic = semanticSkillMatcher.matchSkills(mustHaveSkills, nodeTags, skillMatchThreshold).stream()
+                .map(SemanticSkillMatcher.SemanticMatch::querySkill)
+                .distinct()
+                .toList();
+        List<String> matchedNice = semanticSkillMatcher.matchSkills(niceToHaveSkills, nodeTags, skillMatchThreshold).stream()
+                .map(SemanticSkillMatcher.SemanticMatch::querySkill)
+                .distinct()
+                .toList();
+
         List<String> nodeText = new ArrayList<>(nodeTags);
         if (c.title != null) nodeText.add(c.title);
         if (c.description != null) nodeText.add(c.description);
 
-        List<String> matchedTerms = MatchingUtils.intersectCaseInsensitive(allSearchTerms, nodeText);
-        double tagCoverage = allSearchTerms.isEmpty() ? 0.0
-                : (double) matchedTerms.size() / allSearchTerms.size();
+        List<String> matchedKeywordTerms = MatchingUtils.intersectCaseInsensitive(keywords, nodeText);
+        List<String> matchedMustText = MatchingUtils.intersectCaseInsensitive(mustHaveSkills, nodeText);
+        List<String> matchedMust = deduplicateTerms(
+                MatchingUtils.combineLists(matchedMustSemantic, matchedMustText));
+        Set<String> matchedMustNormalized = matchedMust.stream()
+                .map(SearchService::normalizeTerm)
+                .collect(Collectors.toSet());
+        List<String> missingMust = mustHaveSkills.stream()
+                .filter(s -> !matchedMustNormalized.contains(normalizeTerm(s)))
+                .toList();
 
-        double rawScore = c.cosineSim * 0.70 + tagCoverage * 0.30;
-        if (!mustHaveSkills.isEmpty() && matchedTerms.isEmpty()) {
-            rawScore *= 0.2;
+        double mustHaveCoverage = mustHaveSkills.isEmpty() ? 1.0
+                : (double) matchedMust.size() / mustHaveSkills.size();
+        double niceToHaveBonus = niceToHaveSkills.isEmpty() ? 0.0
+                : (double) matchedNice.size() / niceToHaveSkills.size();
+        double keywordScore = keywords.isEmpty() ? 0.0
+                : (double) matchedKeywordTerms.size() / keywords.size();
+
+        double rawScore = c.cosineSim * 0.65
+                + mustHaveCoverage * 0.20
+                + niceToHaveBonus * 0.10
+                + keywordScore * 0.05;
+
+        if (!mustHaveSkills.isEmpty() && !missingMust.isEmpty()) {
+            double missingRatio = (double) missingMust.size() / mustHaveSkills.size();
+            rawScore *= Math.max(0.0, 1.0 - missingRatio * 0.8);
+        }
+        if (!mustHaveSkills.isEmpty() && mustHaveCoverage == 0.0) {
+            rawScore = 0.0;
         }
         if (!negativeSkills.isEmpty()) {
             List<String> negativeMatches = MatchingUtils.intersectCaseInsensitive(negativeSkills, nodeText);
@@ -312,17 +353,20 @@ public class SearchService {
 
         List<String> reasonCodes = new ArrayList<>();
         if (c.cosineSim >= 0.60) reasonCodes.add("SEMANTIC_SIMILARITY");
-        if (!matchedTerms.isEmpty()) reasonCodes.add("TAG_MATCH");
+        if (!matchedMust.isEmpty()) reasonCodes.add("MUST_HAVE_SKILLS");
+        if (!matchedNice.isEmpty()) reasonCodes.add("NICE_TO_HAVE_SKILLS");
+        if (!matchedKeywordTerms.isEmpty()) reasonCodes.add("KEYWORD_MATCH");
         reasonCodes.add("NODE_" + c.nodeType.name());
 
         SearchMatchBreakdown breakdown = new SearchMatchBreakdown(
                 MatchingUtils.round3(c.cosineSim),
-                MatchingUtils.round3(tagCoverage),
-                0, 0, 0,
+                MatchingUtils.round3(mustHaveCoverage),
+                MatchingUtils.round3(niceToHaveBonus),
+                0, 0,
                 MatchingUtils.round3(rawScore),
-                matchedTerms,
-                Collections.emptyList(),
-                Collections.emptyList(),
+                matchedMust,
+                matchedNice,
+                missingMust,
                 reasonCodes
         );
 
@@ -438,12 +482,69 @@ public class SearchService {
         return deduplicated;
     }
 
+    private List<ScoredCandidate> applyPagination(List<ScoredCandidate> all, Integer requestedLimit, Integer requestedOffset) {
+        int safeOffset = requestedOffset != null ? Math.max(0, requestedOffset) : 0;
+        int safeLimit = requestedLimit != null ? Math.max(1, requestedLimit) : DEFAULT_RESULT_LIMIT;
+        if (safeOffset >= all.size()) {
+            return Collections.emptyList();
+        }
+        int toIndex = Math.min(all.size(), safeOffset + safeLimit);
+        return all.subList(safeOffset, toIndex);
+    }
+
     private String buildEmbeddingQueryText(String embeddingText) {
         String prefix = config.search().queryPrefix().orElse("");
         if (prefix == null || prefix.isBlank()) {
             return embeddingText;
         }
         return prefix + embeddingText;
+    }
+
+    private String extractCountryFilter(ParsedSearchQuery parsed) {
+        if (parsed == null || parsed.mustHave() == null || parsed.mustHave().location() == null) {
+            return null;
+        }
+        for (String rawLocation : parsed.mustHave().location()) {
+            String mapped = mapLocationToCountryCode(rawLocation);
+            if (mapped != null) {
+                return mapped;
+            }
+        }
+        return null;
+    }
+
+    private static String mapLocationToCountryCode(String rawLocation) {
+        if (rawLocation == null || rawLocation.isBlank()) {
+            return null;
+        }
+        String cleaned = rawLocation.trim();
+        if (cleaned.length() == 2) {
+            String cc = cleaned.toUpperCase(Locale.ROOT);
+            if (ISO_COUNTRIES.contains(cc)) {
+                return cc;
+            }
+        }
+        String normalized = cleaned.toLowerCase(Locale.ROOT)
+                .replaceAll("[^\\p{L}\\p{N}]+", " ")
+                .trim()
+                .replaceAll("\\s+", " ");
+        if (normalized.isBlank() || LOCATION_WORDS_TO_IGNORE.contains(normalized)) {
+            return null;
+        }
+        return COUNTRY_NAME_TO_ISO.get(normalized);
+    }
+
+    private static Map<String, String> buildCountryNameToIsoIndex() {
+        Map<String, String> index = new HashMap<>();
+        for (String code : Locale.getISOCountries()) {
+            Locale locale = Locale.of("", code);
+            index.put(code.toLowerCase(Locale.ROOT), code);
+            index.put(locale.getDisplayCountry(Locale.ENGLISH).toLowerCase(Locale.ROOT), code);
+            index.put(locale.getDisplayCountry(Locale.ITALIAN).toLowerCase(Locale.ROOT), code);
+        }
+        index.put("uk", "GB");
+        index.put("england", "GB");
+        return Map.copyOf(index);
     }
 
     private static final Set<String> STOP_WORDS = Set.of(

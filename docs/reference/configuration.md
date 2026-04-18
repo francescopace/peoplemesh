@@ -138,7 +138,6 @@ Search matching notes:
 | Key | Default | Description |
 |-----|---------|-------------|
 | `peoplemesh.matching.candidate-pool-size` | `50` | Candidate pool size before final ranking |
-| `peoplemesh.matching.result-limit` | `20` | Maximum number of returned matches |
 | `peoplemesh.matching.decay-lambda` | `0.1` | Decay factor used in scoring/ranking blend |
 
 ## Skill Catalog

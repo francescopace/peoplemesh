@@ -17,12 +17,15 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 @ApplicationScoped
 public class SemanticSkillMatcher {
 
     private static final int TOP_K = 8;
     private static final Duration CACHE_TTL = Duration.ofMinutes(10);
+    private static final Duration QUERY_EMBEDDING_CACHE_TTL = Duration.ofMinutes(10);
+    private static final int QUERY_EMBEDDING_CACHE_MAX_ENTRIES = 5_000;
 
     @Inject
     EmbeddingService embeddingService;
@@ -31,6 +34,7 @@ public class SemanticSkillMatcher {
     SkillDefinitionRepository skillDefinitionRepository;
 
     private volatile CatalogCache catalogCache = CatalogCache.empty();
+    private final Map<String, CachedEmbedding> queryEmbeddingCache = new ConcurrentHashMap<>();
 
     public List<SemanticMatch> matchSkills(List<String> querySkills,
                                            List<String> candidateSkills,
@@ -60,7 +64,7 @@ public class SemanticSkillMatcher {
             return matches;
         }
 
-        List<float[]> embeddings = embeddingService.generateEmbeddings(semanticPending);
+        List<float[]> embeddings = loadQueryEmbeddings(semanticPending);
         for (int i = 0; i < semanticPending.size(); i++) {
             float[] embedding = i < embeddings.size() ? embeddings.get(i) : null;
             if (embedding == null) {
@@ -215,6 +219,67 @@ public class SemanticSkillMatcher {
         return cleaned;
     }
 
+    private List<float[]> loadQueryEmbeddings(List<String> terms) {
+        if (terms == null || terms.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Instant now = Instant.now();
+        List<float[]> embeddings = new ArrayList<>(Collections.nCopies(terms.size(), null));
+        List<String> missingTerms = new ArrayList<>();
+        List<Integer> missingIndexes = new ArrayList<>();
+        for (int i = 0; i < terms.size(); i++) {
+            String term = terms.get(i);
+            String key = normalizeCacheKey(term);
+            CachedEmbedding cached = queryEmbeddingCache.get(key);
+            if (cached != null && !cached.isExpired(now)) {
+                embeddings.set(i, cached.embedding());
+                continue;
+            }
+            if (cached != null) {
+                queryEmbeddingCache.remove(key);
+            }
+            missingTerms.add(term);
+            missingIndexes.add(i);
+        }
+        if (!missingTerms.isEmpty()) {
+            List<float[]> generated = embeddingService.generateEmbeddings(missingTerms);
+            for (int j = 0; j < missingIndexes.size(); j++) {
+                int targetIndex = missingIndexes.get(j);
+                float[] embedding = j < generated.size() ? generated.get(j) : null;
+                embeddings.set(targetIndex, embedding);
+                if (embedding != null) {
+                    queryEmbeddingCache.put(normalizeCacheKey(terms.get(targetIndex)), new CachedEmbedding(now, embedding));
+                }
+            }
+            pruneQueryEmbeddingCache(now);
+        }
+        return embeddings;
+    }
+
+    private void pruneQueryEmbeddingCache(Instant now) {
+        for (Map.Entry<String, CachedEmbedding> entry : queryEmbeddingCache.entrySet()) {
+            if (entry.getValue() == null || entry.getValue().isExpired(now)) {
+                queryEmbeddingCache.remove(entry.getKey(), entry.getValue());
+            }
+        }
+        if (queryEmbeddingCache.size() <= QUERY_EMBEDDING_CACHE_MAX_ENTRIES) {
+            return;
+        }
+        int toDrop = queryEmbeddingCache.size() - QUERY_EMBEDDING_CACHE_MAX_ENTRIES;
+        for (String key : queryEmbeddingCache.keySet()) {
+            if (toDrop <= 0) {
+                break;
+            }
+            if (queryEmbeddingCache.remove(key) != null) {
+                toDrop--;
+            }
+        }
+    }
+
+    private static String normalizeCacheKey(String value) {
+        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+    }
+
     public record SemanticMatch(String querySkill, String matchedSkill, double similarity) {
     }
 
@@ -228,6 +293,12 @@ public class SemanticSkillMatcher {
 
         boolean isExpired() {
             return loadedAt == null || loadedAt.plus(CACHE_TTL).isBefore(Instant.now());
+        }
+    }
+
+    private record CachedEmbedding(Instant loadedAt, float[] embedding) {
+        boolean isExpired(Instant now) {
+            return loadedAt == null || loadedAt.plus(QUERY_EMBEDDING_CACHE_TTL).isBefore(now);
         }
     }
 }

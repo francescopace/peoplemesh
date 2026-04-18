@@ -6,7 +6,6 @@ import { COUNTRIES } from "../utils/countries.js";
 import { termsMatch } from "../utils/term-matching.js";
 
 const NODE_TYPES = [
-  { id: "",              label: "All Nodes",   icon: "layers" },
   { id: "PEOPLE",        label: "People",      icon: "person" },
   { id: "JOB",           label: "Jobs",        icon: "work" },
   { id: "COMMUNITY",     label: "Communities", icon: "groups" },
@@ -14,6 +13,7 @@ const NODE_TYPES = [
   { id: "PROJECT",       label: "Projects",    icon: "rocket_launch" },
   { id: "INTEREST_GROUP", label: "Groups",     icon: "interests" },
 ];
+const EXPLORE_PAGE_SIZE = 9;
 
 export async function renderExplore(container) {
   container.dataset.page = "explore";
@@ -29,7 +29,8 @@ export async function renderExplore(container) {
 
   /* Node type tabs */
   const hashParams = new URLSearchParams(window.location.hash.split("?")[1] || "");
-  let activeType = hashParams.get("type") || "";
+  const requestedType = hashParams.get("type");
+  let activeType = NODE_TYPES.some((t) => t.id === requestedType) ? requestedType : "PEOPLE";
   const typeTabs = el("div", { className: "explore-type-tabs" });
   NODE_TYPES.forEach((t) => {
     const btn = el("button", {
@@ -52,10 +53,6 @@ export async function renderExplore(container) {
 
   filterBar.appendChild(typeTabs);
 
-  /* Action buttons */
-  const headerActions = el("div", { className: "explore-header-actions" });
-  filterBar.appendChild(headerActions);
-
   container.appendChild(filterBar);
 
   /* Tab click handlers */
@@ -64,54 +61,77 @@ export async function renderExplore(container) {
     if (!tab) return;
     activeType = tab.dataset.type;
     typeTabs.querySelectorAll(".explore-type-tab").forEach((t) => t.classList.toggle("active", t.dataset.type === activeType));
-    updateActions();
     loadResults();
   });
 
   const resultsArea = el("div", { className: "explore-results" });
   container.appendChild(resultsArea);
-
-  function updateActions() {
-    headerActions.innerHTML = "";
-  }
-
-  function updateTypeTabCounts(results) {
-    const counts = {};
-    (results || []).forEach((m) => {
-      const key = (m.nodeType || "").toUpperCase();
-      counts[key] = (counts[key] || 0) + 1;
-    });
-    typeTabs.querySelectorAll(".explore-type-tab").forEach((tab) => {
-      const id = tab.dataset.type;
-      const labelSpan = tab.querySelectorAll("span")[1];
-      const def = NODE_TYPES.find((t) => t.id === id);
-      if (!def || !labelSpan) return;
-      const count = id === "" ? (results || []).length : (counts[id] || 0);
-      labelSpan.textContent = count > 0 ? `${def.label} (${count})` : def.label;
-    });
-  }
+  let grid;
+  let loadMoreWrap;
+  let loadMoreButton;
+  let currentOffset = 0;
+  let hasMore = false;
 
   async function loadResults() {
+    currentOffset = 0;
+    hasMore = false;
+    grid = null;
+    loadMoreWrap = null;
+    loadMoreButton = null;
     resultsArea.innerHTML = "";
     resultsArea.appendChild(spinner());
 
-    await loadAllResults();
+    await loadPagedResults(false);
   }
 
-  async function loadAllResults() {
+  function ensureResultsUi() {
+    if (!grid) {
+      grid = el("div", { className: "explore-grid" });
+      resultsArea.appendChild(grid);
+    }
+    if (!loadMoreWrap) {
+      loadMoreButton = el("button", {
+        className: "btn btn-secondary",
+        type: "button",
+        onClick: () => loadPagedResults(true),
+      }, "Load more");
+      loadMoreWrap = el("div", { className: "explore-load-more" }, loadMoreButton);
+      resultsArea.appendChild(loadMoreWrap);
+    }
+  }
+
+  function updateLoadMoreButton() {
+    if (!loadMoreWrap || !loadMoreButton) return;
+    loadMoreWrap.style.display = hasMore ? "flex" : "none";
+    loadMoreButton.disabled = false;
+    loadMoreButton.textContent = "Load more";
+  }
+
+  async function loadPagedResults(append) {
+    if (append && !hasMore) return;
+    if (append && loadMoreButton) {
+      loadMoreButton.disabled = true;
+      loadMoreButton.textContent = "Loading...";
+    }
+
     const query = {};
     const country = countrySelect.value; if (country) query.country = country;
+    if (activeType) query.type = activeType;
+    query.limit = EXPLORE_PAGE_SIZE;
+    query.offset = currentOffset;
 
     try {
+      const t0 = performance.now();
       const matches = await api.get("/api/v1/matches/me", query);
-      resultsArea.innerHTML = "";
-
-      let filtered = matches || [];
-      updateTypeTabCounts(filtered);
-      if (activeType) {
-        filtered = filtered.filter((m) => (m.nodeType || "").toUpperCase() === activeType);
+      const elapsedMs = performance.now() - t0;
+      const pageResults = matches || [];
+      if (!append) {
+        resultsArea.innerHTML = "";
       }
-      if (!filtered.length) {
+      hasMore = pageResults.length === EXPLORE_PAGE_SIZE;
+      currentOffset += pageResults.length;
+
+      if (!append && !pageResults.length) {
         resultsArea.appendChild(emptyState(
           el("span", {},
             "Your Mesh is empty. Update your ",
@@ -121,9 +141,18 @@ export async function renderExplore(container) {
         ));
         return;
       }
-      const grid = el("div", { className: "explore-grid" });
-      filtered.forEach((m) => grid.appendChild(buildUnifiedCard(m)));
-      resultsArea.appendChild(grid);
+
+      ensureResultsUi();
+      if (!append) {
+        grid.innerHTML = "";
+      }
+      pageResults.forEach((m) => grid.appendChild(buildUnifiedCard(m)));
+      updateLoadMoreButton();
+      if (append) {
+        toast(`Loaded more My Mesh results in ${(elapsedMs / 1000).toFixed(1)}s`, "info", 2200);
+      } else {
+        toast(`My Mesh updated in ${(elapsedMs / 1000).toFixed(1)}s`, "info", 2200);
+      }
     } catch (err) {
       resultsArea.innerHTML = "";
       toast(err.message, "error");
@@ -136,6 +165,8 @@ export async function renderExplore(container) {
           )
         ));
       }
+    } finally {
+      updateLoadMoreButton();
     }
   }
 
@@ -260,7 +291,6 @@ export async function renderExplore(container) {
     return card;
   }
 
-  updateActions();
   loadResults();
 }
 

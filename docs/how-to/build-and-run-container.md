@@ -93,7 +93,7 @@ docker run --rm \
   -e CORS_ORIGINS='https://app.example.com' \
   -e OIDC_GOOGLE_CLIENT_ID='...' \
   -e OIDC_GOOGLE_CLIENT_SECRET='...' \
-  -e JAVA_OPTS='-Dquarkus.datasource.jdbc.max-size=30 -Dpeoplemesh.matching.result-limit=50 -Dpeoplemesh.notification.dry-run=false' \
+  -e JAVA_OPTS='-Dquarkus.datasource.jdbc.max-size=30 -Dpeoplemesh.notification.dry-run=false' \
   peoplemesh:local
 ```
 

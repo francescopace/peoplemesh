@@ -38,12 +38,15 @@ npm run test:watch
 npm test -- __tests__/views/search.test.js
 # run shared term matching utility tests
 npm test -- __tests__/utils/term-matching.test.js
+# run search mapper utility tests
+npm test -- __tests__/utils/search-query-mapper.test.js
 ```
 
 - Test runner: Vitest
 - Environment: jsdom
 - Coverage focus: utilities, router, API client, auth, UI components, views
 - Shared skill term matching logic (used by both Search and My Mesh highlighting) is covered in `src/main/web/__tests__/utils/term-matching.test.js`
+- Parsed-query to schema/result adaptation for search reruns is covered in `src/main/web/__tests__/utils/search-query-mapper.test.js`
 - Search highlighting regression coverage lives in `src/main/web/__tests__/views/search.test.js`
 
 ## Python tools environment

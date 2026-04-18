@@ -77,7 +77,7 @@ class SearchServiceTest {
     void search_noConsent_returnsEmptyResponse() {
         when(consentService.hasActiveConsent(userId, "professional_matching")).thenReturn(false);
 
-        SearchResponse response = searchService.search(userId, "java developer", null);
+        SearchResponse response = searchService.search(userId, "java developer");
 
         assertNotNull(response);
         assertTrue(response.results().isEmpty());
@@ -89,7 +89,7 @@ class SearchServiceTest {
         when(consentService.hasActiveConsent(userId, "professional_matching")).thenReturn(true);
         when(embeddingService.generateEmbedding(anyString())).thenReturn(null);
 
-        SearchResponse response = searchService.search(userId, "some query", null);
+        SearchResponse response = searchService.search(userId, "some query");
 
         assertNotNull(response.parsedQuery());
         assertTrue(response.results().isEmpty());
@@ -103,7 +103,7 @@ class SearchServiceTest {
         when(searchRepository.unifiedVectorSearch(any(float[].class), eq(userId),
                 any(), any(), anyInt())).thenReturn(Collections.emptyList());
 
-        SearchResponse response = searchService.search(userId, "java", null);
+        SearchResponse response = searchService.search(userId, "java");
 
         assertNotNull(response);
         assertTrue(response.results().isEmpty());
@@ -112,14 +112,23 @@ class SearchServiceTest {
     }
 
     @Test
-    void search_withCountryFilter_addsSqlParameter() {
+    void search_withLocationInParsedQuery_addsSqlCountryParameter() throws Exception {
+        SearchQueryParser parser = mock(SearchQueryParser.class);
+        Field parsersField = SearchService.class.getDeclaredField("queryParsers");
+        parsersField.setAccessible(true);
+        parsersField.set(searchService, List.of(parser));
+        ParsedSearchQuery parsed = new ParsedSearchQuery(
+                new ParsedSearchQuery.MustHaveFilters(List.of(), null, List.of(), List.of(), List.of("Italy"), List.of()),
+                null, "unknown", null, List.of(), "query");
+        when(parser.parse("query")).thenReturn(Optional.of(parsed));
+
         when(consentService.hasActiveConsent(userId, "professional_matching")).thenReturn(true);
         when(embeddingService.generateEmbedding(anyString())).thenReturn(new float[]{0.1f});
 
         when(searchRepository.unifiedVectorSearch(any(float[].class), eq(userId),
                 eq("IT"), any(), anyInt())).thenReturn(Collections.emptyList());
 
-        searchService.search(userId, "query", "IT");
+        searchService.search(userId, "query");
 
         verify(searchRepository).unifiedVectorSearch(any(float[].class), eq(userId),
                 eq("IT"), any(), anyInt());
@@ -142,7 +151,7 @@ class SearchServiceTest {
         when(searchRepository.unifiedVectorSearch(any(float[].class), eq(userId),
                 any(), any(), anyInt())).thenReturn(Collections.emptyList());
 
-        SearchResponse response = searchService.search(userId, "java developer", null);
+        SearchResponse response = searchService.search(userId, "java developer");
 
         verify(parser).parse("java developer");
         assertNotNull(response);
@@ -153,7 +162,7 @@ class SearchServiceTest {
         when(consentService.hasActiveConsent(userId, "professional_matching")).thenReturn(true);
         when(embeddingService.generateEmbedding(anyString())).thenReturn(null);
 
-        SearchResponse response = searchService.search(userId, "looking for a java developer", null);
+        SearchResponse response = searchService.search(userId, "looking for a java developer");
 
         assertNotNull(response.parsedQuery());
         assertFalse(response.parsedQuery().keywords().contains("looking"));
@@ -183,7 +192,7 @@ class SearchServiceTest {
         try (MockedStatic<SkillAssessment> sa = mockStatic(SkillAssessment.class)) {
             sa.when(() -> SkillAssessment.findByNode(any())).thenReturn(Collections.emptyList());
 
-            SearchResponse response = searchService.search(userId, "java developer", null);
+            SearchResponse response = searchService.search(userId, "java developer");
 
             assertNotNull(response);
             assertFalse(response.results().isEmpty());
@@ -209,7 +218,7 @@ class SearchServiceTest {
         when(searchRepository.unifiedVectorSearch(any(float[].class), eq(userId),
                 any(), any(), anyInt())).thenReturn(rowList(nodeRow));
 
-        SearchResponse response = searchService.search(userId, "java project", null);
+        SearchResponse response = searchService.search(userId, "java project");
 
         assertNotNull(response);
         assertFalse(response.results().isEmpty());
@@ -245,7 +254,7 @@ class SearchServiceTest {
 
         try (MockedStatic<SkillAssessment> sa = mockStatic(SkillAssessment.class)) {
             sa.when(() -> SkillAssessment.findByNode(any())).thenReturn(Collections.emptyList());
-            SearchResponse response = searchService.search(userId, "java python developer", null);
+            SearchResponse response = searchService.search(userId, "java python developer");
             assertNotNull(response);
             assertFalse(response.results().isEmpty());
         }
@@ -278,7 +287,7 @@ class SearchServiceTest {
 
         try (MockedStatic<SkillAssessment> sa = mockStatic(SkillAssessment.class)) {
             sa.when(() -> SkillAssessment.findByNode(any())).thenReturn(Collections.emptyList());
-            SearchResponse response = searchService.search(userId, "senior devops", null);
+            SearchResponse response = searchService.search(userId, "senior devops");
             assertNotNull(response);
         }
     }
@@ -301,7 +310,7 @@ class SearchServiceTest {
 
         try (MockedStatic<SkillAssessment> sa = mockStatic(SkillAssessment.class)) {
             sa.when(() -> SkillAssessment.findByNode(any())).thenReturn(Collections.emptyList());
-            SearchResponse response = searchService.search(userId, "test", null);
+            SearchResponse response = searchService.search(userId, "test");
             assertNotNull(response);
         }
     }
@@ -337,7 +346,7 @@ class SearchServiceTest {
 
         try (MockedStatic<SkillAssessment> sa = mockStatic(SkillAssessment.class)) {
             sa.when(() -> SkillAssessment.findByNode(any())).thenReturn(Collections.emptyList());
-            SearchResponse response = searchService.search(userId, "java with docker", null);
+            SearchResponse response = searchService.search(userId, "java with docker");
             assertFalse(response.results().isEmpty());
         }
     }
@@ -371,7 +380,7 @@ class SearchServiceTest {
 
         try (MockedStatic<SkillAssessment> sa = mockStatic(SkillAssessment.class)) {
             sa.when(() -> SkillAssessment.findByNode(any())).thenReturn(Collections.emptyList());
-            SearchResponse response = searchService.search(userId, "python in finance", null);
+            SearchResponse response = searchService.search(userId, "python in finance");
             assertFalse(response.results().isEmpty());
         }
     }
@@ -396,12 +405,36 @@ class SearchServiceTest {
 
         try (MockedStatic<SkillAssessment> sa = mockStatic(SkillAssessment.class)) {
             sa.when(() -> SkillAssessment.findByNode(any())).thenReturn(Collections.emptyList());
-            SearchResponse response = searchService.search(userId, "test", null);
+            SearchResponse response = searchService.search(userId, "test");
             assertNotNull(response);
             assertTrue(response.results().size() <= 20);
             for (int i = 1; i < response.results().size(); i++) {
                 assertTrue(response.results().get(i - 1).score() >= response.results().get(i).score());
             }
+        }
+    }
+
+    @Test
+    void search_withLimitAndOffset_returnsPagedSlice() {
+        when(consentService.hasActiveConsent(userId, "professional_matching")).thenReturn(true);
+        when(embeddingService.generateEmbedding(anyString())).thenReturn(new float[]{0.5f});
+
+        UUID id0 = UUID.randomUUID();
+        UUID id1 = UUID.randomUUID();
+        UUID id2 = UUID.randomUUID();
+        List<Object[]> rows = List.of(
+                new Object[]{id0, "USER", "User0", "desc", new String[]{}, "US", Timestamp.from(Instant.now()), null, 0.95},
+                new Object[]{id1, "USER", "User1", "desc", new String[]{}, "US", Timestamp.from(Instant.now()), null, 0.90},
+                new Object[]{id2, "USER", "User2", "desc", new String[]{}, "US", Timestamp.from(Instant.now()), null, 0.85}
+        );
+        when(searchRepository.unifiedVectorSearch(any(float[].class), eq(userId),
+                any(), any(), anyInt())).thenReturn(rows);
+
+        try (MockedStatic<SkillAssessment> sa = mockStatic(SkillAssessment.class)) {
+            sa.when(() -> SkillAssessment.findByNode(any())).thenReturn(Collections.emptyList());
+            SearchResponse response = searchService.search(userId, "test", 1, 1);
+            assertEquals(1, response.results().size());
+            assertEquals(id1, response.results().get(0).id());
         }
     }
 
@@ -423,7 +456,7 @@ class SearchServiceTest {
         when(searchRepository.unifiedVectorSearch(any(float[].class), eq(userId),
                 any(), eq(List.of("Italian")), anyInt())).thenReturn(Collections.emptyList());
 
-        searchService.search(userId, "Italian speaker", null);
+        searchService.search(userId, "Italian speaker");
 
         verify(searchRepository).unifiedVectorSearch(any(float[].class), eq(userId),
                 any(), eq(List.of("Italian")), anyInt());

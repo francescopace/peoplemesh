@@ -3,6 +3,8 @@ package org.peoplemesh.api.resource;
 import io.quarkus.security.Authenticated;
 import jakarta.inject.Inject;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import jakarta.ws.rs.Consumes;
@@ -40,18 +42,23 @@ public class MatchesResource {
     public Response matchFromSchema(
             @Valid ProfileSchema profile,
             @QueryParam("type") @Size(max = 40) @Pattern(regexp = "^[A-Za-z_]*$") String type,
-            @QueryParam("country") @Pattern(regexp = "^[A-Za-z]{2}$|^$") String country) {
+            @QueryParam("country") @Pattern(regexp = "^[A-Za-z]{2}$|^$") String country,
+            @QueryParam("limit") @Min(1) @Max(100) Integer limit,
+            @QueryParam("offset") @Min(0) Integer offset) {
         UUID userId = currentUserService.resolveUserId();
-        List<MeshMatchResult> matches = matchesService.matchFromSchema(userId, profile, type, country);
+        List<MeshMatchResult> matches = matchesService.matchFromSchema(userId, profile, type, country, limit, offset);
         return Response.ok(matches).build();
     }
 
     @POST
     @Path("prompt")
     @Consumes(MediaType.APPLICATION_JSON)
-    public Response matchFromPrompt(@Valid SearchRequest request) {
+    public Response matchFromPrompt(
+            @Valid SearchRequest request,
+            @QueryParam("limit") @Min(1) @Max(100) Integer limit,
+            @QueryParam("offset") @Min(0) Integer offset) {
         UUID userId = currentUserService.resolveUserId();
-        SearchResponse result = matchesService.matchFromPrompt(userId, request);
+        SearchResponse result = matchesService.matchFromPrompt(userId, request, limit, offset);
         return Response.ok(result).build();
     }
 
@@ -59,9 +66,11 @@ public class MatchesResource {
     @Path("me")
     public Response matchMyProfile(
             @QueryParam("type") @Size(max = 40) @Pattern(regexp = "^[A-Za-z_]*$") String type,
-            @QueryParam("country") @Pattern(regexp = "^[A-Za-z]{2}$|^$") String country) {
+            @QueryParam("country") @Pattern(regexp = "^[A-Za-z]{2}$|^$") String country,
+            @QueryParam("limit") @Min(1) @Max(100) Integer limit,
+            @QueryParam("offset") @Min(0) Integer offset) {
         UUID userId = currentUserService.resolveUserId();
-        List<MeshMatchResult> matches = matchesService.matchMyProfile(userId, type, country);
+        List<MeshMatchResult> matches = matchesService.matchMyProfile(userId, type, country, limit, offset);
         return Response.ok(matches).build();
     }
 

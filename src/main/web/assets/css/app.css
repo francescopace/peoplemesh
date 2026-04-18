@@ -1710,35 +1710,6 @@ select.profile-inline-input[multiple] {
   flex-wrap: wrap;
 }
 
-.explore-header-actions {
-  display: flex;
-  gap: var(--space-3);
-  align-items: center;
-  flex-shrink: 0;
-  margin-left: auto;
-}
-
-.explore-search-wrap {
-  flex: 1 1 100%;
-  min-width: 0;
-  width: 100%;
-}
-
-.explore-search-form {
-  max-width: none;
-  box-shadow: none;
-}
-
-.explore-search-input {
-  font-size: var(--text-sm);
-}
-
-.explore-search-input::placeholder { color: var(--color-gray-400); }
-
-.explore-search-form .search-btn {
-  padding: 0.6rem 1rem;
-}
-
 /* Type tabs (segmented pill bar) */
 .explore-type-tabs {
   display: flex;
@@ -1794,6 +1765,12 @@ select.profile-inline-input[multiple] {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: var(--space-6);
+}
+
+.explore-load-more {
+  display: flex;
+  justify-content: center;
+  margin-top: 1rem;
 }
 
 .admin-stats-grid {
@@ -3069,14 +3046,15 @@ select.profile-inline-input[multiple] {
   width: 100%;
 }
 
-.search-result-count {
-  font-size: var(--font-sm);
-  margin: 0 0 var(--space-4);
-}
-
 .search-results-grid {
   display: grid;
   gap: var(--space-4);
+}
+
+.search-load-more {
+  display: flex;
+  justify-content: center;
+  margin-top: 1rem;
 }
 
 @media (max-width: 640px) {

@@ -206,9 +206,7 @@ public class MatchingService {
 
         results.sort(Comparator.comparingDouble(MatchResult::score).reversed());
 
-        return results.stream()
-                .limit(config.matching().resultLimit())
-                .toList();
+        return results;
     }
 
     private Map<UUID, Map<String, Short>> loadSkillLevelsByNode(List<Object[]> candidates, MatchFilters filters) {
@@ -232,6 +230,11 @@ public class MatchingService {
      * Unified match method: returns people + nodes in a single list (uses the caller's published profile).
      */
     public List<MeshMatchResult> findAllMatches(UUID userId, String typeFilter, String country) {
+        return findAllMatches(userId, typeFilter, country, null, null);
+    }
+
+    public List<MeshMatchResult> findAllMatches(
+            UUID userId, String typeFilter, String country, Integer limit, Integer offset) {
         if (!consentService.hasActiveConsent(userId, "professional_matching")) {
             return Collections.emptyList();
         }
@@ -256,7 +259,9 @@ public class MatchingService {
                 MatchingUtils.structuredEmploymentType(myNode),
                 peopleFilters,
                 typeFilter,
-                country);
+                country,
+                limit,
+                offset);
     }
 
     /**
@@ -266,6 +271,13 @@ public class MatchingService {
     public List<MeshMatchResult> findAllMatches(
             UUID excludeUserId, float[] embedding,
             String typeFilter, String countryFilter) {
+        return findAllMatches(excludeUserId, embedding, typeFilter, countryFilter, null, null);
+    }
+
+    public List<MeshMatchResult> findAllMatches(
+            UUID excludeUserId, float[] embedding,
+            String typeFilter, String countryFilter,
+            Integer limit, Integer offset) {
         if (!consentService.hasActiveConsent(excludeUserId, "professional_matching")) {
             return Collections.emptyList();
         }
@@ -283,7 +295,9 @@ public class MatchingService {
                 null,
                 peopleFilters,
                 typeFilter,
-                countryFilter);
+                countryFilter,
+                limit,
+                offset);
     }
 
     /**
@@ -297,7 +311,8 @@ public class MatchingService {
             String referenceCountry, WorkMode referenceWorkMode,
             EmploymentType referenceEmploymentType,
             MatchFilters peopleFilters,
-            String typeFilter, String countryFilter) {
+            String typeFilter, String countryFilter,
+            Integer limit, Integer offset) {
         long start = System.currentTimeMillis();
         List<MeshMatchResult> all = new ArrayList<>();
 
@@ -386,8 +401,7 @@ public class MatchingService {
         }
 
         all.sort(Comparator.comparingDouble(MeshMatchResult::score).reversed());
-        int limit = config.matching().resultLimit();
-        List<MeshMatchResult> result = all.size() > limit ? all.subList(0, limit) : all;
+        List<MeshMatchResult> result = applyPagination(all, limit, offset);
         LOG.debugf("action=matchAll userId=%s type=%s candidates=%d results=%d elapsedMs=%d",
                 excludeUserId, typeFilter, all.size(), result.size(), System.currentTimeMillis() - start);
         return result;
@@ -461,8 +475,17 @@ public class MatchingService {
 
         return results.stream()
                 .sorted(Comparator.comparingDouble(NodeMatchResult::score).reversed())
-                .limit(config.matching().resultLimit())
                 .toList();
+    }
+
+    private List<MeshMatchResult> applyPagination(List<MeshMatchResult> all, Integer requestedLimit, Integer requestedOffset) {
+        int safeOffset = requestedOffset != null ? Math.max(0, requestedOffset) : 0;
+        int safeLimit = requestedLimit != null ? Math.max(1, requestedLimit) : config.matching().resultLimit();
+        if (safeOffset >= all.size()) {
+            return Collections.emptyList();
+        }
+        int toIndex = Math.min(all.size(), safeOffset + safeLimit);
+        return all.subList(safeOffset, toIndex);
     }
 
 
