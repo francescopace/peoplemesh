@@ -141,6 +141,9 @@ public interface AppConfig {
         @WithDefault("0.05")
         double minScore();
 
+        @WithDefault("0.70")
+        double skillMatchThreshold();
+
         java.util.Optional<String> queryPrefix();
     }
 

@@ -15,6 +15,12 @@ import java.util.stream.Collectors;
  */
 public final class MatchingUtils {
 
+    private static final Set<String> EXCLUSIVE_TOKEN_PAIRS = Set.of(
+            "java|javascript",
+            "scala|scalability",
+            "go|golang"
+    );
+
     private MatchingUtils() {}
 
     public static String vectorToString(float[] vec) {
@@ -119,6 +125,20 @@ public final class MatchingUtils {
 
         Set<String> smaller = leftTokens.size() <= rightTokens.size() ? leftTokens : rightTokens;
         Set<String> bigger = leftTokens.size() <= rightTokens.size() ? rightTokens : leftTokens;
+        if (smaller.size() == 1) {
+            String token = smaller.iterator().next();
+            if (token.length() < 4) {
+                return false;
+            }
+            if (((double) smaller.size() / bigger.size()) < 0.5) {
+                return false;
+            }
+            for (String biggerToken : bigger) {
+                if (isExclusivePair(token, biggerToken)) {
+                    return false;
+                }
+            }
+        }
         return bigger.containsAll(smaller);
     }
 
@@ -137,6 +157,15 @@ public final class MatchingUtils {
             if (!token.isBlank()) set.add(token);
         }
         return set;
+    }
+
+    private static boolean isExclusivePair(String leftToken, String rightToken) {
+        if (leftToken == null || rightToken == null || leftToken.equals(rightToken)) {
+            return false;
+        }
+        String a = leftToken.compareTo(rightToken) <= 0 ? leftToken : rightToken;
+        String b = leftToken.compareTo(rightToken) <= 0 ? rightToken : leftToken;
+        return EXCLUSIVE_TOKEN_PAIRS.contains(a + "|" + b);
     }
 
     private static String normalizeTerm(String raw) {

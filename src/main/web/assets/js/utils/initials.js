@@ -9,7 +9,7 @@ export function deriveInitialsFromName(name) {
 }
 
 export function deriveInitials(user) {
-  const displayName = user?.display_name || user?.displayName || user?.name || "";
+  const displayName = user?.display_name || "";
   const fromName = deriveInitialsFromName(displayName);
   if (fromName) return fromName;
 

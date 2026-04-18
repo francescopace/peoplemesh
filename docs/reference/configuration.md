@@ -62,12 +62,12 @@ In production mode, OpenAI is used by default.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `OPENAI_API_KEY` | — | OpenAI API key (required in production) |
-| `LLM_MODEL` | `gpt-4.1-mini` | OpenAI chat model |
+| `LLM_MODEL` | `GPT-5.4-nano` | OpenAI chat model used for query parsing and CV extraction prompts |
 
 Dev model defaults are configured in `application-dev.properties`:
 
 - Chat model: `granite4:3b`
-- Embedding model: `qwen3-embedding:0.6b`
+- Embedding model: `granite-embedding:30m`
 
 ## Docling / CV Import
 
@@ -122,6 +122,16 @@ Current migration includes:
 | Key | Default | Description |
 |-----|---------|-------------|
 | `peoplemesh.search.min-score` | `0.05` | Minimum result score threshold |
+| `peoplemesh.search.skill-match-threshold` | `0.70` | Minimum semantic similarity for query-skill to candidate-skill matching in prompt search (`/api/v1/matches/prompt`) and PEOPLE matching in My Mesh (`/api/v1/matches/me`) |
+
+Search matching notes:
+
+- Prompt search uses a hybrid strategy:
+  - exact/fallback term matching (`termsMatch`)
+  - semantic matching over skill embeddings (catalog skill vectors)
+- PEOPLE matching in My Mesh (`GET /api/v1/matches/me`) reuses the same semantic skill matcher for skills overlap scoring.
+- `peoplemesh.search.skill-match-threshold` tunes the semantic gate only (higher = stricter precision, lower = higher recall).
+- This threshold is independent from `peoplemesh.skills.reconciliation-threshold` (used by catalog reconciliation workflows, not search scoring).
 
 ## Matching
 

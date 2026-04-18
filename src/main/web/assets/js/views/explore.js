@@ -3,6 +3,7 @@ import { el, spinner, toast, emptyState } from "../ui.js";
 import { NODE_TYPE_ICONS, NODE_TYPE_COLORS } from "../node-types.js";
 import { contactFooter } from "../contact-actions.js";
 import { COUNTRIES } from "../utils/countries.js";
+import { termsMatch } from "../utils/term-matching.js";
 
 const NODE_TYPES = [
   { id: "",              label: "All Nodes",   icon: "layers" },
@@ -224,7 +225,7 @@ export async function renderExplore(container) {
       card.appendChild(el("p", { className: "dc-desc" }, desc));
     }
 
-    const commonSet = new Set((m.breakdown?.commonItems || []).map((s) => s.toLowerCase()));
+    const commonItems = m.breakdown?.commonItems || [];
     const commonGoals = m.breakdown?.commonGoals || [];
     const geoReason = m.breakdown?.geographyReason;
     const GEO_POSITIVE = new Set(["same_country", "same_continent", "remote_friendly"]);
@@ -235,7 +236,7 @@ export async function renderExplore(container) {
       const tagsArea = el("div", { className: "dc-tags-area" });
       const row = el("div", { className: "dc-tags" });
       (m.tags || []).slice(0, 8).forEach((t) => {
-        const isCommon = commonSet.has(t.toLowerCase());
+        const isCommon = commonItems.some((item) => termsMatch(item, t));
         row.appendChild(el("span", { className: "dc-tag", style: isCommon ? matchStyle : undefined }, t));
       });
       commonGoals.slice(0, 3).forEach((g) => row.appendChild(el("span", { className: "dc-tag", style: matchStyle }, g.replace(/_/g, " ").toLowerCase())));

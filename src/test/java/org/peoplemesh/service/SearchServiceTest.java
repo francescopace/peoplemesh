@@ -33,6 +33,7 @@ class SearchServiceTest {
     @Mock AppConfig config;
     @Mock ObjectMapper objectMapper;
     @Mock AppConfig.SearchConfig searchConfig;
+    @Mock SemanticSkillMatcher semanticSkillMatcher;
 
     @InjectMocks
     SearchService searchService;
@@ -43,8 +44,29 @@ class SearchServiceTest {
     void setUp() throws Exception {
         lenient().when(config.search()).thenReturn(searchConfig);
         lenient().when(searchConfig.minScore()).thenReturn(0.0);
+        lenient().when(searchConfig.skillMatchThreshold()).thenReturn(0.7);
         lenient().when(skillAssessmentRepository.findByNodeIds(anyList())).thenReturn(Collections.emptyMap());
         lenient().when(skillDefinitionRepository.findByIds(anyList())).thenReturn(Collections.emptyList());
+        lenient().when(semanticSkillMatcher.matchSkills(anyList(), anyList(), anyDouble())).thenAnswer(invocation -> {
+            List<String> querySkills = invocation.getArgument(0);
+            List<String> candidateSkills = invocation.getArgument(1);
+            List<SemanticSkillMatcher.SemanticMatch> matches = new ArrayList<>();
+            if (querySkills == null || candidateSkills == null) {
+                return matches;
+            }
+            for (String querySkill : querySkills) {
+                if (querySkill == null) {
+                    continue;
+                }
+                for (String candidateSkill : candidateSkills) {
+                    if (candidateSkill != null && MatchingUtils.termsMatch(querySkill, candidateSkill)) {
+                        matches.add(new SemanticSkillMatcher.SemanticMatch(querySkill, candidateSkill, 1.0));
+                        break;
+                    }
+                }
+            }
+            return matches;
+        });
 
         Field parsersField = SearchService.class.getDeclaredField("queryParsers");
         parsersField.setAccessible(true);
@@ -138,6 +160,8 @@ class SearchServiceTest {
         assertFalse(response.parsedQuery().keywords().contains("for"));
         assertFalse(response.parsedQuery().keywords().contains("a"));
         assertTrue(response.parsedQuery().keywords().contains("java"));
+        assertTrue(response.parsedQuery().mustHave().roles().contains("developer"));
+        assertFalse(response.parsedQuery().mustHave().skills().contains("developer"));
     }
 
     @Test

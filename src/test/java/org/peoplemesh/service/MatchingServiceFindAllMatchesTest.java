@@ -19,6 +19,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -32,24 +33,38 @@ class MatchingServiceFindAllMatchesTest {
     private MeshNodeSearchRepository searchRepository;
     private ConsentService consentService;
     private NodeRepository nodeRepository;
+    private SemanticSkillMatcher semanticSkillMatcher;
 
     @BeforeEach
     void setUp() throws Exception {
         AppConfig config = mock(AppConfig.class);
         AppConfig.MatchingConfig matching = mock(AppConfig.MatchingConfig.class);
+        AppConfig.SearchConfig search = mock(AppConfig.SearchConfig.class);
         when(config.matching()).thenReturn(matching);
+        when(config.search()).thenReturn(search);
         when(matching.decayLambda()).thenReturn(0.1);
         when(matching.candidatePoolSize()).thenReturn(50);
         when(matching.resultLimit()).thenReturn(20);
+        when(search.skillMatchThreshold()).thenReturn(0.7);
 
         searchRepository = mock(MeshNodeSearchRepository.class);
         consentService = mock(ConsentService.class);
         nodeRepository = mock(NodeRepository.class);
+        semanticSkillMatcher = mock(SemanticSkillMatcher.class);
+        when(semanticSkillMatcher.matchSkills(any(), any(), anyDouble())).thenAnswer(invocation -> {
+            List<String> querySkills = invocation.getArgument(0);
+            List<String> candidateSkills = invocation.getArgument(1);
+            return querySkills.stream()
+                    .filter(q -> candidateSkills.stream().anyMatch(c -> MatchingUtils.termsMatch(q, c)))
+                    .map(q -> new SemanticSkillMatcher.SemanticMatch(q, q, 1.0))
+                    .toList();
+        });
 
         setField("config", config);
         setField("searchRepository", searchRepository);
         setField("consentService", consentService);
         setField("nodeRepository", nodeRepository);
+        setField("semanticSkillMatcher", semanticSkillMatcher);
     }
 
     @Test

@@ -67,6 +67,12 @@ public final class EmbeddingTextBuilder {
                         list("Topics", interestsProfessional != null ? interestsProfessional.topicsFrequent() : null),
                         list("Learning", interestsProfessional != null ? interestsProfessional.learningAreas() : null),
                         list("Projects", interestsProfessional != null ? interestsProfessional.projectTypes() : null),
+                        list("Hobbies", personal != null ? personal.hobbies() : null),
+                        list("Sports", personal != null ? personal.sports() : null),
+                        list("Causes", personal != null ? personal.causes() : null),
+                        list("Personality", personal != null ? personal.personalityTags() : null),
+                        list("Music", personal != null ? personal.musicGenres() : null),
+                        list("Books", personal != null ? personal.bookGenres() : null),
                         professional != null && professional.workModePreference() != null
                                 ? "Work Mode: " + professional.workModePreference().name()
                                 : null,

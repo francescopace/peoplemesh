@@ -98,6 +98,9 @@ public class MatchingService {
     @Inject
     SkillLevelResolutionService skillLevelResolutionService;
 
+    @Inject
+    SemanticSkillMatcher semanticSkillMatcher;
+
     private static List<String> parseCommaSeparatedRoles(String plain) {
         return MatchingUtils.splitCommaSeparated(plain);
     }
@@ -120,18 +123,22 @@ public class MatchingService {
                 queryEmbedding, excludeUserId, poolSize);
         Map<UUID, Map<String, Short>> skillLevelsByNode = loadSkillLevelsByNode(candidates, filters);
 
-        List<String> mySkillPool = referenceSkillPool != null ? referenceSkillPool : Collections.emptyList();
+        List<String> mySkillPool = deduplicateTerms(referenceSkillPool);
+        double semanticThreshold = config.search().skillMatchThreshold();
         List<MatchResult> results = new ArrayList<>();
 
         for (Object[] raw : candidates) {
             CandidateRow c = CandidateRow.fromNativeRow(raw);
+            List<String> candidateSkillPool = deduplicateTerms(
+                    MatchingUtils.combineLists(c.combinedSkillsAndTools(), c.skillsSoft()));
 
-            double skillsOverlap = MatchingUtils.jaccardSimilarity(mySkillPool, c.combinedSkillsAndTools());
+            List<String> matchedSkills = matchSkills(mySkillPool, candidateSkillPool, semanticThreshold);
+            double skillsOverlap = mySkillPool.isEmpty() ? 0.0 : (double) matchedSkills.size() / mySkillPool.size();
 
             if (filters != null && filters.skillsWithLevel() != null && !filters.skillsWithLevel().isEmpty()) {
                 double levelScore = MatchingUtils.computeLevelAwareCoverage(
                         filters.skillsWithLevel(),
-                        c.combinedSkillsAndTools(),
+                        candidateSkillPool,
                         skillLevelsByNode.get(c.nodeId()));
                 skillsOverlap = Math.max(skillsOverlap, levelScore);
             }
@@ -150,7 +157,6 @@ public class MatchingService {
             double decayedScore = applyDecay(rawScore, c.updatedAt());
             double decayMultiplier = rawScore == 0.0 ? 1.0 : decayedScore / rawScore;
 
-            List<String> matchedSkills = MatchingUtils.intersectCaseInsensitive(mySkillPool, c.combinedSkillsAndTools());
             String geographyReason = geographyReason(referenceCountry, c.country(), referenceWorkMode);
             List<String> reasonCodes = new ArrayList<>(buildReasonCodes(c.cosineSim(), matchedSkills, geoScore, decayMultiplier));
             if (referenceEmploymentType != null) {
@@ -236,6 +242,7 @@ public class MatchingService {
         List<String> referenceTags = MatchingUtils.combineLists(
                 myNode.tags != null ? myNode.tags : Collections.emptyList(),
                 sdListOrEmpty(myNode.structuredData, "tools_and_tech"));
+        referenceTags = MatchingUtils.combineLists(referenceTags, sdListOrEmpty(myNode.structuredData, "skills_soft"));
         List<String> nodeReferenceTags = MatchingUtils.combineLists(referenceTags, sdListOrEmpty(myNode.structuredData, "hobbies"));
         nodeReferenceTags = MatchingUtils.combineLists(nodeReferenceTags, sdListOrEmpty(myNode.structuredData, "sports"));
         MatchFilters peopleFilters = new MatchFilters(null, null, null, country);
@@ -527,6 +534,34 @@ public class MatchingService {
         if (geoScore > 0) codes.add("LOCATION_COMPATIBLE");
         if (decayMultiplier < 1.0) codes.add("RECENCY_DECAY_APPLIED");
         return codes;
+    }
+
+    private static List<String> deduplicateTerms(List<String> raw) {
+        if (raw == null || raw.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Set<String> seen = new HashSet<>();
+        List<String> out = new ArrayList<>();
+        for (String value : raw) {
+            if (value == null || value.isBlank()) {
+                continue;
+            }
+            String normalized = value.toLowerCase(Locale.ROOT).trim();
+            if (seen.add(normalized)) {
+                out.add(value.trim());
+            }
+        }
+        return out;
+    }
+
+    private List<String> matchSkills(List<String> querySkills, List<String> candidateSkills, double threshold) {
+        if (querySkills == null || querySkills.isEmpty() || candidateSkills == null || candidateSkills.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return semanticSkillMatcher.matchSkills(querySkills, candidateSkills, threshold).stream()
+                .map(SemanticSkillMatcher.SemanticMatch::querySkill)
+                .distinct()
+                .toList();
     }
 
 

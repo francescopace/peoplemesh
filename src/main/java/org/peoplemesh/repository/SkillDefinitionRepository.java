@@ -4,6 +4,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import org.peoplemesh.domain.model.SkillDefinition;
+import org.peoplemesh.util.VectorSqlUtils;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -120,5 +121,27 @@ public class SkillDefinitionRepository {
                 .setFirstResult(page * size)
                 .setMaxResults(size)
                 .getResultList();
+    }
+
+    public List<Object[]> findSimilarByEmbedding(float[] embedding, int limit, double minSimilarity) {
+        if (embedding == null || embedding.length == 0 || limit <= 0) {
+            return Collections.emptyList();
+        }
+        String vectorLiteral = VectorSqlUtils.vectorToSqlLiteral(embedding);
+        String sql = """
+                SELECT d.id, d.name, d.aliases, (1 - (d.embedding <=> cast(:vec as vector))) as cosine_sim
+                FROM skills.skill_definition d
+                WHERE d.embedding IS NOT NULL
+                  AND (1 - (d.embedding <=> cast(:vec as vector))) >= :minSimilarity
+                ORDER BY d.embedding <=> cast(:vec as vector)
+                LIMIT :limit
+                """;
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = em.createNativeQuery(sql)
+                .setParameter("vec", vectorLiteral)
+                .setParameter("minSimilarity", minSimilarity)
+                .setParameter("limit", limit)
+                .getResultList();
+        return rows;
     }
 }

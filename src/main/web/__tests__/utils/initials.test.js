@@ -39,12 +39,9 @@ describe("deriveInitials", () => {
     expect(deriveInitials({ display_name: "Alice Smith" })).toBe("AS");
   });
 
-  it("uses displayName (camelCase) as fallback", () => {
-    expect(deriveInitials({ displayName: "Bob Jones" })).toBe("BJ");
-  });
-
-  it("uses name as fallback", () => {
-    expect(deriveInitials({ name: "Charlie" })).toBe("CH");
+  it("ignores legacy displayName/name fields", () => {
+    expect(deriveInitials({ displayName: "Bob Jones", provider: "google" })).toBe("GO");
+    expect(deriveInitials({ name: "Charlie", provider: "github" })).toBe("GI");
   });
 
   it("falls back to provider initials when name is empty", () => {

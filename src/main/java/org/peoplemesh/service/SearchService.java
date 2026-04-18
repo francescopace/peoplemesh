@@ -57,6 +57,9 @@ public class SearchService {
     @Inject
     SkillLevelResolutionService skillLevelResolutionService;
 
+    @Inject
+    SemanticSkillMatcher semanticSkillMatcher;
+
     public SearchResponse search(UUID userId, String queryText, String countryFilter) {
         if (!consentService.hasActiveConsent(userId, "professional_matching")) {
             return new SearchResponse(null, Collections.emptyList());
@@ -184,9 +187,19 @@ public class SearchService {
                                            List<String> negativeSkills) {
         List<String> candidateSkills = c.tags != null ? new ArrayList<>(c.tags) : new ArrayList<>();
         List<String> toolsAndTech = sdListOrEmpty(c.structuredData, "tools_and_tech");
+        List<String> softSkills = sdListOrEmpty(c.structuredData, "skills_soft");
         candidateSkills.addAll(toolsAndTech);
+        candidateSkills.addAll(softSkills);
+        if (cachedLevelsBySkillName != null && !cachedLevelsBySkillName.isEmpty()) {
+            candidateSkills.addAll(cachedLevelsBySkillName.keySet());
+        }
+        candidateSkills = deduplicateTerms(candidateSkills);
 
-        List<String> matchedMust = MatchingUtils.intersectCaseInsensitive(mustHaveSkills, candidateSkills);
+        double skillMatchThreshold = config.search().skillMatchThreshold();
+        List<String> matchedMust = semanticSkillMatcher.matchSkills(mustHaveSkills, candidateSkills, skillMatchThreshold).stream()
+                .map(SemanticSkillMatcher.SemanticMatch::querySkill)
+                .distinct()
+                .toList();
         Set<String> matchedMustNormalized = matchedMust.stream()
                 .map(SearchService::normalizeTerm)
                 .collect(Collectors.toSet());
@@ -200,7 +213,10 @@ public class SearchService {
             mustHaveCoverage = MatchingUtils.computeLevelAwareCoverage(mustHaveWithLevel, candidateSkills, cachedLevelsBySkillName);
         }
 
-        List<String> matchedNice = MatchingUtils.intersectCaseInsensitive(niceToHaveSkills, candidateSkills);
+        List<String> matchedNice = semanticSkillMatcher.matchSkills(niceToHaveSkills, candidateSkills, skillMatchThreshold).stream()
+                .map(SemanticSkillMatcher.SemanticMatch::querySkill)
+                .distinct()
+                .toList();
         double niceToHaveBonus = niceToHaveSkills.isEmpty() ? 0.0
                 : (double) matchedNice.size() / niceToHaveSkills.size();
 
@@ -404,6 +420,24 @@ public class SearchService {
         return raw.toLowerCase(Locale.ROOT).trim();
     }
 
+    private static List<String> deduplicateTerms(List<String> values) {
+        if (values == null || values.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Set<String> seen = new HashSet<>();
+        List<String> deduplicated = new ArrayList<>();
+        for (String value : values) {
+            if (value == null || value.isBlank()) {
+                continue;
+            }
+            String key = normalizeTerm(value);
+            if (seen.add(key)) {
+                deduplicated.add(value.trim());
+            }
+        }
+        return deduplicated;
+    }
+
     private String buildEmbeddingQueryText(String embeddingText) {
         String prefix = config.search().queryPrefix().orElse("");
         if (prefix == null || prefix.isBlank()) {
@@ -429,6 +463,25 @@ public class SearchService {
             "knowledge", "familiar", "background", "developer", "engineer",
             "consultant", "specialist", "professional", "person", "someone",
             "anybody", "people", "team", "work", "working", "role"
+    );
+
+    private static final Set<String> CONTEXT_KEYWORDS = Set.of(
+            "community", "communities", "event", "events", "job", "jobs",
+            "opportunity", "opportunities", "networking", "meetup", "meetups",
+            "conference", "conferences"
+    );
+
+    private static final Map<String, String> ROLE_WORD_ALIASES = Map.ofEntries(
+            Map.entry("developer", "developer"),
+            Map.entry("dev", "developer"),
+            Map.entry("engineer", "engineer"),
+            Map.entry("architect", "architect"),
+            Map.entry("analyst", "analyst"),
+            Map.entry("designer", "designer"),
+            Map.entry("manager", "manager"),
+            Map.entry("consultant", "consultant"),
+            Map.entry("specialist", "specialist"),
+            Map.entry("lead", "lead")
     );
 
     private static final Map<String, String> LANGUAGE_ALIASES = Map.ofEntries(
@@ -462,7 +515,9 @@ public class SearchService {
     );
 
     private ParsedSearchQuery fallbackParse(String queryText) {
-        List<String> words = new ArrayList<>();
+        List<String> skills = new ArrayList<>();
+        Set<String> roles = new LinkedHashSet<>();
+        Set<String> keywords = new LinkedHashSet<>();
         Set<String> languages = new LinkedHashSet<>();
         for (String rawToken : queryText.split("\\s+")) {
             String token = TOKEN_TRIM_PATTERN.matcher(rawToken).replaceAll("").trim();
@@ -470,6 +525,12 @@ public class SearchService {
                 continue;
             }
             String normalized = token.toLowerCase(Locale.ROOT);
+            String canonicalRole = ROLE_WORD_ALIASES.get(normalized);
+            if (canonicalRole != null) {
+                roles.add(canonicalRole);
+                keywords.add(canonicalRole);
+                continue;
+            }
             if (STOP_WORDS.contains(normalized)) {
                 continue;
             }
@@ -478,14 +539,19 @@ public class SearchService {
                 languages.add(canonicalLanguage);
                 continue;
             }
-            words.add(token);
+            if (CONTEXT_KEYWORDS.contains(normalized)) {
+                keywords.add(token);
+                continue;
+            }
+            skills.add(token);
+            keywords.add(token);
         }
         return new ParsedSearchQuery(
-                new ParsedSearchQuery.MustHaveFilters(words, null, Collections.emptyList(),
+                new ParsedSearchQuery.MustHaveFilters(skills, null, new ArrayList<>(roles),
                         new ArrayList<>(languages), Collections.emptyList(), Collections.emptyList()),
                 new ParsedSearchQuery.NiceToHaveFilters(Collections.emptyList(), null,
                         Collections.emptyList(), Collections.emptyList()),
-                "unknown", null, words, queryText
+                "unknown", null, new ArrayList<>(keywords), queryText
         );
     }
 

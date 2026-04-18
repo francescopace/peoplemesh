@@ -1,101 +1,304 @@
 # API Reference
 
-This document lists the main HTTP surfaces exposed by PeopleMesh.
-This reference follows PeopleMesh's security- and GDPR-first posture by design (authenticated access, scoped authorization, protected maintenance surfaces, and explicit data-subject-rights endpoints).
+This document describes the HTTP surfaces exposed by PeopleMesh.
+The API enforces a security- and GDPR-first posture: authenticated access, scoped authorization, protected maintenance surfaces, and explicit data-subject-rights endpoints.
 
 ## Audience
 
-- Application developers
-- Integrators
+- Application developers integrating with PeopleMesh
 - Platform operators validating endpoint contracts
+- Security reviewers auditing access controls
 
 ## How to use this page
 
-- Use this page as a quick lookup of paths and purpose.
+- Use this page as the authoritative lookup for paths, parameters, and access rules.
 - Use [`../how-to/README.md`](../how-to/README.md) for procedural tasks.
 - Use [`mcp.md`](mcp.md) for MCP-specific details.
+- Use [`configuration.md`](configuration.md) for tuning parameters referenced here.
 
-## Core Endpoints
+---
+
+## Authentication & Authorization
+
+| Mechanism | Where used |
+|-----------|-----------|
+| OIDC session cookie | All `/api/v1/` endpoints except Auth |
+| `@PermitAll` | Auth endpoints, `GET /api/v1/me` (returns 204 if anonymous) |
+| `is_admin` entitlement | System statistics, node create/update, skill catalog management |
+| `X-Maintenance-Key` header | All maintenance endpoints (+ optional IP/CIDR allowlist) |
+
+API errors use [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) `ProblemDetail` responses; internal exception details are never returned in response bodies.
+
+---
+
+## Auth
+
+Public endpoints for OAuth login flow.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/` | Static SPA |
-| | | **Auth** |
 | GET | `/api/v1/auth/providers` | List enabled OAuth providers |
 | GET | `/api/v1/auth/login/{provider}` | Start OAuth login (Google, Microsoft, GitHub) |
-| GET | `/api/v1/auth/callback/{provider}` | OAuth callback |
-| POST | `/api/v1/auth/logout` | End session |
-| | | **Me** |
-| GET | `/api/v1/me` | Get profile (`?identity_only=true` for session check) |
+| GET | `/api/v1/auth/callback/{provider}` | OAuth callback — sets session cookie on success |
+| POST | `/api/v1/auth/logout` | End session — clears session cookie |
+
+**Access:** `@PermitAll` — no session required.
+
+`GET /api/v1/auth/login/{provider}` accepts an optional `?intent` query parameter (max 50 chars).
+
+---
+
+## Me (Current User)
+
+Endpoints for the authenticated user to manage their own profile, privacy, and data.
+
+### Profile
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/me` | Get profile |
 | PUT | `/api/v1/me` | Update profile |
 | POST | `/api/v1/me/import-apply` | Apply selected fields from an import preview |
-| DELETE | `/api/v1/me` | Delete account (GDPR Art. 17) |
-| GET | `/api/v1/me/export` | GDPR data export (Art. 15/20) |
-| POST | `/api/v1/me/cv-import` | CV import (Docling + LLM) |
+| POST | `/api/v1/me/cv-import` | Import CV (Docling + LLM extraction) |
+
+**Access:** `@Authenticated` (`GET /api/v1/me` is `@PermitAll` — returns 204 when anonymous).
+
+| Endpoint | Parameters |
+|----------|-----------|
+| `GET /api/v1/me` | `?identity_only=true` — lightweight session check, returns identity payload only |
+| `PUT /api/v1/me` | Body: `ProfileSchema` (JSON). Identity updates are limited to `identity.birth_date`; other identity fields are OAuth-managed |
+| `POST /api/v1/me/import-apply` | Body: partial `ProfileSchema` (JSON). `?source` (required, validated pattern) |
+| `POST /api/v1/me/cv-import` | Body: multipart file upload (`multipart/form-data`, field `file`) |
+
+Import-apply merge behavior:
+- For list fields (skills, tools, industries, languages, professional interests): the server persists the array values sent by the client — merge is client-driven.
+- `professional.roles` is single-valued: import always overrides, and if multiple values are provided only the first non-blank role is stored.
+- Identity imports are restricted to `identity.birth_date`; other identity fields are ignored.
+
+### GDPR & Privacy
+
+| Method | Path | Description |
+|--------|------|-------------|
+| DELETE | `/api/v1/me` | Delete account (GDPR Art. 17 — right to erasure) |
+| GET | `/api/v1/me/export` | GDPR data export (Art. 15/20 — JSON attachment download) |
+| GET | `/api/v1/me/consents` | List consent scopes and their current state |
+| POST | `/api/v1/me/consents/{scope}` | Grant consent for a scope |
+| DELETE | `/api/v1/me/consents/{scope}` | Revoke consent for a scope |
+| GET | `/api/v1/me/activity` | Privacy activity dashboard |
+
+**Access:** `@Authenticated`.
+
+`{scope}` must match `^[a-z_]+$`.
+
+### Skills & Notifications
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/me/skills` | List skill self-assessments |
+| PUT | `/api/v1/me/skills` | Update skill self-assessments |
 | GET | `/api/v1/me/notifications` | List notifications |
-| GET/PUT | `/api/v1/me/skills` | Skill self-assessments |
-| GET | `/api/v1/me/consents` | List consents |
-| POST/DELETE | `/api/v1/me/consents/{scope}` | Grant/revoke consent |
-| GET | `/api/v1/me/activity` | Activity feed |
-| | | **System** (`is_admin`) |
-| GET | `/api/v1/system/statistics` | Overview counters and runtime timing stats (LLM, embedding, HNSW) |
-| | | **Matches** |
+
+**Access:** `@Authenticated`.
+
+| Endpoint | Parameters |
+|----------|-----------|
+| `GET /api/v1/me/skills` | `?catalog_id={uuid}` — filter by catalog |
+| `PUT /api/v1/me/skills` | Body: JSON array of `SkillAssessmentDto` (max 500 items) |
+| `GET /api/v1/me/notifications` | `?limit={1..100}` (default 20) |
+
+### Profile field reference
+
+| Field path | Notes |
+|-----------|-------|
+| `identity.birth_date` | Only identity field editable via API |
+| `contacts.slack_handle` | Contact field |
+| `contacts.telegram_handle` | Contact field |
+| `contacts.mobile_phone` | Contact field |
+| `contacts.linkedin_url` | Contact field |
+
+---
+
+## Matches
+
+Endpoints for finding similar profiles and nodes.
+
+| Method | Path | Description |
+|--------|------|-------------|
 | POST | `/api/v1/matches/prompt` | Natural-language search |
-| POST | `/api/v1/matches` | Structured match |
-| GET | `/api/v1/matches/me` | Match from own profile embedding |
+| POST | `/api/v1/matches` | Structured match from a `ProfileSchema` |
+| GET | `/api/v1/matches/me` | Match from the authenticated user's profile embedding |
 | GET | `/api/v1/matches/{nodeId}` | Match from a node's embedding |
-| | | **Nodes** (`is_admin` for create/update) |
-| GET/POST | `/api/v1/nodes` | List / create mesh nodes |
-| GET/PUT | `/api/v1/nodes/{nodeId}` | Get / update a node |
+
+**Access:** `@Authenticated`.
+
+| Endpoint | Parameters |
+|----------|-----------|
+| `POST /api/v1/matches/prompt` | Body: `SearchRequest` (JSON) |
+| `POST /api/v1/matches` | Body: `ProfileSchema` (JSON). `?type`, `?country` (validated) |
+| `GET /api/v1/matches/me` | `?type`, `?country` |
+| `GET /api/v1/matches/{nodeId}` | `?type`, `?country`. `{nodeId}` is a UUID |
+
+### Search matching details (`POST /api/v1/matches/prompt`)
+
+Matching for profile results is hybrid:
+- **Exact/fallback term matching** (`termsMatch`): direct or normalized skill-name overlaps.
+- **Semantic matching**: query-side skill terms are matched against catalog skill definition embeddings and candidate skill sets.
+
+The candidate profile skill pool includes:
+- Technical skills (`tags`)
+- `tools_and_tech`
+- `skills_soft`
+- Resolved catalog assessment skill names (when present)
+
+Response `breakdown` fields per result:
+- `matchedMustHaveSkills` — query-side must-have skills considered matched
+- `matchedNiceToHaveSkills` — query-side nice-to-have skills considered matched
+- `missingMustHaveSkills` — query-side must-have skills not matched
+
+Query parsing:
+- Preferred: LLM parser (`must_have`, `nice_to_have`, `keywords`, `embedding_text`)
+- Fallback: token parser with role/language/context separation
+
+Tuning: see `peoplemesh.search.skill-match-threshold` in [configuration.md](configuration.md).
+
+### My Mesh matching details (`GET /api/v1/matches/me`)
+
+For PEOPLE results in My Mesh, skill overlap now uses the same centralized semantic matcher used by prompt search:
+- semantic skill matching via catalog embeddings (`SemanticSkillMatcher`)
+- exact/fallback term matching (`termsMatch`) as part of the hybrid matching behavior
+
+Candidate skill pool for PEOPLE results includes:
+- Technical skills (`tags`)
+- `tools_and_tech`
+- `skills_soft`
+
+Response shape note:
+- `breakdown.commonItems` contains matched overlap terms used for card highlighting and explanation.
+
+---
+
+## Nodes
+
+Mesh nodes represent people, jobs, or other entities in the network.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/nodes` | List nodes |
+| POST | `/api/v1/nodes` | Create a node |
+| GET | `/api/v1/nodes/{nodeId}` | Get a node |
+| PUT | `/api/v1/nodes/{nodeId}` | Update a node |
 | GET | `/api/v1/nodes/{nodeId}/skills` | Node skill assessments |
 | GET | `/api/v1/nodes/{nodeId}/profile` | Public profile (read-only) |
-| | | **Skills** (`is_admin`) |
-| GET/POST | `/api/v1/skills` | List / create catalogs |
-| GET/DELETE | `/api/v1/skills/{catalogId}` | Get / delete catalog |
-| POST | `/api/v1/skills/{catalogId}/import` | Import definitions (CSV) |
-| GET | `/api/v1/skills/{catalogId}/definitions` | List definitions |
+
+**Access:** `@Authenticated`. Create and update require `is_admin` entitlement.
+
+| Endpoint | Parameters |
+|----------|-----------|
+| `GET /api/v1/nodes` | `?type` — filter by node type (alphabetic pattern) |
+| `POST /api/v1/nodes` | Body: JSON. Cannot create `JOB` nodes — jobs are managed via `POST /api/v1/maintenance/ingest/jobs` |
+| `GET /api/v1/nodes/{nodeId}/skills` | `?catalog_id={uuid}` — filter by catalog |
+
+---
+
+## Skills (Catalogs)
+
+Skill catalog management — definitions, categories, and CSV import.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/skills` | List catalogs |
+| POST | `/api/v1/skills` | Create a catalog |
+| GET | `/api/v1/skills/{catalogId}` | Get a catalog |
+| PUT | `/api/v1/skills/{catalogId}` | Update a catalog |
+| DELETE | `/api/v1/skills/{catalogId}` | Delete a catalog |
+| POST | `/api/v1/skills/{catalogId}/import` | Import skill definitions (CSV) |
+| GET | `/api/v1/skills/{catalogId}/definitions` | List skill definitions |
 | GET | `/api/v1/skills/{catalogId}/categories` | List categories |
-| | | **Maintenance** (`X-Maintenance-Key`) |
-| POST | `/api/v1/maintenance/ingest/jobs` | ATS job batch upsert |
+
+**Access:** `@Authenticated`. Mutating operations require `is_admin` entitlement.
+
+| Endpoint | Parameters |
+|----------|-----------|
+| `POST /api/v1/skills` | Body: JSON. Returns 201 |
+| `PUT /api/v1/skills/{catalogId}` | Body: JSON |
+| `DELETE /api/v1/skills/{catalogId}` | Returns 204 |
+| `POST /api/v1/skills/{catalogId}/import` | Body: raw CSV (`application/octet-stream`) |
+| `GET /api/v1/skills/{catalogId}/definitions` | `?category`, `?page` (default 0), `?size` (default 50, max 200) |
+
+---
+
+## System
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/system/statistics` | Overview counters and runtime timing stats |
+
+**Access:** `@Authenticated` + `is_admin` entitlement.
+
+Response includes timing summaries for:
+
+| Block | Content |
+|-------|---------|
+| `timings.llmInference` | LLM call latency |
+| `timings.embeddingInferenceSingle` | Single-item embedding latency |
+| `timings.embeddingInferenceBatch` | Batch embedding latency |
+| `timings.hnswSearch` | HNSW vector search latency |
+
+Each block provides `sampleCount`, `avgMs`, `p95Ms`, and `maxMs`.
+
+---
+
+## Maintenance
+
+Protected operations for platform operators. All endpoints require the `X-Maintenance-Key` header and may enforce IP/CIDR restrictions (see [configuration.md](configuration.md)).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/v1/maintenance/ingest/jobs` | ATS job batch upsert (idempotent on `external_id`) |
 | POST | `/api/v1/maintenance/purge-consent-tokens` | Remove expired consent tokens |
-| POST | `/api/v1/maintenance/enforce-retention` | Hard-delete inactive users past retention |
+| POST | `/api/v1/maintenance/enforce-retention` | Hard-delete inactive users past retention window |
 | POST | `/api/v1/maintenance/run-clustering` | Auto-discover communities (k-means) |
-| POST | `/api/v1/maintenance/regenerate-embeddings` | Start asynchronous node embedding regeneration job (`onlyMissing=true` and `batchSize=1` by default; supports `?nodeType=...`, `?onlyMissing=false`, `?batchSize=1..1000`) |
+| POST | `/api/v1/maintenance/regenerate-embeddings` | Start async node embedding regeneration job |
 | GET | `/api/v1/maintenance/regenerate-embeddings/{jobId}` | Poll embedding regeneration job status |
 | POST | `/api/v1/maintenance/ldap-import/preview` | LDAP import preview |
 | POST | `/api/v1/maintenance/ldap-import` | Execute LDAP import |
-| | | **MCP** |
-| POST | `/mcp` | Streamable HTTP (also `/mcp/sse` for legacy SSE) |
-| | | **Ops** |
-| GET | `/q/health` | Liveness/readiness probes |
-| GET | `/q/metrics` | Micrometer export endpoint (format depends on enabled registry, e.g. Prometheus) |
+
+| Endpoint | Parameters |
+|----------|-----------|
+| `POST .../ingest/jobs` | Body: `AtsIngestRequestDto` (JSON, validated) |
+| `POST .../regenerate-embeddings` | `?nodeType`, `?onlyMissing` (default true), `?batchSize` (1..1000, default 1). Returns 202 |
+| `GET .../regenerate-embeddings/{jobId}` | `{jobId}` is a UUID |
+| `POST .../ldap-import/preview` | `?limit` (1..200, default 20) |
+
+---
+
+## MCP
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/mcp` | Streamable HTTP transport |
+| POST | `/mcp/sse` | Legacy SSE transport |
+
+**Access:** Authenticated session required. MCP is read-only by design.
+
+See [`mcp.md`](mcp.md) for available tools and integration details.
+
+---
+
+## Ops
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/q/health` | Liveness / readiness probes |
+| GET | `/q/metrics` | Micrometer metrics export (format depends on enabled registry, e.g. Prometheus) |
 | GET | `/q/dev-ui` | Quarkus dev dashboard (dev mode only) |
 
-## Notes
+---
 
-- Endpoint authorization depends on OIDC/session state and configured entitlements.
-- `GET /api/v1/system/statistics` requires entitlement `is_admin`.
-- `POST /api/v1/nodes` and `PUT /api/v1/nodes/{nodeId}` require entitlement `is_admin`.
-- `POST /api/v1/nodes` cannot create `JOB` nodes; jobs are managed via `POST /api/v1/maintenance/ingest/jobs`.
-- Maintenance endpoints require `X-Maintenance-Key` and may also enforce IP/CIDR restrictions.
-- MCP integration is read-only by design.
-- `PUT /api/v1/me` applies identity updates only for `identity.birth_date`; other identity fields are OAuth-managed.
-- Profile import apply (`POST /api/v1/me/import-apply`) expects a partial `ProfileSchema` payload.
-  - For list fields (for example skills, tools, industries, languages, and professional-interest lists), merge behavior is client-driven: the server persists the array values that are sent.
-  - `professional.roles` is treated as a single-role field: import always overrides role and, if multiple values are provided, only the first non-blank role is stored.
-  - Identity imports are restricted to `identity.birth_date`; other identity fields are ignored.
-- Contact fields are under `contacts`: `slack_handle`, `telegram_handle`, `mobile_phone`, `linkedin_url`.
-- Birth date is under `identity.birth_date`.
-- API implementation layering:
-  - REST endpoints live under `org.peoplemesh.api.resource`
-  - Orchestration flow is `api/resource -> service -> repository`
-  - MCP transport follows `mcp -> service -> repository` and remains read-only
-  - API error contracts and exception mapping live under `org.peoplemesh.api.error`
-- Input validation is enforced with Jakarta Validation on DTO and endpoint payloads (for example node creation/update, ATS ingest payloads, and skill assessments).
-- API errors are normalized through `ProblemDetail` responses; internal exception details are not returned in response bodies.
-- `GET /api/v1/system/statistics` includes timing summaries for:
-  - `timings.llmInference`
-  - `timings.hnswSearch`
-  - `timings.embeddingInferenceSingle`
-  - `timings.embeddingInferenceBatch`
-  Each block provides `sampleCount`, `avgMs`, `p95Ms`, and `maxMs`.
+## Implementation notes
+
+- REST endpoints live under `org.peoplemesh.api.resource`.
+- Orchestration follows `api/resource → service → repository`.
+- MCP transport follows `mcp → service → repository` (read-only).
+- API error contracts and exception mapping live under `org.peoplemesh.api.error`.
+- Input validation uses Jakarta Validation on DTOs and endpoint payloads.

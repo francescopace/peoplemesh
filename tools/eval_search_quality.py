@@ -24,7 +24,6 @@ import sys
 import time
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from typing import Any, Callable
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -76,6 +75,7 @@ class QueryMetrics:
     precision_at_10: float
     precision_at_20: float
     recall_at_20: float
+    recall_at_20_capped: float
     mrr: float
     ndcg_at_10: float
     relevant_total: int
@@ -95,6 +95,7 @@ class AggregateMetrics:
     precision_at_10: float
     precision_at_20: float
     recall_at_20: float
+    recall_at_20_capped: float
     mrr: float
     ndcg_at_10: float
 
@@ -119,11 +120,6 @@ def parse_args() -> argparse.Namespace:
         help=f"Ollama embedding model (default: {DEFAULT_OLLAMA_MODEL})",
     )
     parser.add_argument(
-        "--with-api",
-        action="store_true",
-        help="Run API end-to-end evaluation (POST /api/v1/matches/prompt).",
-    )
-    parser.add_argument(
         "--api-url",
         default=DEFAULT_API_URL,
         help=f"Base API URL (default: {DEFAULT_API_URL})",
@@ -132,11 +128,6 @@ def parse_args() -> argparse.Namespace:
         "--session-secret",
         default=os.getenv("PEOPLEMESH_SESSION_SECRET", DEFAULT_SESSION_SECRET),
         help="Session signing secret used for pm_session cookie.",
-    )
-    parser.add_argument(
-        "--country",
-        default="",
-        help="Optional country filter passed to API search requests.",
     )
     parser.add_argument(
         "--sample-divergence",
@@ -384,7 +375,7 @@ def has_any_term(text: str, terms: list[str]) -> bool:
 
 
 def matches_skill_any(c: Candidate, terms: list[str]) -> bool:
-    pool = lower_set(c.tags + sd_list(c, "tools_and_tech") + sd_list(c, "skills_professional"))
+    pool = lower_set(c.tags + sd_list(c, "tools_and_tech") + sd_list(c, "skills_soft"))
     for term in terms:
         lt = term.lower()
         if any(lt in p for p in pool):
@@ -393,7 +384,7 @@ def matches_skill_any(c: Candidate, terms: list[str]) -> bool:
 
 
 def matches_skill_all(c: Candidate, terms: list[str]) -> bool:
-    pool = lower_set(c.tags + sd_list(c, "tools_and_tech") + sd_list(c, "skills_professional"))
+    pool = lower_set(c.tags + sd_list(c, "tools_and_tech") + sd_list(c, "skills_soft"))
     for term in terms:
         lt = term.lower()
         if not any(lt in p for p in pool):
@@ -408,6 +399,51 @@ def matches_language(c: Candidate, terms: list[str]) -> bool:
         if any(lt in l for l in langs):
             return True
     return False
+
+
+def split_roles(description: str) -> list[str]:
+    if not description:
+        return []
+    return [part.strip().lower() for part in description.split(",") if part.strip()]
+
+
+def strict_profile_overlap_relevant(seed: Candidate, cand: Candidate) -> bool:
+    if cand.node_type != "USER" or cand.node_id == seed.node_id:
+        return False
+
+    seed_skills = lower_set(seed.tags + sd_list(seed, "tools_and_tech") + sd_list(seed, "skills_soft"))
+    cand_skills = lower_set(cand.tags + sd_list(cand, "tools_and_tech") + sd_list(cand, "skills_soft"))
+    skill_overlap = len(seed_skills.intersection(cand_skills))
+
+    seed_langs = lower_set(sd_list(seed, "languages_spoken"))
+    cand_langs = lower_set(sd_list(cand, "languages_spoken"))
+    language_ok = True if not seed_langs else bool(seed_langs.intersection(cand_langs))
+
+    seed_roles = split_roles(seed.description)
+    cand_role_text = (cand.description or "").lower()
+    role_ok = True
+    if seed_roles:
+        role_ok = any(role in cand_role_text for role in seed_roles)
+
+    # Strict benchmark: require language compatibility (when specified) and clear skill overlap.
+    if skill_overlap >= 2 and language_ok:
+        return True
+    if skill_overlap >= 1 and language_ok and role_ok:
+        return True
+    return False
+
+
+def build_relevant_ids(seed: Candidate, candidates: list[Candidate], relevance_mode: str) -> set[str]:
+    if relevance_mode == "strict":
+        return {c.node_id for c in candidates if strict_profile_overlap_relevant(seed, c)}
+
+    neighbors: list[tuple[str, float]] = []
+    for cand in candidates:
+        if cand.node_id == seed.node_id:
+            continue
+        neighbors.append((cand.node_id, cosine(seed.embedding, cand.embedding)))
+    neighbors.sort(key=lambda x: x[1], reverse=True)
+    return {node_id for node_id, _ in neighbors[:20]}
 
 
 def build_query_cases() -> list[QueryCase]:
@@ -532,6 +568,16 @@ def recall_at_k(ranked_relevance: list[int], total_relevant: int, k: int) -> flo
     return sum(top) / total_relevant
 
 
+def recall_at_k_capped(ranked_relevance: list[int], total_relevant: int, k: int) -> float:
+    if total_relevant <= 0 or k <= 0:
+        return 0.0
+    top = ranked_relevance[:k]
+    denominator = min(total_relevant, k)
+    if denominator <= 0:
+        return 0.0
+    return sum(top) / denominator
+
+
 def reciprocal_rank(ranked_relevance: list[int]) -> float:
     for idx, rel in enumerate(ranked_relevance, start=1):
         if rel:
@@ -603,6 +649,7 @@ def evaluate_direct(
                 0,
                 0,
                 0,
+                0,
                 [],
                 None,
                 None,
@@ -632,6 +679,7 @@ def evaluate_direct(
             precision_at_10=precision_at_k(ranked_relevance, 10),
             precision_at_20=precision_at_k(ranked_relevance, 20),
             recall_at_20=recall_at_k(ranked_relevance, total_relevant, 20),
+            recall_at_20_capped=recall_at_k_capped(ranked_relevance, total_relevant, 20),
             mrr=reciprocal_rank(ranked_relevance),
             ndcg_at_10=ndcg_at_k(ranked_relevance, total_relevant, 10),
             relevant_total=total_relevant,
@@ -799,25 +847,23 @@ def build_profile_schema_from_candidate(c: Candidate) -> dict[str, Any]:
         "birth_date": str(sd.get("birth_date", "")).strip() or None,
     }
 
-    payload = {
+    return {
         "profile_version": "2.0",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
         "professional": professional,
         "interests_professional": interests_professional,
         "personal": personal,
         "geography": geography,
         "identity": identity,
     }
-    return payload
 
 
 def evaluate_api_matches(
-    conn,
     candidates: list[Candidate],
     api_url: str,
     session_cookie: str,
     sample_size: int,
     rng: random.Random,
+    relevance_mode: str = "embedding",
 ) -> tuple[list[QueryCase], dict[str, QueryMetrics]]:
     endpoint = api_url.rstrip("/") + "/api/v1/matches"
     out: dict[str, QueryMetrics] = {}
@@ -836,20 +882,15 @@ def evaluate_api_matches(
             )
         )
 
-        neighbors: list[tuple[str, float]] = []
-        for cand in candidates:
-            if cand.node_id == seed.node_id:
-                continue
-            neighbors.append((cand.node_id, cosine(seed.embedding, cand.embedding)))
-        neighbors.sort(key=lambda x: x[1], reverse=True)
-        relevant_ids = {node_id for node_id, _ in neighbors[:20]}
-
+        relevant_ids = build_relevant_ids(seed, candidates, relevance_mode)
         try:
             payload = build_profile_schema_from_candidate(seed)
             data = post_json_with_cookie(endpoint, payload, session_cookie)
         except (HTTPError, URLError) as exc:
             print(f"[warn] API call failed for {case_key}: {exc}", file=sys.stderr)
-            out[case_key] = QueryMetrics(0, 0, 0, 0, 0, 0, len(relevant_ids), 0, [], None, None, None, None, None, None)
+            out[case_key] = QueryMetrics(
+                0, 0, 0, 0, 0, 0, 0, len(relevant_ids), 0, [], None, None, None, None, None, None
+            )
             continue
 
         raw_results = data if isinstance(data, list) else []
@@ -859,6 +900,8 @@ def evaluate_api_matches(
             if not isinstance(item, dict):
                 continue
             node_id = str(item.get("id", "")).strip()
+            if node_id == seed.node_id:
+                continue
             if node_id:
                 ranked_ids.append(node_id)
             title = str(item.get("title", "")).strip()
@@ -872,6 +915,7 @@ def evaluate_api_matches(
             precision_at_10=precision_at_k(ranked_relevance, 10),
             precision_at_20=precision_at_k(ranked_relevance, 20),
             recall_at_20=recall_at_k(ranked_relevance, len(relevant_ids), 20),
+            recall_at_20_capped=recall_at_k_capped(ranked_relevance, len(relevant_ids), 20),
             mrr=reciprocal_rank(ranked_relevance),
             ndcg_at_10=ndcg_at_k(ranked_relevance, len(relevant_ids), 10),
             relevant_total=len(relevant_ids),
@@ -1009,7 +1053,7 @@ def print_query_table(title: str, cases: list[QueryCase], metrics_by_case: dict[
     print("-" * len(title))
     print(
         "query".ljust(26)
-        + "P@5   P@10  P@20  R@20  MRR   NDCG@10 rel/top20 totalRel  top3"
+        + "P@5   P@10  P@20  R@20  Rc@20 MRR   NDCG@10 rel/top20 totalRel  top3"
     )
     for case in cases:
         m = metrics_by_case[case.key]
@@ -1020,6 +1064,7 @@ def print_query_table(title: str, cases: list[QueryCase], metrics_by_case: dict[
             + f"{m.precision_at_10:0.3f} "
             + f"{m.precision_at_20:0.3f} "
             + f"{m.recall_at_20:0.3f} "
+            + f"{m.recall_at_20_capped:0.3f} "
             + f"{m.mrr:0.3f} "
             + f"{m.ndcg_at_10:0.3f} "
             + f"{str(m.relevant_found_top20).rjust(3)}/{str(20).ljust(5)} "
@@ -1041,6 +1086,7 @@ def print_aggregate(title: str, cases: list[QueryCase], metrics_by_case: dict[st
     print(f"mean P@10:   {fmt(agg.precision_at_10)}")
     print(f"mean P@20:   {fmt(agg.precision_at_20)}")
     print(f"mean Recall@20: {fmt(agg.recall_at_20)}")
+    print(f"mean Recall@20(capped): {fmt(agg.recall_at_20_capped)}")
     print(f"mean MRR:    {fmt(agg.mrr)}")
     print(f"mean NDCG@10:{fmt(agg.ndcg_at_10)}")
 
@@ -1056,6 +1102,7 @@ def compute_aggregate(
         precision_at_10=float(mean([x.precision_at_10 for x in vals]) or 0.0),
         precision_at_20=float(mean([x.precision_at_20 for x in vals]) or 0.0),
         recall_at_20=float(mean([x.recall_at_20 for x in vals]) or 0.0),
+        recall_at_20_capped=float(mean([x.recall_at_20_capped for x in vals]) or 0.0),
         mrr=float(mean([x.mrr for x in vals]) or 0.0),
         ndcg_at_10=float(mean([x.ndcg_at_10 for x in vals]) or 0.0),
     )
@@ -1069,7 +1116,25 @@ def traffic_light_status(value: float, green: float, yellow: float) -> str:
     return "RED"
 
 
-def print_quality_gate(direct_agg: AggregateMetrics, api_agg: AggregateMetrics | None) -> None:
+def combine_status(left: str, right: str) -> str:
+    order = {"RED": 0, "YELLOW": 1, "GREEN": 2}
+    left_score = order.get(left, 0)
+    right_score = order.get(right, 0)
+    worst = min(left_score, right_score)
+    for key, score in order.items():
+        if score == worst:
+            return key
+    return "RED"
+
+
+def summarize_gate(p10_status: str, ndcg_status: str, mrr_status: str) -> str:
+    # Conservative summary: keep at least YELLOW/GREEN consistency on rank quality,
+    # then cap by the worst of the three core metrics.
+    rank_pair = combine_status(p10_status, ndcg_status)
+    return combine_status(rank_pair, mrr_status)
+
+
+def print_quality_gate(direct_agg: AggregateMetrics, api_agg: AggregateMetrics | None) -> tuple[str, str | None, str]:
     print("\nQuality Gate (Traffic Light)")
     print("-----------------------")
     d_p10 = traffic_light_status(direct_agg.precision_at_10, green=0.45, yellow=0.35)
@@ -1080,7 +1145,10 @@ def print_quality_gate(direct_agg: AggregateMetrics, api_agg: AggregateMetrics |
         f"NDCG@10={fmt(direct_agg.ndcg_at_10)} [{d_ndcg}], "
         f"MRR={fmt(direct_agg.mrr)} [{d_mrr}]"
     )
+    direct_overall = summarize_gate(d_p10, d_ndcg, d_mrr)
+    print(f"direct_overall: {direct_overall}")
 
+    api_overall: str | None = None
     if api_agg is not None:
         a_p10 = traffic_light_status(api_agg.precision_at_10, green=0.70, yellow=0.55)
         a_ndcg = traffic_light_status(api_agg.ndcg_at_10, green=0.65, yellow=0.55)
@@ -1090,16 +1158,64 @@ def print_quality_gate(direct_agg: AggregateMetrics, api_agg: AggregateMetrics |
             f"NDCG@10={fmt(api_agg.ndcg_at_10)} [{a_ndcg}], "
             f"MRR={fmt(api_agg.mrr)} [{a_mrr}]"
         )
+        api_overall = summarize_gate(a_p10, a_ndcg, a_mrr)
+        print(f"api_overall: {api_overall}")
 
-    if api_agg is not None:
-        overall = "GREEN" if a_p10 == "GREEN" and a_ndcg == "GREEN" else (
-            "YELLOW" if a_p10 != "RED" and a_ndcg != "RED" else "RED"
-        )
+    overall_global = combine_status(direct_overall, api_overall) if api_overall is not None else direct_overall
+    print(f"overall_global: {overall_global}")
+    return direct_overall, api_overall, overall_global
+
+
+def print_action_hints(
+    direct_agg: AggregateMetrics,
+    api_agg: AggregateMetrics | None,
+    direct_overall: str,
+    api_overall: str | None,
+    overall_global: str,
+) -> None:
+    if overall_global == "GREEN":
+        print("\nAction Hints")
+        print("------------")
+        print("- All checks are GREEN. Keep configuration as-is and monitor trend across runs.")
+        return
+
+    hints: list[str] = []
+    if overall_global == "YELLOW":
+        hints.append("Borderline quality. Track the weakest metric and re-run with the same seed to confirm stability.")
     else:
-        overall = "GREEN" if d_p10 == "GREEN" and d_ndcg == "GREEN" else (
-            "YELLOW" if d_p10 != "RED" and d_ndcg != "RED" else "RED"
+        hints.append("Global quality is RED. Prioritize fixes on the failing block before tuning secondary metrics.")
+
+    if direct_overall != "GREEN":
+        if direct_agg.precision_at_10 < 0.35:
+            hints.append(
+                "Direct P@10 is low: validate embedding model choice and query text construction before rank-weight tuning."
+            )
+        if direct_agg.ndcg_at_10 < 0.55:
+            hints.append(
+                "Direct NDCG@10 is weak: inspect top-10 ordering and adjust must-have/nice-to-have weighting in SearchService."
+            )
+        if direct_agg.mrr < 0.60:
+            hints.append(
+                "Direct MRR is weak: check first-hit behavior (hard gates, exact-match fallback, parser extraction quality)."
+            )
+
+    if api_agg is not None and api_overall is not None and api_overall != "GREEN":
+        if api_agg.precision_at_10 < 0.55:
+            hints.append("API P@10 is weak: verify /matches payload construction and seeded profile completeness.")
+        if api_agg.ndcg_at_10 < 0.55:
+            hints.append("API NDCG@10 is weak: inspect reranking behavior and reason-code distribution in top results.")
+        if api_agg.mrr < 0.40:
+            hints.append("API MRR is weak: ensure relevant items appear in the first ranks (check self-match filtering).")
+
+    if api_agg is not None and api_agg.recall_at_20 < 0.10 and api_agg.recall_at_20_capped >= 0.70:
+        hints.append(
+            "API strict relevance: low Recall@20 with high Recall@20(capped) indicates a very large relevant pool; prefer capped recall and ranking metrics."
         )
-    print(f"overall: {overall}")
+
+    print("\nAction Hints")
+    print("------------")
+    for hint in hints:
+        print(f"- {hint}")
 
 
 def print_similarity_separation(cases: list[QueryCase], metrics_by_case: dict[str, QueryMetrics]) -> None:
@@ -1148,8 +1264,7 @@ def main() -> int:
     print(f"[info] ollama_model={args.ollama_model}")
     print(f"[info] query_prefix={args.query_prefix!r}")
     print(f"[info] query_suite={args.query_suite}")
-    if args.with_api:
-        print(f"[info] api_url={args.api_url}")
+    print(f"[info] api_url={args.api_url}")
 
     try:
         conn = connect_db(db_url)
@@ -1188,45 +1303,72 @@ def main() -> int:
         )
         print_divergence_report(divergence)
 
-        api_agg: AggregateMetrics | None = None
-        if args.with_api:
-            user_samples = [c for c in candidates if c.node_type == "USER"]
-            if not user_samples:
-                print("[warn] No USER candidates found, skipping /matches API evaluation.")
-            else:
-                admin_user_id = str(uuid.uuid4())
-                admin_identity_id = str(uuid.uuid4())
-                provider = "eval-admin"
-                cleanup_needed = False
-                try:
-                    ensure_api_user_and_consent(
-                        conn,
-                        admin_user_id,
-                        admin_identity_id,
-                        provider,
-                        is_admin=True,
-                        ensure_node=True,
-                    )
-                    cleanup_needed = True
-                    admin_token = encode_pm_session(admin_user_id, provider, args.session_secret)
-                    admin_cookie = f"pm_session={admin_token}"
-                    api_cases, api_metrics = evaluate_api_matches(
-                        conn,
-                        candidates,
-                        args.api_url,
-                        admin_cookie,
-                        args.api_sample_size,
-                        rng,
-                    )
-                    print_query_table("API /matches schema-input results", api_cases, api_metrics)
-                    print_aggregate("API /matches aggregate", api_cases, api_metrics)
-                    api_agg = compute_aggregate(api_cases, api_metrics)
-                finally:
-                    if cleanup_needed:
-                        cleanup_api_user(conn, admin_user_id, admin_identity_id, delete_node=True)
+        api_agg_for_gate: AggregateMetrics | None = None
+        user_samples = [c for c in candidates if c.node_type == "USER"]
+        if not user_samples:
+            print("[warn] No USER candidates found, skipping /matches API evaluation.")
+        else:
+            admin_user_id = str(uuid.uuid4())
+            admin_identity_id = str(uuid.uuid4())
+            provider = "eval-admin"
+            cleanup_needed = False
+            try:
+                ensure_api_user_and_consent(
+                    conn,
+                    admin_user_id,
+                    admin_identity_id,
+                    provider,
+                    is_admin=True,
+                    ensure_node=True,
+                )
+                cleanup_needed = True
+                admin_token = encode_pm_session(admin_user_id, provider, args.session_secret)
+                admin_cookie = f"pm_session={admin_token}"
+                api_cases_embedding, api_metrics_embedding = evaluate_api_matches(
+                    candidates,
+                    args.api_url,
+                    admin_cookie,
+                    args.api_sample_size,
+                    rng,
+                    relevance_mode="embedding",
+                )
+                print_query_table(
+                    "API /matches schema-input results (embedding-neighbors relevance)",
+                    api_cases_embedding,
+                    api_metrics_embedding,
+                )
+                print_aggregate(
+                    "API /matches aggregate (embedding-neighbors relevance)",
+                    api_cases_embedding,
+                    api_metrics_embedding,
+                )
+
+                api_cases_strict, api_metrics_strict = evaluate_api_matches(
+                    candidates,
+                    args.api_url,
+                    admin_cookie,
+                    args.api_sample_size,
+                    rng,
+                    relevance_mode="strict",
+                )
+                print_query_table(
+                    "API /matches schema-input results (strict profile-overlap relevance)",
+                    api_cases_strict,
+                    api_metrics_strict,
+                )
+                print_aggregate(
+                    "API /matches aggregate (strict profile-overlap relevance)",
+                    api_cases_strict,
+                    api_metrics_strict,
+                )
+                api_agg_for_gate = compute_aggregate(api_cases_strict, api_metrics_strict)
+            finally:
+                if cleanup_needed:
+                    cleanup_api_user(conn, admin_user_id, admin_identity_id, delete_node=True)
 
         if direct_agg is not None:
-            print_quality_gate(direct_agg, api_agg)
+            direct_overall, api_overall, overall_global = print_quality_gate(direct_agg, api_agg_for_gate)
+            print_action_hints(direct_agg, api_agg_for_gate, direct_overall, api_overall, overall_global)
 
         print("\n[done] Evaluation completed.")
         print("[next] If divergence cosine is low, regenerate embeddings in Java text format.")

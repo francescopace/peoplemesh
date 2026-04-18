@@ -60,13 +60,6 @@ router.on("/privacy", withShell(renderPrivacy), { auth: true, keepShell: true })
 router.on("/privacy_policy", renderPrivacyPolicy);
 router.on("/terms_of_service", renderTermsOfService);
 
-/* Redirects for old bookmarked URLs */
-router.on("/explore", () => router.navigate("/my-mesh"), { auth: true });
-router.on("/matches", () => router.navigate("/my-mesh"), { auth: true });
-router.on("/feed", () => router.navigate("/my-mesh"), { auth: true });
-router.on("/connections", () => router.navigate("/my-mesh"), { auth: true });
-router.on("/jobs", () => router.navigate("/my-mesh"), { auth: true });
-
 router.notFound((container) => {
   container.innerHTML = `
     <div class="empty-state" style="min-height:100dvh">
