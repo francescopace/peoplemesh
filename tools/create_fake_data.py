@@ -29,7 +29,7 @@ RANDOMUSER_URL = "https://randomuser.me/api/"
 UUID_NS = uuid.UUID("0b651c55-f445-4dcf-86e1-806cf2f59b1b")
 TARGET_MESH_VECTOR_DIM = 1024
 
-SO_SURVEY_CSV = Path(__file__).parent / "stack-overflow/survey_results_public.csv"
+SO_SURVEY_CSV = Path(__file__).parent / "stack-overflow-survey/survey_results_public.csv"
 
 SO_TECH_COLUMNS = [
     "LanguageHaveWorkedWith",

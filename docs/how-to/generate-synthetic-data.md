@@ -22,14 +22,14 @@ All generated data is scoped to a single company name and filtered by industry p
 
 - Python 3.11+
 - [Ollama](https://ollama.com) running locally (for embeddings)
-- The SO survey CSV in `tools/stack-overflow/`
+- The SO survey CSV in `tools/stack-overflow-survey/`
 
 ### Download the survey data
 
 The CSV is not committed to git (140 MB). Download it once:
 
 ```bash
-cd tools/stack-overflow
+cd tools/stack-overflow-survey
 curl -L -o survey.zip "https://survey.stackoverflow.co/2025/download"
 unzip survey.zip
 rm survey.zip
@@ -37,7 +37,7 @@ rm survey.zip
 
 If the direct link does not work, download manually from
 <https://survey.stackoverflow.co/2025/> (Methodology section, "Download" button)
-and place `survey_results_public.csv` inside `tools/stack-overflow/`.
+and place `survey_results_public.csv` inside `tools/stack-overflow-survey/`.
 
 ### Pull the embedding model
 

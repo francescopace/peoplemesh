@@ -1,4 +1,4 @@
-.PHONY: help start test-backend test-frontend image container clean
+.PHONY: help start test-backend test-integration test-frontend image container clean
 
 MVN ?= mvn
 MVN_FLAGS ?= --batch-mode --no-transfer-progress -q
@@ -8,8 +8,9 @@ DOCKERFILE_JVM ?= src/main/docker/Dockerfile.jvm
 help:
 	@echo "Available targets:"
 	@echo "  start         Run app in dev mode (quarkus:dev)"
-	@echo "  test-backend  Run backend tests"
-	@echo "  test-frontend Run frontend tests"
+	@echo "  test-backend      Run backend unit tests (Surefire)"
+	@echo "  test-integration  Run backend integration tests (Failsafe)"
+	@echo "  test-frontend     Run frontend tests"
 	@echo "  image         Build local JVM container image"
 	@echo "  container     Alias for image"
 	@echo "  clean         Remove build artifacts"
@@ -19,8 +20,14 @@ start:
 	@$(MVN) quarkus:dev
 
 test-backend:
-	@echo "Running backend tests..."
+	@echo "Running backend unit tests..."
 	@$(MVN) $(MVN_FLAGS) test
+
+test-integration:
+	@echo "Running backend integration tests..."
+	@$(MVN) $(MVN_FLAGS) verify -DskipUnitTests=true; rc=$$?; \
+	docker ps -q --filter label=org.testcontainers=true | xargs -r docker rm -f > /dev/null 2>&1; \
+	exit $$rc
 
 test-frontend:
 	@echo "Running frontend tests..."
