@@ -170,6 +170,51 @@ describe("search view skill highlighting", () => {
     expect(highlightedTag.getAttribute("style")).toContain("box-shadow");
   });
 
+  it("keeps All tab active when parsedQuery result_scope is all", async () => {
+    apiMock.post.mockResolvedValue({
+      parsedQuery: {
+        must_have: { roles: ["architect"], skills: ["Java", "Kubernetes"], languages: [], location: [], industries: [] },
+        nice_to_have: { skills: [], industries: [], experience: [] },
+        seniority: "unknown",
+        negative_filters: { seniority: null, skills: [], location: [] },
+        keywords: ["all results"],
+        embedding_text: "all results with Java and Kubernetes",
+        result_scope: "all",
+      },
+      results: [
+        {
+          id: "p-1",
+          resultType: "profile",
+          displayName: "Alice",
+          score: 0.8,
+          skillsTechnical: ["Java", "Kubernetes"],
+          toolsAndTech: [],
+          breakdown: { matchedMustHaveSkills: ["Java"], matchedNiceToHaveSkills: [] },
+          skill_levels: {},
+        },
+      ],
+    });
+
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    await renderSearch(container);
+
+    const input = container.querySelector(".search-input");
+    const form = container.querySelector("form.search-input-wrap");
+    input.value = "tutti i risultati con Java e Kubernetes";
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await flushPromises();
+
+    const allTab = [...container.querySelectorAll(".explore-type-tab")]
+      .find((btn) => btn.dataset.type === "");
+    const peopleTab = [...container.querySelectorAll(".explore-type-tab")]
+      .find((btn) => btn.dataset.type === "profile");
+    expect(allTab).toBeTruthy();
+    expect(peopleTab).toBeTruthy();
+    expect(allTab.classList.contains("active")).toBe(true);
+    expect(peopleTab.classList.contains("active")).toBe(false);
+  });
+
   it("load more fetches next prompt page from backend", async () => {
     const makeProfile = (id) => ({
       id,

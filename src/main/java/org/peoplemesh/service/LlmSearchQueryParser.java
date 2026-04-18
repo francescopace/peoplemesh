@@ -26,6 +26,9 @@ public class LlmSearchQueryParser implements SearchQueryParser {
 
     private static final Logger LOG = Logger.getLogger(LlmSearchQueryParser.class);
     private static final Set<String> ALLOWED_SENIORITY = Set.of("junior", "mid", "senior", "lead", "unknown");
+    private static final Set<String> ALLOWED_RESULT_SCOPE = Set.of(
+            "all", "people", "jobs", "communities", "events", "projects", "groups", "unknown"
+    );
     private static final Pattern EXPLICIT_SENIORITY_SIGNAL = Pattern.compile(
             "\\b(junior|jr\\.?|entry[\\s-]?level|graduate|intern|mid|middle|intermediate|senior|sr\\.?|lead|principal|staff|head|director|executive|vp|chief|c-level)\\b",
             Pattern.CASE_INSENSITIVE
@@ -56,7 +59,8 @@ public class LlmSearchQueryParser implements SearchQueryParser {
                 "location": []
               },
               "keywords": [],
-              "embedding_text": ""
+              "embedding_text": "",
+              "result_scope": "all|people|jobs|communities|events|projects|groups|unknown"
             }
             Rules:
             - Return ALL keys from the schema every time; use [] or null when unknown.
@@ -74,19 +78,28 @@ public class LlmSearchQueryParser implements SearchQueryParser {
             - negative_filters only for explicit exclusions (e.g., "not junior", "exclude Germany").
             - keywords must be short deduplicated intent terms useful for non-profile nodes (events, community, jobs).
             - embedding_text must be an English phrase of max 10 words describing user intent.
+            - result_scope must be one of: all, people, jobs, communities, events, projects, groups, unknown.
+            - If query implies "all/tutti/everything/any type", set result_scope = "all".
+            - If query asks for communities, set result_scope = "communities".
+            - If query asks for events/meetups/conferences, set result_scope = "events".
+            - If query asks for jobs/open roles/opportunities, set result_scope = "jobs".
+            - If query asks for projects, set result_scope = "projects".
+            - If query asks for groups, set result_scope = "groups".
+            - If query is a skill+role search with no all-signal, set result_scope = "people".
+            - If intent is unclear, set result_scope = "unknown".
 
             Examples:
             Query: "Java developer with Kubernetes experience"
-            JSON: {"must_have":{"skills":["Java","Kubernetes"],"skills_with_level":[],"roles":["developer"],"languages":[],"location":[],"industries":[]},"nice_to_have":{"skills":[],"skills_with_level":[],"industries":[],"experience":[]},"seniority":"unknown","negative_filters":{"seniority":null,"skills":[],"location":[]},"keywords":["developer"],"embedding_text":"Java developer with Kubernetes"}
+            JSON: {"must_have":{"skills":["Java","Kubernetes"],"skills_with_level":[],"roles":["developer"],"languages":[],"location":[],"industries":[]},"nice_to_have":{"skills":[],"skills_with_level":[],"industries":[],"experience":[]},"seniority":"unknown","negative_filters":{"seniority":null,"skills":[],"location":[]},"keywords":["developer"],"embedding_text":"Java developer with Kubernetes","result_scope":"people"}
 
             Query: "Community for data engineers in Europe"
-            JSON: {"must_have":{"skills":["data engineering"],"skills_with_level":[],"roles":["data engineer"],"languages":[],"location":["Europe"],"industries":[]},"nice_to_have":{"skills":[],"skills_with_level":[],"industries":[],"experience":[]},"seniority":"unknown","negative_filters":{"seniority":null,"skills":[],"location":[]},"keywords":["community"],"embedding_text":"Data engineering community in Europe"}
+            JSON: {"must_have":{"skills":["data engineering"],"skills_with_level":[],"roles":["data engineer"],"languages":[],"location":["Europe"],"industries":[]},"nice_to_have":{"skills":[],"skills_with_level":[],"industries":[],"experience":[]},"seniority":"unknown","negative_filters":{"seniority":null,"skills":[],"location":[]},"keywords":["community"],"embedding_text":"Data engineering community in Europe","result_scope":"communities"}
 
             Query: "Events about AI and machine learning"
-            JSON: {"must_have":{"skills":["AI","machine learning"],"skills_with_level":[],"roles":[],"languages":[],"location":[],"industries":[]},"nice_to_have":{"skills":[],"skills_with_level":[],"industries":[],"experience":[]},"seniority":"unknown","negative_filters":{"seniority":null,"skills":[],"location":[]},"keywords":["events"],"embedding_text":"Events about AI and machine learning"}
+            JSON: {"must_have":{"skills":["AI","machine learning"],"skills_with_level":[],"roles":[],"languages":[],"location":[],"industries":[]},"nice_to_have":{"skills":[],"skills_with_level":[],"industries":[],"experience":[]},"seniority":"unknown","negative_filters":{"seniority":null,"skills":[],"location":[]},"keywords":["events"],"embedding_text":"Events about AI and machine learning","result_scope":"events"}
 
             Query: "Open roles in cloud architecture"
-            JSON: {"must_have":{"skills":["cloud architecture"],"skills_with_level":[],"roles":["architect"],"languages":[],"location":[],"industries":[]},"nice_to_have":{"skills":[],"skills_with_level":[],"industries":[],"experience":[]},"seniority":"unknown","negative_filters":{"seniority":null,"skills":[],"location":[]},"keywords":["roles"],"embedding_text":"Open roles in cloud architecture"}""";
+            JSON: {"must_have":{"skills":["cloud architecture"],"skills_with_level":[],"roles":["architect"],"languages":[],"location":[],"industries":[]},"nice_to_have":{"skills":[],"skills_with_level":[],"industries":[],"experience":[]},"seniority":"unknown","negative_filters":{"seniority":null,"skills":[],"location":[]},"keywords":["roles"],"embedding_text":"Open roles in cloud architecture","result_scope":"jobs"}""";
 
     @Inject
     ChatModel chatModel;
@@ -153,7 +166,8 @@ public class LlmSearchQueryParser implements SearchQueryParser {
                 ? userQuery
                 : parsed.embeddingText().trim();
         String seniority = normalizeSeniority(parsed.seniority(), userQuery);
-        return new ParsedSearchQuery(mustHave, niceToHave, seniority, negativeFilters, keywords, embeddingText);
+        String resultScope = normalizeResultScope(parsed.resultScope());
+        return new ParsedSearchQuery(mustHave, niceToHave, seniority, negativeFilters, keywords, embeddingText, resultScope);
     }
 
     private ParsedSearchQuery.MustHaveFilters normalizeMustHave(ParsedSearchQuery.MustHaveFilters source) {
@@ -277,5 +291,16 @@ public class LlmSearchQueryParser implements SearchQueryParser {
             return "lead";
         }
         return "unknown";
+    }
+
+    private String normalizeResultScope(String rawResultScope) {
+        if (rawResultScope == null || rawResultScope.isBlank()) {
+            return "unknown";
+        }
+        String normalized = rawResultScope.trim().toLowerCase(Locale.ROOT);
+        if (!ALLOWED_RESULT_SCOPE.contains(normalized)) {
+            return "unknown";
+        }
+        return normalized;
     }
 }

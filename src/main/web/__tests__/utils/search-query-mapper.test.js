@@ -7,11 +7,36 @@ import {
 } from "../../assets/js/utils/search-query-mapper.js";
 
 describe("search-query-mapper", () => {
+  it('maps result_scope "all" to All tab', () => {
+    const parsed = { result_scope: "all" };
+    expect(inferAutoTypeFromParsedQuery(parsed)).toBe("");
+  });
+
+  it('maps result_scope "communities" to community tab', () => {
+    const parsed = { result_scope: "communities" };
+    expect(inferAutoTypeFromParsedQuery(parsed)).toBe("COMMUNITY");
+  });
+
+  it('maps result_scope "jobs" to jobs tab', () => {
+    const parsed = { result_scope: "jobs" };
+    expect(inferAutoTypeFromParsedQuery(parsed)).toBe("JOB");
+  });
+
   it("infers community tab from parsed keywords", () => {
     const parsed = {
       must_have: { roles: [], skills: [] },
       keywords: ["community", "devrel"],
       embedding_text: "community in italy",
+    };
+    expect(inferAutoTypeFromParsedQuery(parsed)).toBe("COMMUNITY");
+  });
+
+  it("falls back to legacy heuristics when result_scope is unknown", () => {
+    const parsed = {
+      result_scope: "unknown",
+      must_have: { roles: [], skills: [] },
+      keywords: ["community"],
+      embedding_text: "community data engineering in europe",
     };
     expect(inferAutoTypeFromParsedQuery(parsed)).toBe("COMMUNITY");
   });

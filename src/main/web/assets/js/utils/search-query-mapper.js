@@ -61,6 +61,21 @@ const LOCATION_WORDS_TO_IGNORE = new Set([
 
 export function inferAutoTypeFromParsedQuery(parsedQuery) {
   if (!parsedQuery) return "";
+  const scope = String(parsedQuery.result_scope || "").trim().toLowerCase();
+  if (scope && scope !== "unknown") {
+    const scopeToTab = {
+      all: "",
+      people: "profile",
+      jobs: "JOB",
+      communities: "COMMUNITY",
+      events: "EVENT",
+      projects: "PROJECT",
+      groups: "INTEREST_GROUP",
+    };
+    if (scope in scopeToTab) {
+      return scopeToTab[scope];
+    }
+  }
   const mustHaveRoles = parsedQuery.must_have?.roles || [];
   const keywords = (parsedQuery.keywords || []).map((k) => String(k || "").toLowerCase());
   const text = `${parsedQuery.embedding_text || ""} ${(parsedQuery.keywords || []).join(" ")}`.toLowerCase();

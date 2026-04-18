@@ -75,7 +75,7 @@ public class SearchService {
         SearchQueryParser effectiveParser = parser != null ? parser : FALLBACK_QUERY_PARSER;
         ParsedSearchQuery parsedQuery = effectiveParser.parse(queryText)
                 .or(() -> FALLBACK_QUERY_PARSER.parse(queryText))
-                .orElse(new ParsedSearchQuery(null, null, "unknown", null, Collections.emptyList(), queryText));
+                .orElse(new ParsedSearchQuery(null, null, "unknown", null, Collections.emptyList(), queryText, "unknown"));
 
         String embeddingText = parsedQuery.embeddingText();
         if (embeddingText == null || embeddingText.isBlank()) {

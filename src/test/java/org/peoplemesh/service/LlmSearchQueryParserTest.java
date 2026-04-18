@@ -49,7 +49,8 @@ class LlmSearchQueryParserTest {
                   "nice_to_have": {"skills": [], "industries": []},
                   "seniority": "senior",
                   "keywords": ["backend"],
-                  "embedding_text": "Senior Java developer"
+                  "embedding_text": "Senior Java developer",
+                  "result_scope": "people"
                 }
                 """;
         mockChatResponse(json);
@@ -58,6 +59,27 @@ class LlmSearchQueryParserTest {
 
         assertTrue(result.isPresent());
         assertEquals("senior", result.get().seniority());
+        assertEquals("people", result.get().resultScope());
+    }
+
+    @Test
+    void parse_resultScopeAll_returnsParsed() {
+        String json = """
+                {
+                  "must_have": {"skills": ["Java"], "languages": [], "industries": []},
+                  "nice_to_have": {"skills": [], "industries": []},
+                  "seniority": "unknown",
+                  "keywords": ["java"],
+                  "embedding_text": "Java and Kubernetes",
+                  "result_scope": "all"
+                }
+                """;
+        mockChatResponse(json);
+
+        Optional<ParsedSearchQuery> result = parser.parse("tutti i risultati con Java e Kubernetes");
+
+        assertTrue(result.isPresent());
+        assertEquals("all", result.get().resultScope());
     }
 
     @Test
@@ -85,7 +107,8 @@ class LlmSearchQueryParserTest {
                     "location": ["Germany"]
                   },
                   "keywords": ["community", "events"],
-                  "embedding_text": "Java Kubernetes developer in Europe"
+                  "embedding_text": "Java Kubernetes developer in Europe",
+                  "result_scope": "communities"
                 }
                 """;
         mockChatResponse(json);
@@ -102,6 +125,7 @@ class LlmSearchQueryParserTest {
         assertEquals(2, result.get().niceToHave().skillsWithLevel().get(0).minLevel());
         assertEquals("community", result.get().niceToHave().experience().get(0));
         assertEquals("junior", result.get().negativeFilters().seniority());
+        assertEquals("communities", result.get().resultScope());
     }
 
     @Test
@@ -115,11 +139,13 @@ class LlmSearchQueryParserTest {
         assertTrue(prompt.contains("\"negative_filters\""));
         assertTrue(prompt.contains("\"experience\""));
         assertTrue(prompt.contains("\"min_level\""));
+        assertTrue(prompt.contains("\"result_scope\""));
         assertTrue(prompt.contains("languages = spoken human languages only"));
         assertTrue(prompt.contains("location = geographic places"));
         assertTrue(prompt.contains("industries = business sectors only"));
         assertTrue(prompt.contains("Open roles in cloud architecture"));
         assertTrue(prompt.contains("keep seniority as \"unknown\""));
+        assertTrue(prompt.contains("all/tutti/everything/any type"));
     }
 
     @Test
@@ -134,7 +160,8 @@ class LlmSearchQueryParserTest {
                   "seniority": "mid",
                   "negative_filters": {},
                   "keywords": ["cloud architecture", "architecture"],
-                  "embedding_text": "Open roles in cloud architecture"
+                  "embedding_text": "Open roles in cloud architecture",
+                  "result_scope": "jobs"
                 }
                 """;
         mockChatResponse(json);
@@ -156,6 +183,7 @@ class LlmSearchQueryParserTest {
         assertTrue(result.get().negativeFilters().skills().isEmpty());
         assertNotNull(result.get().negativeFilters().location());
         assertTrue(result.get().negativeFilters().location().isEmpty());
+        assertEquals("jobs", result.get().resultScope());
     }
 
     @Test
@@ -167,7 +195,8 @@ class LlmSearchQueryParserTest {
                   "nice_to_have": {"skills": [], "industries": []},
                   "seniority": "mid",
                   "keywords": [],
-                  "embedding_text": "Mid Python developer"
+                  "embedding_text": "Mid Python developer",
+                  "result_scope": "people"
                 }
                 ```
                 """;

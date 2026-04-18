@@ -158,6 +158,7 @@ Response `breakdown` fields per result:
 Query parsing:
 - Preferred: LLM parser (`must_have`, `nice_to_have`, `keywords`, `embedding_text`)
 - Fallback: token parser with role/language/context separation
+- `result_scope` indicates inferred result intent (`all`, `people`, `jobs`, `communities`, `events`, `projects`, `groups`, `unknown`) and drives initial Search tab auto-selection; defaults to `unknown` when absent.
 
 Country filter behavior:
 - Prompt search derives country hard-filtering from parsed `must_have.location` when a country is clearly mappable to an ISO code.

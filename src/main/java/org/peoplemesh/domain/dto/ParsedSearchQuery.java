@@ -10,7 +10,8 @@ public record ParsedSearchQuery(
         String seniority,
         @JsonProperty("negative_filters") NegativeFilters negativeFilters,
         List<String> keywords,
-        @JsonProperty("embedding_text") String embeddingText
+        @JsonProperty("embedding_text") String embeddingText,
+        @JsonProperty("result_scope") String resultScope
 ) {
     public record MustHaveFilters(
             List<String> skills,
