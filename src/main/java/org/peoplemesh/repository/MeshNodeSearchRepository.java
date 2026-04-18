@@ -1,6 +1,5 @@
 package org.peoplemesh.repository;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.annotation.Timed;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -36,9 +35,6 @@ public class MeshNodeSearchRepository {
 
     @Inject
     EntityManager em;
-
-    @Inject
-    ObjectMapper objectMapper;
 
     @SuppressWarnings("unchecked")
     @Timed(
@@ -121,17 +117,15 @@ public class MeshNodeSearchRepository {
         }
 
         if (languages != null && !languages.isEmpty()) {
-            sql.append("AND (n.node_type != 'USER' OR n.tags && cast(:langs as text[]) OR ");
-            sql.append("n.structured_data->'languages_spoken' @> cast(:langsJson as jsonb)) ");
+            sql.append("AND (n.node_type != 'USER' OR EXISTS (");
+            sql.append("SELECT 1 FROM jsonb_array_elements_text(COALESCE(n.structured_data->'languages_spoken', '[]'::jsonb)) AS lang(value) ");
+            sql.append("WHERE lower(lang.value) = ANY(cast(:langs as text[]))");
+            sql.append(")) ");
             String escapedLangs = languages.stream()
+                    .map(l -> l.toLowerCase(Locale.ROOT))
                     .map(l -> "\"" + l.replace("\\", "\\\\").replace("\"", "\\\"") + "\"")
                     .collect(Collectors.joining(",", "{", "}"));
             params.put("langs", escapedLangs);
-            try {
-                params.put("langsJson", objectMapper.writeValueAsString(languages));
-            } catch (Exception e) {
-                params.put("langsJson", "[]");
-            }
         }
 
         sql.append("ORDER BY n.embedding <=> cast(:vec as vector) ");

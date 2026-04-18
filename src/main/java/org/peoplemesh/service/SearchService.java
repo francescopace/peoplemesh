@@ -17,6 +17,7 @@ import org.peoplemesh.domain.enums.NodeType;
 import org.peoplemesh.domain.enums.Seniority;
 import org.peoplemesh.domain.enums.WorkMode;
 import java.time.Instant;
+import java.util.regex.Pattern;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -31,8 +32,9 @@ public class SearchService {
     private static final double W_LANGUAGE = 0.10;
     private static final double W_INDUSTRY = 0.05;
 
-    private static final int VECTOR_POOL_SIZE = 50;
+    private static final int VECTOR_POOL_SIZE = 100;
     private static final int RESULT_LIMIT = 20;
+    private static final Pattern TOKEN_TRIM_PATTERN = Pattern.compile("^[^\\p{Alnum}]+|[^\\p{Alnum}]+$");
 
     @Inject @All
     List<SearchQueryParser> queryParsers;
@@ -72,7 +74,8 @@ public class SearchService {
         if (embeddingText == null || embeddingText.isBlank()) {
             embeddingText = queryText;
         }
-        float[] queryEmbedding = embeddingService.generateEmbedding(embeddingText);
+        String queryTextForEmbedding = buildEmbeddingQueryText(embeddingText);
+        float[] queryEmbedding = embeddingService.generateEmbedding(queryTextForEmbedding);
         if (queryEmbedding == null) {
             return new SearchResponse(parsedQuery, Collections.emptyList());
         }
@@ -147,6 +150,8 @@ public class SearchService {
         List<String> niceToHaveIndustries = parsed.niceToHave() != null && parsed.niceToHave().industries() != null
                 ? parsed.niceToHave().industries() : Collections.emptyList();
         List<String> keywords = parsed.keywords() != null ? parsed.keywords() : Collections.emptyList();
+        List<String> negativeSkills = parsed.negativeFilters() != null && parsed.negativeFilters().skills() != null
+                ? parsed.negativeFilters().skills() : Collections.emptyList();
 
         List<SkillWithLevel> mustHaveWithLevel = parsed.mustHave() != null
                 ? parsed.mustHave().skillsWithLevel() : null;
@@ -159,9 +164,9 @@ public class SearchService {
             if (c.nodeType == NodeType.USER) {
                 scored.add(scoreUserNode(c, mustHaveSkills, niceToHaveSkills,
                         mustHaveLanguages, mustHaveIndustries, niceToHaveIndustries,
-                        mustHaveWithLevel, niceToHaveWithLevel, levelCacheByNode.get(c.nodeId)));
+                        mustHaveWithLevel, niceToHaveWithLevel, levelCacheByNode.get(c.nodeId), negativeSkills));
             } else {
-                scored.add(scoreGenericNode(c, keywords, mustHaveSkills));
+                scored.add(scoreGenericNode(c, keywords, mustHaveSkills, negativeSkills));
             }
         }
 
@@ -175,7 +180,8 @@ public class SearchService {
                                            List<String> mustHaveIndustries, List<String> niceToHaveIndustries,
                                            List<SkillWithLevel> mustHaveWithLevel,
                                            List<SkillWithLevel> niceToHaveWithLevel,
-                                           Map<String, Short> cachedLevelsBySkillName) {
+                                           Map<String, Short> cachedLevelsBySkillName,
+                                           List<String> negativeSkills) {
         List<String> candidateSkills = c.tags != null ? new ArrayList<>(c.tags) : new ArrayList<>();
         List<String> toolsAndTech = sdListOrEmpty(c.structuredData, "tools_and_tech");
         candidateSkills.addAll(toolsAndTech);
@@ -227,6 +233,16 @@ public class SearchService {
             double missingRatio = (double) missingMust.size() / mustHaveSkills.size();
             rawScore *= Math.max(0.0, 1.0 - missingRatio * 0.8);
         }
+        if (!mustHaveSkills.isEmpty() && mustHaveCoverage == 0.0) {
+            // Hard precision gate: if no must-have matches, suppress semantic-only false positives.
+            rawScore = 0.0;
+        }
+
+        List<String> matchedNegative = MatchingUtils.intersectCaseInsensitive(negativeSkills, candidateSkills);
+        if (!matchedNegative.isEmpty() && !negativeSkills.isEmpty()) {
+            double matchedNegativeRatio = (double) matchedNegative.size() / negativeSkills.size();
+            rawScore *= Math.max(0.0, 1.0 - matchedNegativeRatio * 0.8);
+        }
 
         List<String> reasonCodes = new ArrayList<>();
         if (c.cosineSim >= 0.65) reasonCodes.add("SEMANTIC_SIMILARITY");
@@ -252,7 +268,8 @@ public class SearchService {
     }
 
     private ScoredCandidate scoreGenericNode(RawNodeCandidate c,
-                                              List<String> keywords, List<String> mustHaveSkills) {
+                                              List<String> keywords, List<String> mustHaveSkills,
+                                              List<String> negativeSkills) {
         List<String> allSearchTerms = new ArrayList<>(keywords);
         allSearchTerms.addAll(mustHaveSkills);
 
@@ -266,6 +283,16 @@ public class SearchService {
                 : (double) matchedTerms.size() / allSearchTerms.size();
 
         double rawScore = c.cosineSim * 0.70 + tagCoverage * 0.30;
+        if (!mustHaveSkills.isEmpty() && matchedTerms.isEmpty()) {
+            rawScore *= 0.2;
+        }
+        if (!negativeSkills.isEmpty()) {
+            List<String> negativeMatches = MatchingUtils.intersectCaseInsensitive(negativeSkills, nodeText);
+            if (!negativeMatches.isEmpty()) {
+                double negativeRatio = (double) negativeMatches.size() / negativeSkills.size();
+                rawScore *= Math.max(0.0, 1.0 - negativeRatio * 0.8);
+            }
+        }
 
         List<String> reasonCodes = new ArrayList<>();
         if (c.cosineSim >= 0.60) reasonCodes.add("SEMANTIC_SIMILARITY");
@@ -377,6 +404,14 @@ public class SearchService {
         return raw.toLowerCase(Locale.ROOT).trim();
     }
 
+    private String buildEmbeddingQueryText(String embeddingText) {
+        String prefix = config.search().queryPrefix().orElse("");
+        if (prefix == null || prefix.isBlank()) {
+            return embeddingText;
+        }
+        return prefix + embeddingText;
+    }
+
     private static final Set<String> STOP_WORDS = Set.of(
             "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
             "of", "with", "by", "from", "as", "is", "was", "are", "were", "be",
@@ -396,15 +431,58 @@ public class SearchService {
             "anybody", "people", "team", "work", "working", "role"
     );
 
+    private static final Map<String, String> LANGUAGE_ALIASES = Map.ofEntries(
+            Map.entry("english", "English"),
+            Map.entry("italian", "Italian"),
+            Map.entry("italiano", "Italian"),
+            Map.entry("french", "French"),
+            Map.entry("francese", "French"),
+            Map.entry("spanish", "Spanish"),
+            Map.entry("spagnolo", "Spanish"),
+            Map.entry("german", "German"),
+            Map.entry("tedesco", "German"),
+            Map.entry("portuguese", "Portuguese"),
+            Map.entry("portoghese", "Portuguese"),
+            Map.entry("dutch", "Dutch"),
+            Map.entry("polish", "Polish"),
+            Map.entry("swedish", "Swedish"),
+            Map.entry("norwegian", "Norwegian"),
+            Map.entry("danish", "Danish"),
+            Map.entry("finnish", "Finnish"),
+            Map.entry("romanian", "Romanian"),
+            Map.entry("russian", "Russian"),
+            Map.entry("ukrainian", "Ukrainian"),
+            Map.entry("arabic", "Arabic"),
+            Map.entry("hindi", "Hindi"),
+            Map.entry("chinese", "Chinese"),
+            Map.entry("mandarin", "Chinese"),
+            Map.entry("japanese", "Japanese"),
+            Map.entry("korean", "Korean"),
+            Map.entry("turkish", "Turkish")
+    );
+
     private ParsedSearchQuery fallbackParse(String queryText) {
-        List<String> words = Arrays.stream(queryText.split("\\s+"))
-                .map(String::trim)
-                .filter(s -> s.length() > 1)
-                .filter(s -> !STOP_WORDS.contains(s.toLowerCase()))
-                .collect(Collectors.toList());
+        List<String> words = new ArrayList<>();
+        Set<String> languages = new LinkedHashSet<>();
+        for (String rawToken : queryText.split("\\s+")) {
+            String token = TOKEN_TRIM_PATTERN.matcher(rawToken).replaceAll("").trim();
+            if (token.length() <= 1) {
+                continue;
+            }
+            String normalized = token.toLowerCase(Locale.ROOT);
+            if (STOP_WORDS.contains(normalized)) {
+                continue;
+            }
+            String canonicalLanguage = LANGUAGE_ALIASES.get(normalized);
+            if (canonicalLanguage != null) {
+                languages.add(canonicalLanguage);
+                continue;
+            }
+            words.add(token);
+        }
         return new ParsedSearchQuery(
                 new ParsedSearchQuery.MustHaveFilters(words, null, Collections.emptyList(),
-                        Collections.emptyList(), Collections.emptyList(), Collections.emptyList()),
+                        new ArrayList<>(languages), Collections.emptyList(), Collections.emptyList()),
                 new ParsedSearchQuery.NiceToHaveFilters(Collections.emptyList(), null,
                         Collections.emptyList(), Collections.emptyList()),
                 "unknown", null, words, queryText

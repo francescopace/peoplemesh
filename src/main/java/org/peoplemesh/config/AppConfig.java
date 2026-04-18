@@ -140,6 +140,8 @@ public interface AppConfig {
     interface SearchConfig {
         @WithDefault("0.05")
         double minScore();
+
+        java.util.Optional<String> queryPrefix();
     }
 
 }

@@ -30,6 +30,7 @@ Thumbs.db
 *.key
 *.crt
 .certs
+.venv
 ignored/
 
 # Node

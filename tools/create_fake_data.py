@@ -652,20 +652,138 @@ def build_job_records(survey: SurveyProfile, company_name: str, count: int, rng:
     return out
 
 
+def _format_field(label: str, value: str | None) -> str | None:
+    if value is None:
+        return None
+    clean = str(value).strip()
+    if not clean:
+        return None
+    return f"{label}: {clean}"
+
+
+def _format_list(label: str, items: list[str] | None) -> str | None:
+    if not items:
+        return None
+    clean = [str(x).strip() for x in items if str(x).strip()]
+    if not clean:
+        return None
+    return f"{label}: {', '.join(clean)}"
+
+
+def _sd_string(structured_data: dict[str, Any], key: str) -> str | None:
+    value = structured_data.get(key)
+    if value is None:
+        return None
+    if isinstance(value, list):
+        return ", ".join(str(x).strip() for x in value if str(x).strip()) or None
+    clean = str(value).strip()
+    return clean or None
+
+
+def _sd_list(structured_data: dict[str, Any], key: str) -> list[str]:
+    value = structured_data.get(key)
+    if not isinstance(value, list):
+        return []
+    return [str(x).strip() for x in value if str(x).strip()]
+
+
+def _java_like_structured_value(value: Any) -> str:
+    if isinstance(value, list):
+        return "[" + ", ".join(str(x).strip() for x in value if str(x).strip()) + "]"
+    if isinstance(value, dict):
+        pairs = [f"{k}={v}" for k, v in value.items()]
+        return "{" + ", ".join(pairs) + "}"
+    return str(value)
+
+
+def _join_with_optional(primary_parts: list[str], optional_parts: list[str], max_chars: int) -> str:
+    selected = list(primary_parts)
+    current_length = len(". ".join(selected))
+    for section in optional_parts:
+        candidate_length = len(section) if current_length == 0 else current_length + 2 + len(section)
+        if candidate_length > max_chars:
+            break
+        selected.append(section)
+        current_length = candidate_length
+    return ". ".join(selected)
+
+
 def build_embedding_text(
+    node_type: str,
     title: str,
     description: str,
     tags: list[str],
     structured_data: dict[str, Any],
+    country: str | None,
     max_chars: int | None = None,
 ) -> str:
-    parts = [title.strip(), description.strip()]
-    if tags:
-        parts.append("tags: " + ", ".join(tags))
-    if structured_data:
-        compact = json.dumps(structured_data, ensure_ascii=True, separators=(",", ":"))
-        parts.append("metadata: " + compact)
-    text = "\n".join(p for p in parts if p)
+    if node_type == "USER":
+        primary_parts = [
+            p
+            for p in [
+                _format_field("Roles", description),
+                _format_list("Technical Skills", tags),
+                _format_list("Tools", _sd_list(structured_data, "tools_and_tech")),
+                _format_field("Industries", _sd_string(structured_data, "industries")),
+                _format_field("Seniority", _sd_string(structured_data, "seniority")),
+                _format_list("Languages", _sd_list(structured_data, "languages_spoken")),
+                _format_list("Education", _sd_list(structured_data, "education")),
+                _format_field("Country", country),
+            ]
+            if p
+        ]
+        optional_parts = [
+            p
+            for p in [
+                _format_list("Topics", _sd_list(structured_data, "topics_frequent")),
+                _format_list("Learning", _sd_list(structured_data, "learning_areas")),
+                _format_list("Projects", _sd_list(structured_data, "project_types")),
+                _format_field("Work Mode", _sd_string(structured_data, "work_mode")),
+                _format_field("Employment", _sd_string(structured_data, "employment_type")),
+                _format_list("Soft Skills", _sd_list(structured_data, "skills_soft")),
+            ]
+            if p
+        ]
+        text = _join_with_optional(primary_parts, optional_parts, 1200)
+    elif node_type == "JOB":
+        required_skills = tags if tags else _sd_list(structured_data, "skills_required")
+        parts = [
+            p
+            for p in [
+                _format_field("Title", title),
+                _format_field("Description", description),
+                _format_field("Requirements", _sd_string(structured_data, "requirements_text")),
+                _format_list("Required Skills", required_skills),
+                _format_field("Work Mode", _sd_string(structured_data, "work_mode")),
+                _format_field("Employment", _sd_string(structured_data, "employment_type")),
+                _format_field("Country", country),
+            ]
+            if p
+        ]
+        text = ". ".join(parts)
+    else:
+        parts: list[str] = []
+        parts.append(f"Type: {node_type}")
+        title_field = _format_field("Title", title)
+        if title_field:
+            parts.append(title_field)
+        description_field = _format_field("Description", description)
+        if description_field:
+            parts.append(description_field)
+        tags_field = _format_list("Tags", tags)
+        if tags_field:
+            parts.append(tags_field)
+        country_field = _format_field("Country", country)
+        if country_field:
+            parts.append(country_field)
+        for key, value in structured_data.items():
+            if value is None:
+                continue
+            java_like = _java_like_structured_value(value).strip()
+            if not java_like or java_like == "[]":
+                continue
+            parts.append(f"{key.replace('_', ' ')}: {java_like}")
+        text = ". ".join(parts)
     if max_chars is not None and max_chars > 0 and len(text) > max_chars:
         return text[:max_chars]
     return text
@@ -700,9 +818,24 @@ def generate_embeddings_with_ollama(
     def should_retry_status(status_code: int) -> bool:
         return status_code in {429, 500, 502, 503, 504}
 
-    def embed_record(title: str, description: str, tags: list[str], structured_data: dict[str, Any]) -> str | None:
+    def embed_record(
+        node_type: str,
+        title: str,
+        description: str,
+        tags: list[str],
+        structured_data: dict[str, Any],
+        country: str | None,
+    ) -> str | None:
         for limit in prompt_limits:
-            prompt = build_embedding_text(title, description, tags, structured_data, max_chars=limit)
+            prompt = build_embedding_text(
+                node_type=node_type,
+                title=title,
+                description=description,
+                tags=tags,
+                structured_data=structured_data,
+                country=country,
+                max_chars=limit,
+            )
             payload = {"model": ollama_model, "prompt": prompt}
 
             for attempt in range(3):
@@ -727,9 +860,9 @@ def generate_embeddings_with_ollama(
         return None
 
     for u in users:
-        u["embedding"] = embed_record(u["title"], u["description"], u["tags"], u["structured_data"])
+        u["embedding"] = embed_record("USER", u["title"], u["description"], u["tags"], u["structured_data"], u.get("country"))
     for g in groups:
-        g["embedding"] = embed_record(g["title"], g["description"], g["tags"], g["structured_data"])
+        g["embedding"] = embed_record(g["node_type"], g["title"], g["description"], g["tags"], g["structured_data"], g.get("country"))
     for j in jobs:
         sd = {
             "external_id": j["external_id"],
@@ -739,7 +872,7 @@ def generate_embeddings_with_ollama(
             "employment_type": j["employment_type"],
             "external_url": j["external_url"],
         }
-        j["embedding"] = embed_record(j["title"], j["description"], j["skills_required"], sd)
+        j["embedding"] = embed_record("JOB", j["title"], j["description"], j["skills_required"], sd, j.get("country"))
 
 
 def write_seed_users_sql(path: Path, users: list[dict[str, Any]]) -> None:

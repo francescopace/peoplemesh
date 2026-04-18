@@ -40,6 +40,25 @@ npm run test:watch
 - Environment: jsdom
 - Coverage focus: utilities, router, API client, auth, UI components, views
 
+## Python tools environment
+
+Some helper scripts under `tools/` (for example `tools/eval_search_quality.py`) require
+Python packages and should run inside a local virtual environment.
+
+```bash
+cd /Users/fpace/git/peoplemesh
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r tools/requirements.txt
+```
+
+Run scripts with the venv active, then exit when done:
+
+```bash
+python tools/eval_search_quality.py
+deactivate
+```
+
 ## Suggested CI order
 
 1. `make test-backend` — fast unit tests, no containers
