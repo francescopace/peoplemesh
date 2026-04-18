@@ -82,7 +82,7 @@ public class OAuthLoginResource {
                     .build();
         }
         if (outcome.isSessionRedirect()) {
-            NewCookie sessionCookie = sessionService.buildSessionCookie(outcome.sessionCookieValue(), isSecure());
+            NewCookie sessionCookie = buildSessionCookie(outcome.sessionCookieValue(), isSecure());
             URI after = UriBuilder.fromUri(uriInfo.getBaseUri()).path("/").fragment("/search").build();
             return Response.temporaryRedirect(after).cookie(sessionCookie).build();
         }
@@ -95,7 +95,7 @@ public class OAuthLoginResource {
     @POST
     @Path("/logout")
     public Response logout() {
-        NewCookie clearCookie = sessionService.buildClearCookie(isSecure());
+        NewCookie clearCookie = buildClearCookie(isSecure());
         return Response.noContent().cookie(clearCookie).build();
     }
 
@@ -113,5 +113,27 @@ public class OAuthLoginResource {
 
     private boolean isSecure() {
         return uriInfo.getRequestUri().getScheme().equalsIgnoreCase("https");
+    }
+
+    private NewCookie buildSessionCookie(String value, boolean secure) {
+        return new NewCookie.Builder(SessionService.COOKIE_NAME)
+                .value(value)
+                .path("/")
+                .maxAge(sessionService.sessionMaxAgeSeconds())
+                .httpOnly(true)
+                .secure(secure)
+                .sameSite(NewCookie.SameSite.LAX)
+                .build();
+    }
+
+    private NewCookie buildClearCookie(boolean secure) {
+        return new NewCookie.Builder(SessionService.COOKIE_NAME)
+                .value("")
+                .path("/")
+                .maxAge(0)
+                .httpOnly(true)
+                .secure(secure)
+                .sameSite(NewCookie.SameSite.LAX)
+                .build();
     }
 }

@@ -3,8 +3,8 @@ package org.peoplemesh.service;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
-import jakarta.ws.rs.NotFoundException;
 import org.jboss.logging.Logger;
+import org.peoplemesh.domain.exception.NotFoundBusinessException;
 import org.peoplemesh.domain.model.SkillCatalog;
 import org.peoplemesh.domain.model.SkillDefinition;
 import org.peoplemesh.repository.SkillCatalogRepository;
@@ -50,7 +50,7 @@ public class SkillCatalogService {
     public SkillCatalog updateCatalog(UUID catalogId, String name, String description,
                                       Map<String, Object> levelScale, String source) {
         SkillCatalog catalog = skillCatalogRepository.findById(catalogId)
-                .orElseThrow(() -> new NotFoundException("Catalog not found"));
+                .orElseThrow(() -> new NotFoundBusinessException("Catalog not found"));
         catalog.name = name;
         catalog.description = description;
         catalog.source = source;
@@ -63,7 +63,7 @@ public class SkillCatalogService {
     @Transactional
     public int importFromCsv(UUID catalogId, InputStream csvStream) throws IOException {
         SkillCatalog catalog = skillCatalogRepository.findById(catalogId)
-                .orElseThrow(() -> new NotFoundException("Catalog not found"));
+                .orElseThrow(() -> new NotFoundBusinessException("Catalog not found"));
 
         int count = 0;
         try (BufferedReader reader = new BufferedReader(
@@ -193,12 +193,20 @@ public class SkillCatalogService {
     @Transactional
     public void deleteCatalog(UUID catalogId) {
         SkillCatalog catalog = skillCatalogRepository.findById(catalogId)
-                .orElseThrow(() -> new NotFoundException("Catalog not found"));
+                .orElseThrow(() -> new NotFoundBusinessException("Catalog not found"));
         skillCatalogRepository.delete(catalog);
     }
 
     public List<SkillCatalog> listCatalogs() {
         return skillCatalogRepository.findAllSorted();
+    }
+
+    public Map<UUID, Long> countSkillsByCatalogIds(List<UUID> catalogIds) {
+        return skillDefinitionRepository.countByCatalogIds(catalogIds);
+    }
+
+    public long countSkillsByCatalog(UUID catalogId) {
+        return skillDefinitionRepository.countByCatalog(catalogId);
     }
 
     public Optional<SkillCatalog> getCatalog(UUID catalogId) {
@@ -207,6 +215,10 @@ public class SkillCatalogService {
 
     public List<SkillDefinition> listSkills(UUID catalogId, String category, int page, int size) {
         return skillDefinitionRepository.listSkills(catalogId, category, page, size);
+    }
+
+    public List<String> listCategories(UUID catalogId) {
+        return skillDefinitionRepository.listCategories(catalogId);
     }
 
     private List<SkillDefinition> findCatalogSkills(UUID catalogId) {

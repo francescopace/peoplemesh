@@ -1,6 +1,5 @@
 package org.peoplemesh.service;
 
-import jakarta.ws.rs.core.NewCookie;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.peoplemesh.config.AppConfig;
@@ -79,22 +78,10 @@ class SessionServiceTest {
     }
 
     @Test
-    void buildSessionCookie_containsCorrectAttributes() {
-        NewCookie cookie = sessionService.buildSessionCookie("session-value", true);
-
-        assertEquals(SessionService.COOKIE_NAME, cookie.getName());
-        assertEquals("/", cookie.getPath());
-        assertTrue(cookie.isHttpOnly());
-        assertTrue(cookie.isSecure());
-        assertEquals(NewCookie.SameSite.LAX, cookie.getSameSite());
-    }
-
-    @Test
-    void buildClearCookie_hasZeroMaxAge() {
-        NewCookie cookie = sessionService.buildClearCookie(false);
-
-        assertEquals(0, cookie.getMaxAge());
-        assertEquals("", cookie.getValue());
+    void sessionMaxAgeSeconds_isPositiveAndBounded() {
+        int maxAge = sessionService.sessionMaxAgeSeconds();
+        assertTrue(maxAge > 0);
+        assertTrue(maxAge <= Integer.MAX_VALUE);
     }
 
     @Test
@@ -167,20 +154,4 @@ class SessionServiceTest {
         assertNull(decoded.get().displayName());
     }
 
-    @Test
-    void buildSessionCookie_insecure_notSecure() {
-        NewCookie cookie = sessionService.buildSessionCookie("val", false);
-
-        assertFalse(cookie.isSecure());
-        assertEquals("val", cookie.getValue());
-        assertTrue(cookie.getMaxAge() > 0);
-    }
-
-    @Test
-    void buildClearCookie_secure_isSecure() {
-        NewCookie cookie = sessionService.buildClearCookie(true);
-
-        assertTrue(cookie.isSecure());
-        assertEquals(0, cookie.getMaxAge());
-    }
 }

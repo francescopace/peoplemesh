@@ -3,7 +3,6 @@ package org.peoplemesh.service;
 import io.quarkus.security.identity.SecurityIdentity;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import jakarta.ws.rs.core.HttpHeaders;
 import org.peoplemesh.domain.enums.NodeType;
 import org.peoplemesh.domain.exception.NotFoundBusinessException;
 import org.peoplemesh.domain.exception.ValidationBusinessException;
@@ -13,7 +12,6 @@ import org.peoplemesh.domain.dto.ProfileSchema;
 import org.peoplemesh.domain.dto.SkillAssessmentDto;
 import org.peoplemesh.repository.NodeRepository;
 import org.peoplemesh.repository.UserIdentityRepository;
-import org.peoplemesh.util.ClientIpResolver;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -105,12 +103,9 @@ public class MeService {
         profileService.applySelectiveImport(userId, selectedFields, source.trim());
     }
 
-    public void grantConsent(UUID userId, String scope, Collection<String> allowedScopes, HttpHeaders headers) {
+    public void grantConsent(UUID userId, String scope, Collection<String> allowedScopes, String clientIpHash) {
         validateConsentScope(scope, allowedScopes);
-        String ipHash = ClientIpResolver.resolveClientIp(headers)
-                .map(org.peoplemesh.util.HashUtils::sha256)
-                .orElse(null);
-        consentService.recordConsent(userId, scope, ipHash);
+        consentService.recordConsent(userId, scope, clientIpHash);
         auditService.log(userId, "CONSENT_GRANTED", "privacy_consent");
     }
 

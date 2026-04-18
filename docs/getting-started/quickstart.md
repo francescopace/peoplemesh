@@ -50,6 +50,7 @@ Notes:
 
 - The image uses `src/main/docker/Dockerfile.jvm`.
 - Override the image name if needed: `make image IMAGE_NAME=peoplemesh:dev`.
+- For required environment variables and `-D` system properties, see [`../how-to/build-and-run-container.md`](../how-to/build-and-run-container.md).
 
 ## First useful endpoints
 

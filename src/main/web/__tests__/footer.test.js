@@ -42,13 +42,13 @@ describe("renderFooter()", () => {
   it("includes GitHub issues link", () => {
     const html = renderFooter();
     expect(html).toContain('href="https://github.com/francescopace/peoplemesh/issues"');
-    expect(html).toContain("GitHub Issues");
+    expect(html).toContain("Issues");
   });
 
   it("includes GitHub conversations link", () => {
     const html = renderFooter();
     expect(html).toContain('href="https://github.com/francescopace/peoplemesh/discussions"');
-    expect(html).toContain("GitHub Conversations");
+    expect(html).toContain("Discussions");
   });
 
   it("applies default class", () => {

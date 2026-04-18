@@ -30,9 +30,7 @@ public class NotificationService {
             return;
         }
 
-        Optional<MeshNode> maybeNode = nodeRepository != null
-                ? nodeRepository.findById(userId)
-                : MeshNode.findByIdOptional(userId).map(MeshNode.class::cast);
+        Optional<MeshNode> maybeNode = nodeRepository.findById(userId);
         if (maybeNode.isEmpty()) {
             LOG.debugf("Notification skipped (node missing): userId=%s action=%s", userId, action);
             return;

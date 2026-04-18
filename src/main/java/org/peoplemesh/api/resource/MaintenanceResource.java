@@ -24,6 +24,8 @@ import org.peoplemesh.domain.exception.ValidationBusinessException;
 import org.peoplemesh.security.MaintenanceAccessGuard;
 import org.peoplemesh.service.MaintenanceService;
 
+import java.util.function.Supplier;
+
 @Path("/api/v1/maintenance")
 @Produces(MediaType.APPLICATION_JSON)
 @Blocking
@@ -64,22 +66,20 @@ public class MaintenanceResource {
     public Response ldapPreview(@HeaderParam("X-Maintenance-Key") String key,
                                 @QueryParam("limit") @DefaultValue("20") @Min(1) @Max(200) int limit) {
         assertAuthorized(key);
-        try {
-            return Response.ok(maintenanceService.previewLdapUsers(limit)).build();
-        } catch (ValidationBusinessException e) {
-            throw new BusinessException(400, "Configuration Error", "LDAP configuration is invalid");
-        }
+        return mapValidationError(
+                () -> Response.ok(maintenanceService.previewLdapUsers(limit)).build(),
+                "Configuration Error",
+                "LDAP configuration is invalid");
     }
 
     @POST
     @Path("/ldap-import")
     public Response ldapImport(@HeaderParam("X-Maintenance-Key") String key) {
         assertAuthorized(key);
-        try {
-            return Response.ok(maintenanceService.importFromLdap()).build();
-        } catch (ValidationBusinessException e) {
-            throw new BusinessException(400, "Configuration Error", "LDAP configuration is invalid");
-        }
+        return mapValidationError(
+                () -> Response.ok(maintenanceService.importFromLdap()).build(),
+                "Configuration Error",
+                "LDAP configuration is invalid");
     }
 
     @POST
@@ -91,13 +91,12 @@ public class MaintenanceResource {
                                          @QueryParam("onlyMissing") @DefaultValue("true") boolean onlyMissing,
                                          @QueryParam("batchSize") @DefaultValue("1") @Min(1) @Max(1000) int batchSize) {
         assertAuthorized(key);
-        try {
-            return Response.accepted(maintenanceService.startEmbeddingRegeneration(
-                    nodeTypeParam, onlyMissing, batchSize
-            )).build();
-        } catch (ValidationBusinessException e) {
-            throw new BusinessException(400, "Validation Error", "Invalid maintenance request");
-        }
+        return mapValidationError(
+                () -> Response.accepted(maintenanceService.startEmbeddingRegeneration(
+                        nodeTypeParam, onlyMissing, batchSize
+                )).build(),
+                "Validation Error",
+                "Invalid maintenance request");
     }
 
     @GET
@@ -107,12 +106,21 @@ public class MaintenanceResource {
                                                @Pattern(regexp = "^[0-9a-fA-F\\-]{36}$", message = "jobId must be a UUID")
                                                String jobIdParam) {
         assertAuthorized(key);
+        return mapValidationError(
+                () -> {
+                    var status = maintenanceService.getEmbeddingRegenerationStatus(jobIdParam)
+                            .orElseThrow(() -> new NotFoundBusinessException("Embedding job not found"));
+                    return Response.ok(status).build();
+                },
+                "Validation Error",
+                "Invalid jobId format");
+    }
+
+    private Response mapValidationError(Supplier<Response> action, String title, String detail) {
         try {
-            var status = maintenanceService.getEmbeddingRegenerationStatus(jobIdParam)
-                    .orElseThrow(() -> new NotFoundBusinessException("Embedding job not found"));
-            return Response.ok(status).build();
+            return action.get();
         } catch (ValidationBusinessException e) {
-            throw new BusinessException(400, "Validation Error", "Invalid jobId format");
+            throw new BusinessException(400, title, detail);
         }
     }
 

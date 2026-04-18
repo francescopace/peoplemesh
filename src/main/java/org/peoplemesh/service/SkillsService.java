@@ -8,7 +8,6 @@ import org.peoplemesh.domain.dto.SkillDefinitionDto;
 import org.peoplemesh.domain.exception.ForbiddenBusinessException;
 import org.peoplemesh.domain.model.SkillCatalog;
 import org.peoplemesh.domain.model.SkillDefinition;
-import org.peoplemesh.repository.SkillDefinitionRepository;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -24,14 +23,11 @@ public class SkillsService {
     SkillCatalogService catalogService;
 
     @Inject
-    SkillDefinitionRepository skillDefinitionRepository;
-
-    @Inject
     EntitlementService entitlementService;
 
     public List<SkillCatalogDto> listCatalogs() {
         List<SkillCatalog> catalogs = catalogService.listCatalogs();
-        Map<UUID, Long> skillCountsByCatalog = skillDefinitionRepository.countByCatalogIds(
+        Map<UUID, Long> skillCountsByCatalog = catalogService.countSkillsByCatalogIds(
                 catalogs.stream().map(c -> c.id).toList());
         return catalogs.stream()
                 .map(c -> toCatalogDto(c, skillCountsByCatalog.getOrDefault(c.id, 0L)))
@@ -45,19 +41,19 @@ public class SkillsService {
             levelScale = defaultLevelScale();
         }
         SkillCatalog catalog = catalogService.createCatalog(body.name(), body.description(), levelScale, body.source());
-        return toCatalogDto(catalog, skillDefinitionRepository.countByCatalog(catalog.id));
+        return toCatalogDto(catalog, catalogService.countSkillsByCatalog(catalog.id));
     }
 
     public SkillCatalogDto updateCatalog(UUID userId, UUID catalogId, CatalogCreateRequest body) {
         ensureIsAdmin(userId);
         SkillCatalog updated = catalogService.updateCatalog(
                 catalogId, body.name(), body.description(), body.levelScale(), body.source());
-        return toCatalogDto(updated, skillDefinitionRepository.countByCatalog(updated.id));
+        return toCatalogDto(updated, catalogService.countSkillsByCatalog(updated.id));
     }
 
     public SkillCatalogDto getCatalog(UUID catalogId) {
         return catalogService.getCatalog(catalogId)
-                .map(c -> toCatalogDto(c, skillDefinitionRepository.countByCatalog(c.id)))
+                .map(c -> toCatalogDto(c, catalogService.countSkillsByCatalog(c.id)))
                 .orElse(null);
     }
 
@@ -75,7 +71,7 @@ public class SkillsService {
     }
 
     public List<String> listCategories(UUID catalogId) {
-        return skillDefinitionRepository.listCategories(catalogId);
+        return catalogService.listCategories(catalogId);
     }
 
     public void deleteCatalog(UUID userId, UUID catalogId) {

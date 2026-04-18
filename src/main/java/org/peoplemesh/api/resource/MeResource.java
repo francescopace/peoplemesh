@@ -45,6 +45,8 @@ import org.peoplemesh.service.OAuthCallbackService;
 import org.peoplemesh.service.ProfileService;
 import org.peoplemesh.service.SessionService;
 import org.peoplemesh.service.UserNotificationService;
+import org.peoplemesh.util.ClientIpResolver;
+import org.peoplemesh.util.HashUtils;
 
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -95,17 +97,13 @@ public class MeResource {
         if (identityOnly) {
             return identityPayload();
         }
-        try {
-            if (identity.isAnonymous()) {
-                return Response.noContent().build();
-            }
-            UUID userId = currentUserService.resolveUserId();
-            return profileService.getProfile(userId)
-                    .map(schema -> Response.ok(schema).build())
-                    .orElse(Response.noContent().build());
-        } catch (jakarta.ws.rs.NotAuthorizedException | SecurityException e) {
+        var maybeUserId = currentUserService.findCurrentUserId();
+        if (maybeUserId.isEmpty()) {
             return Response.noContent().build();
         }
+        return profileService.getProfile(maybeUserId.get())
+                .map(schema -> Response.ok(schema).build())
+                .orElse(Response.noContent().build());
     }
 
     private Response identityPayload() {
@@ -148,7 +146,7 @@ public class MeResource {
         UUID userId = currentUserService.resolveUserId();
         gdprService.deleteAllData(userId);
         boolean secure = uriInfo.getRequestUri().getScheme().equalsIgnoreCase("https");
-        NewCookie clearCookie = sessionService.buildClearCookie(secure);
+        NewCookie clearCookie = buildClearCookie(secure);
         return Response.noContent().cookie(clearCookie).build();
     }
 
@@ -201,33 +199,10 @@ public class MeResource {
     @Path("/cv-import")
     @Consumes(MediaType.MULTIPART_FORM_DATA)
     public Response uploadCv(@RestForm("file") FileUpload file) {
-        try {
-            if (file == null) {
-                throw new ValidationBusinessException("Missing file");
-            }
-            if (file.size() > appConfig.cvImport().maxFileSize()) {
-                throw new ValidationBusinessException("File exceeds maximum size");
-            }
-            UUID userId = currentUserService.resolveUserId();
-            try (InputStream stream = Files.newInputStream(file.filePath())) {
-                CvImportService.CvImportResult result = cvImportService.parseCv(
-                        stream,
-                        file.fileName(),
-                        file.size(),
-                        userId);
-                return Response.ok(Map.of("imported", result.schema(), "source", result.source())).build();
-            }
-        } catch (ValidationBusinessException e) {
-            if ("File exceeds maximum size".equals(e.publicDetail())) {
-                throw new BusinessException(413, "Payload Too Large", e.publicDetail());
-            }
-            throw e;
-        } catch (IllegalStateException e) {
-            throw new BusinessException(502, "Bad Gateway", "CV processing failed");
-        } catch (Exception e) {
-            LOG.error("CV upload processing failed", e);
-            throw new BusinessException(500, "Internal Server Error", "Error processing file");
-        }
+        validateCvUpload(file);
+        UUID userId = currentUserService.resolveUserId();
+        CvImportService.CvImportResult result = parseCvUpload(file, userId);
+        return Response.ok(Map.of("imported", result.schema(), "source", result.source())).build();
     }
 
     @GET
@@ -250,7 +225,11 @@ public class MeResource {
             @Context HttpHeaders headers
     ) {
         UUID userId = currentUserService.resolveUserId();
-        meService.grantConsent(userId, scope, OAuthCallbackService.DEFAULT_CONSENT_SCOPES, headers);
+        meService.grantConsent(
+                userId,
+                scope,
+                OAuthCallbackService.DEFAULT_CONSENT_SCOPES,
+                resolveClientIpHash(headers));
         return Response.ok(Map.of("scope", scope, "status", "granted")).build();
     }
 
@@ -273,5 +252,46 @@ public class MeResource {
     public Response getPrivacyDashboard() {
         UUID userId = currentUserService.resolveUserId();
         return Response.ok(gdprService.getPrivacyDashboard(userId)).build();
+    }
+
+    private void validateCvUpload(FileUpload file) {
+        if (file == null) {
+            throw new ValidationBusinessException("Missing file");
+        }
+        if (file.size() > appConfig.cvImport().maxFileSize()) {
+            throw new BusinessException(413, "Payload Too Large", "File exceeds maximum size");
+        }
+    }
+
+    private CvImportService.CvImportResult parseCvUpload(FileUpload file, UUID userId) {
+        try (InputStream stream = Files.newInputStream(file.filePath())) {
+            return cvImportService.parseCv(
+                    stream,
+                    file.fileName(),
+                    file.size(),
+                    userId);
+        } catch (IllegalStateException e) {
+            throw new BusinessException(502, "Bad Gateway", "CV processing failed");
+        } catch (Exception e) {
+            LOG.error("CV upload processing failed", e);
+            throw new BusinessException(500, "Internal Server Error", "Error processing file");
+        }
+    }
+
+    private NewCookie buildClearCookie(boolean secure) {
+        return new NewCookie.Builder(SessionService.COOKIE_NAME)
+                .value("")
+                .path("/")
+                .maxAge(0)
+                .httpOnly(true)
+                .secure(secure)
+                .sameSite(NewCookie.SameSite.LAX)
+                .build();
+    }
+
+    private static String resolveClientIpHash(HttpHeaders headers) {
+        return ClientIpResolver.resolveClientIp(headers)
+                .map(HashUtils::sha256)
+                .orElse(null);
     }
 }

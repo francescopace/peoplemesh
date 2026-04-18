@@ -6,8 +6,6 @@ import org.peoplemesh.config.AppConfig;
 import org.peoplemesh.util.HmacSigner;
 import org.peoplemesh.util.StringUtils;
 
-import jakarta.ws.rs.core.NewCookie;
-
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Base64;
@@ -88,30 +86,8 @@ public class SessionService {
         }
     }
 
-    private int sessionMaxAgeSeconds() {
+    public int sessionMaxAgeSeconds() {
         return (int) Math.min(SESSION_TTL_SECONDS, Integer.MAX_VALUE);
-    }
-
-    public NewCookie buildSessionCookie(String value, boolean secure) {
-        return new NewCookie.Builder(COOKIE_NAME)
-                .value(value)
-                .path("/")
-                .maxAge(sessionMaxAgeSeconds())
-                .httpOnly(true)
-                .secure(secure)
-                .sameSite(NewCookie.SameSite.LAX)
-                .build();
-    }
-
-    public NewCookie buildClearCookie(boolean secure) {
-        return new NewCookie.Builder(COOKIE_NAME)
-                .value("")
-                .path("/")
-                .maxAge(0)
-                .httpOnly(true)
-                .secure(secure)
-                .sameSite(NewCookie.SameSite.LAX)
-                .build();
     }
 
     // === OAuth state HMAC ===

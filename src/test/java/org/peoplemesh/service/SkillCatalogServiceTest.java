@@ -5,6 +5,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.peoplemesh.domain.exception.NotFoundBusinessException;
 import org.peoplemesh.domain.model.SkillCatalog;
 import org.peoplemesh.domain.model.SkillDefinition;
 import org.peoplemesh.repository.SkillCatalogRepository;
@@ -33,7 +34,7 @@ class SkillCatalogServiceTest {
     void importFromCsv_catalogNotFound_throws() {
         UUID id = UUID.randomUUID();
         when(skillCatalogRepository.findById(id)).thenReturn(Optional.empty());
-        assertThrows(jakarta.ws.rs.NotFoundException.class,
+        assertThrows(NotFoundBusinessException.class,
                 () -> service.importFromCsv(id, new ByteArrayInputStream(new byte[0])));
     }
 
@@ -198,7 +199,7 @@ class SkillCatalogServiceTest {
     void deleteCatalog_notFound_throws() {
         UUID id = UUID.randomUUID();
         when(skillCatalogRepository.findById(id)).thenReturn(Optional.empty());
-        assertThrows(jakarta.ws.rs.NotFoundException.class, () -> service.deleteCatalog(id));
+        assertThrows(NotFoundBusinessException.class, () -> service.deleteCatalog(id));
     }
 
     @Test

@@ -130,12 +130,17 @@ describe("AuthManager", () => {
   it("login does not redirect for unknown provider", () => {
     Auth._providers = ["google"];
     Auth._configured = ["google"];
-    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const hrefSetter = vi.fn();
+    delete window.location;
+    window.location = { href: "", hash: "" };
+    Object.defineProperty(window.location, "href", {
+      set: hrefSetter,
+      get: () => "",
+    });
 
     Auth.login("unknown_provider");
 
-    expect(consoleSpy).toHaveBeenCalled();
-    consoleSpy.mockRestore();
+    expect(hrefSetter).not.toHaveBeenCalled();
   });
 
   it("logout clears user and redirects to root", async () => {

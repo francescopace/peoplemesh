@@ -225,9 +225,7 @@ public class MatchingService {
         if (!consentService.hasActiveConsent(userId, "professional_matching")) {
             return Collections.emptyList();
         }
-        MeshNode myNode = nodeRepository != null
-                ? nodeRepository.findPublishedUserNode(userId).orElse(null)
-                : MeshNode.findPublishedUserNode(userId).orElse(null);
+        MeshNode myNode = nodeRepository.findPublishedUserNode(userId).orElse(null);
         if (myNode == null || myNode.embedding == null) {
             return Collections.emptyList();
         }

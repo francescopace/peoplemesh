@@ -7,6 +7,7 @@ import org.peoplemesh.domain.dto.MeshMatchResult;
 import org.peoplemesh.domain.enums.NodeType;
 import org.peoplemesh.domain.model.MeshNode;
 import org.peoplemesh.repository.MeshNodeSearchRepository;
+import org.peoplemesh.repository.NodeRepository;
 
 import java.lang.reflect.Field;
 import java.time.Instant;
@@ -21,7 +22,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -31,6 +31,7 @@ class MatchingServiceFindAllMatchesTest {
     private final MatchingService service = new MatchingService();
     private MeshNodeSearchRepository searchRepository;
     private ConsentService consentService;
+    private NodeRepository nodeRepository;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -43,10 +44,12 @@ class MatchingServiceFindAllMatchesTest {
 
         searchRepository = mock(MeshNodeSearchRepository.class);
         consentService = mock(ConsentService.class);
+        nodeRepository = mock(NodeRepository.class);
 
         setField("config", config);
         setField("searchRepository", searchRepository);
         setField("consentService", consentService);
+        setField("nodeRepository", nodeRepository);
     }
 
     @Test
@@ -69,13 +72,11 @@ class MatchingServiceFindAllMatchesTest {
         noEmbedding.nodeType = NodeType.USER;
         noEmbedding.embedding = null;
 
-        try (var meshMock = mockStatic(MeshNode.class)) {
-            meshMock.when(() -> MeshNode.findPublishedUserNode(userId)).thenReturn(Optional.empty());
-            assertTrue(service.findAllMatches(userId, null, null).isEmpty());
+        when(nodeRepository.findPublishedUserNode(userId)).thenReturn(Optional.empty());
+        assertTrue(service.findAllMatches(userId, null, null).isEmpty());
 
-            meshMock.when(() -> MeshNode.findPublishedUserNode(userId)).thenReturn(Optional.of(noEmbedding));
-            assertTrue(service.findAllMatches(userId, null, null).isEmpty());
-        }
+        when(nodeRepository.findPublishedUserNode(userId)).thenReturn(Optional.of(noEmbedding));
+        assertTrue(service.findAllMatches(userId, null, null).isEmpty());
     }
 
     @Test
@@ -111,15 +112,13 @@ class MatchingServiceFindAllMatchesTest {
         when(searchRepository.findNodeCandidatesByEmbedding(any(float[].class), eq(userId), eq(null), eq(50)))
                 .thenReturn(java.util.Collections.singletonList(nodeRow));
 
-        try (var meshMock = mockStatic(MeshNode.class)) {
-            meshMock.when(() -> MeshNode.findPublishedUserNode(userId)).thenReturn(Optional.of(me));
+        when(nodeRepository.findPublishedUserNode(userId)).thenReturn(Optional.of(me));
 
-            List<MeshMatchResult> out = service.findAllMatches(userId, null, null);
+        List<MeshMatchResult> out = service.findAllMatches(userId, null, null);
 
-            assertEquals(2, out.size());
-            assertEquals("PEOPLE", out.get(0).nodeType());
-            assertEquals("PROJECT", out.get(1).nodeType());
-        }
+        assertEquals(2, out.size());
+        assertEquals("PEOPLE", out.get(0).nodeType());
+        assertEquals("PROJECT", out.get(1).nodeType());
     }
 
     @Test
