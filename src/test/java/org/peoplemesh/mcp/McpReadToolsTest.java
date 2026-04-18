@@ -10,6 +10,7 @@ import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.peoplemesh.domain.dto.MeshMatchResult;
 import org.peoplemesh.domain.dto.ProfileSchema;
+import org.peoplemesh.domain.dto.SearchQuery;
 import org.peoplemesh.domain.exception.ForbiddenBusinessException;
 import org.peoplemesh.domain.exception.NotFoundBusinessException;
 import org.peoplemesh.service.CurrentUserService;
@@ -77,7 +78,7 @@ class McpReadToolsTest {
     @Test
     void match_blankProfileJson_returnsError() {
         TextContent result = mcpReadTools.match(null, null, null);
-        assertTrue(result.text().contains("profileJson is required"));
+        assertTrue(result.text().contains("parsedQueryJson is required"));
     }
 
     @Test
@@ -92,21 +93,21 @@ class McpReadToolsTest {
         UUID userId = UUID.randomUUID();
         when(currentUserService.resolveUserId()).thenReturn(userId);
         MeshMatchResult one = sampleMatch();
-        when(matchesService.matchFromSchema(eq(userId), any(ProfileSchema.class), eq("JOB"), eq("IT")))
+        when(matchesService.matchFromSchema(eq(userId), any(SearchQuery.class), eq("JOB"), eq("IT"), isNull(), isNull()))
                 .thenReturn(List.of(one));
 
-        String json = "{\"professional\":{\"roles\":[\"Engineer\"]}}";
+        String json = "{\"keywords\":[\"java\"],\"embedding_text\":\"java engineer\"}";
         TextContent result = mcpReadTools.match(json, "JOB", "IT");
 
         assertTrue(result.text().contains(one.title()));
-        verify(matchesService).matchFromSchema(eq(userId), any(ProfileSchema.class), eq("JOB"), eq("IT"));
+        verify(matchesService).matchFromSchema(eq(userId), any(SearchQuery.class), eq("JOB"), eq("IT"), isNull(), isNull());
     }
 
     @Test
     void match_securityException_returnsError() {
         when(currentUserService.resolveUserId()).thenThrow(new SecurityException("denied"));
 
-        TextContent result = mcpReadTools.match("{\"professional\":{\"roles\":[\"X\"]}}", null, null);
+        TextContent result = mcpReadTools.match("{\"keywords\":[\"x\"],\"embedding_text\":\"x\"}", null, null);
         assertTrue(result.text().contains("access denied"));
     }
 
@@ -114,10 +115,10 @@ class McpReadToolsTest {
     void match_businessException_returnsPublicDetail() {
         UUID userId = UUID.randomUUID();
         when(currentUserService.resolveUserId()).thenReturn(userId);
-        when(matchesService.matchFromSchema(eq(userId), any(ProfileSchema.class), isNull(), isNull()))
+        when(matchesService.matchFromSchema(eq(userId), any(SearchQuery.class), isNull(), isNull(), isNull(), isNull()))
                 .thenThrow(new ForbiddenBusinessException("not allowed"));
 
-        TextContent result = mcpReadTools.match("{\"professional\":{\"roles\":[\"X\"]}}", null, null);
+        TextContent result = mcpReadTools.match("{\"keywords\":[\"x\"]}", null, null);
         assertTrue(result.text().contains("not allowed"));
     }
 

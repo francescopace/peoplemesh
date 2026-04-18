@@ -52,7 +52,10 @@ Core objectives:
 - Keep refactor incremental; do not rewrite the whole codebase.
 - Preserve behavior and external API contracts unless explicitly requested.
 
-6) Testing and output
+6) Documentation
+- Always update relevant documentation when behavior, configuration, or workflows change.
+
+7) Testing and output
 - Update/add tests where behavior changes.
 - Prefer Mockito-based unit tests for service logic; reserve @QuarkusTest + DevServices for integration tests only.
 - Do not introduce explicit Testcontainers dependencies; integration tests rely on Quarkus DevServices.

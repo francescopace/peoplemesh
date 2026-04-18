@@ -9,7 +9,7 @@ import io.micrometer.core.annotation.Timed;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
-import org.peoplemesh.domain.dto.ParsedSearchQuery;
+import org.peoplemesh.domain.dto.SearchQuery;
 import org.peoplemesh.domain.dto.SkillWithLevel;
 import org.peoplemesh.util.StringUtils;
 
@@ -114,7 +114,7 @@ public class LlmSearchQueryParser implements SearchQueryParser {
             percentiles = {0.95},
             histogram = true
     )
-    public Optional<ParsedSearchQuery> parse(String userQuery) {
+    public Optional<SearchQuery> parse(String userQuery) {
         if (userQuery == null || userQuery.isBlank()) {
             return Optional.empty();
         }
@@ -142,8 +142,8 @@ public class LlmSearchQueryParser implements SearchQueryParser {
                     .configure(DeserializationFeature.ACCEPT_SINGLE_VALUE_AS_ARRAY, true)
                     .configure(DeserializationFeature.ACCEPT_EMPTY_STRING_AS_NULL_OBJECT, true)
                     .configure(DeserializationFeature.ACCEPT_EMPTY_ARRAY_AS_NULL_OBJECT, true);
-            ParsedSearchQuery parsed = lenient.readValue(StringUtils.stripMarkdownFences(content), ParsedSearchQuery.class);
-            ParsedSearchQuery normalized = normalizeParsedQuery(parsed, userQuery);
+            SearchQuery parsed = lenient.readValue(StringUtils.stripMarkdownFences(content), SearchQuery.class);
+            SearchQuery normalized = normalizeParsedQuery(parsed, userQuery);
             LOG.debugf("Parsed search query: skills=%s, seniority=%s",
                     normalized.mustHave().skills(),
                     normalized.seniority());
@@ -154,25 +154,25 @@ public class LlmSearchQueryParser implements SearchQueryParser {
         }
     }
 
-    private ParsedSearchQuery normalizeParsedQuery(ParsedSearchQuery parsed, String userQuery) {
+    private SearchQuery normalizeParsedQuery(SearchQuery parsed, String userQuery) {
         if (parsed == null) {
             return null;
         }
-        ParsedSearchQuery.MustHaveFilters mustHave = normalizeMustHave(parsed.mustHave());
-        ParsedSearchQuery.NiceToHaveFilters niceToHave = normalizeNiceToHave(parsed.niceToHave());
-        ParsedSearchQuery.NegativeFilters negativeFilters = normalizeNegativeFilters(parsed.negativeFilters());
+        SearchQuery.MustHaveFilters mustHave = normalizeMustHave(parsed.mustHave());
+        SearchQuery.NiceToHaveFilters niceToHave = normalizeNiceToHave(parsed.niceToHave());
+        SearchQuery.NegativeFilters negativeFilters = normalizeNegativeFilters(parsed.negativeFilters());
         List<String> keywords = normalizeStringList(parsed.keywords());
         String embeddingText = parsed.embeddingText() == null || parsed.embeddingText().isBlank()
                 ? userQuery
                 : parsed.embeddingText().trim();
         String seniority = normalizeSeniority(parsed.seniority(), userQuery);
         String resultScope = normalizeResultScope(parsed.resultScope());
-        return new ParsedSearchQuery(mustHave, niceToHave, seniority, negativeFilters, keywords, embeddingText, resultScope);
+        return new SearchQuery(mustHave, niceToHave, seniority, negativeFilters, keywords, embeddingText, resultScope);
     }
 
-    private ParsedSearchQuery.MustHaveFilters normalizeMustHave(ParsedSearchQuery.MustHaveFilters source) {
+    private SearchQuery.MustHaveFilters normalizeMustHave(SearchQuery.MustHaveFilters source) {
         if (source == null) {
-            return new ParsedSearchQuery.MustHaveFilters(
+            return new SearchQuery.MustHaveFilters(
                     Collections.emptyList(),
                     Collections.emptyList(),
                     Collections.emptyList(),
@@ -181,7 +181,7 @@ public class LlmSearchQueryParser implements SearchQueryParser {
                     Collections.emptyList()
             );
         }
-        return new ParsedSearchQuery.MustHaveFilters(
+        return new SearchQuery.MustHaveFilters(
                 normalizeStringList(source.skills()),
                 normalizeSkillWithLevelList(source.skillsWithLevel()),
                 normalizeStringList(source.roles()),
@@ -191,16 +191,16 @@ public class LlmSearchQueryParser implements SearchQueryParser {
         );
     }
 
-    private ParsedSearchQuery.NiceToHaveFilters normalizeNiceToHave(ParsedSearchQuery.NiceToHaveFilters source) {
+    private SearchQuery.NiceToHaveFilters normalizeNiceToHave(SearchQuery.NiceToHaveFilters source) {
         if (source == null) {
-            return new ParsedSearchQuery.NiceToHaveFilters(
+            return new SearchQuery.NiceToHaveFilters(
                     Collections.emptyList(),
                     Collections.emptyList(),
                     Collections.emptyList(),
                     Collections.emptyList()
             );
         }
-        return new ParsedSearchQuery.NiceToHaveFilters(
+        return new SearchQuery.NiceToHaveFilters(
                 normalizeStringList(source.skills()),
                 normalizeSkillWithLevelList(source.skillsWithLevel()),
                 normalizeStringList(source.industries()),
@@ -208,11 +208,11 @@ public class LlmSearchQueryParser implements SearchQueryParser {
         );
     }
 
-    private ParsedSearchQuery.NegativeFilters normalizeNegativeFilters(ParsedSearchQuery.NegativeFilters source) {
+    private SearchQuery.NegativeFilters normalizeNegativeFilters(SearchQuery.NegativeFilters source) {
         if (source == null) {
-            return new ParsedSearchQuery.NegativeFilters(null, Collections.emptyList(), Collections.emptyList());
+            return new SearchQuery.NegativeFilters(null, Collections.emptyList(), Collections.emptyList());
         }
-        return new ParsedSearchQuery.NegativeFilters(
+        return new SearchQuery.NegativeFilters(
                 source.seniority() == null || source.seniority().isBlank() ? null : source.seniority().trim(),
                 normalizeStringList(source.skills()),
                 normalizeStringList(source.location())

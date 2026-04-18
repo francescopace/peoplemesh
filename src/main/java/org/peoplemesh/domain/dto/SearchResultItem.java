@@ -33,6 +33,7 @@ public record SearchResultItem(
         String email,
         String telegramHandle,
         String mobilePhone,
+        String linkedinUrl,
 
         // Node fields (null for profile results).
         NodeType nodeType,
@@ -52,13 +53,13 @@ public record SearchResultItem(
             List<String> skillsTechnical, List<String> toolsAndTech,
             List<String> languagesSpoken, String country, String city,
             WorkMode workMode, EmploymentType employmentType,
-            String slackHandle, String email, String telegramHandle, String mobilePhone,
+            String slackHandle, String email, String telegramHandle, String mobilePhone, String linkedinUrl,
             SearchMatchBreakdown breakdown,
             Map<String, Integer> skillLevels) {
         return new SearchResultItem(profileId, "profile", score,
                 displayName, avatarUrl, roles, seniority, skillsTechnical, toolsAndTech,
                 languagesSpoken, country, city, workMode, employmentType,
-                slackHandle, email, telegramHandle, mobilePhone,
+                slackHandle, email, telegramHandle, mobilePhone, linkedinUrl,
                 null, null, null, null,
                 breakdown, skillLevels);
     }
@@ -69,7 +70,7 @@ public record SearchResultItem(
             SearchMatchBreakdown breakdown) {
         return new SearchResultItem(nodeId, "node", score,
                 null, null, null, null, null, null, null, country, null,
-                null, null, null, null, null, null,
+                null, null, null, null, null, null, null,
                 nodeType, title, description, tags,
                 breakdown, null);
     }

@@ -32,7 +32,7 @@ MCP handlers delegate to service-layer use cases and do not access repositories 
 | Tool | Purpose |
 |------|---------|
 | `peoplemesh_get_my_profile` | Returns the authenticated user's profile as `ProfileSchema` JSON |
-| `peoplemesh_match` | Returns matches from a `ProfileSchema` JSON input (optional filters: `type`, `country`) |
+| `peoplemesh_match` | Returns matches from a `SearchQuery` JSON input (optional filters: `type`, `country`) |
 | `peoplemesh_match_me` | Returns matches from the authenticated user's stored embedding |
 | `peoplemesh_match_node` | Returns matches from a specific node embedding (`nodeId` + optional filters) |
 

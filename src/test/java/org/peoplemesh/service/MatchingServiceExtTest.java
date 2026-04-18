@@ -340,6 +340,7 @@ class MatchingServiceExtTest {
                 null,
                 null,
                 null,
+                null,
                 null);
         assertEquals(List.of("Java", "Rust", "Docker", "K8s"), row.combinedSkillsAndTools());
     }

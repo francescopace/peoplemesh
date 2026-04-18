@@ -9,7 +9,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.MockedStatic;
 import org.peoplemesh.config.AppConfig;
-import org.peoplemesh.domain.dto.ParsedSearchQuery;
+import org.peoplemesh.domain.dto.SearchQuery;
 import org.peoplemesh.domain.dto.SearchResponse;
 import org.peoplemesh.domain.model.SkillAssessment;
 
@@ -117,8 +117,8 @@ class SearchServiceTest {
         Field parsersField = SearchService.class.getDeclaredField("queryParsers");
         parsersField.setAccessible(true);
         parsersField.set(searchService, List.of(parser));
-        ParsedSearchQuery parsed = new ParsedSearchQuery(
-                new ParsedSearchQuery.MustHaveFilters(List.of(), null, List.of(), List.of(), List.of("Italy"), List.of()),
+        SearchQuery parsed = new SearchQuery(
+                new SearchQuery.MustHaveFilters(List.of(), null, List.of(), List.of(), List.of("Italy"), List.of()),
                 null, "unknown", null, List.of(), "query", null);
         when(parser.parse("query")).thenReturn(Optional.of(parsed));
 
@@ -141,7 +141,7 @@ class SearchServiceTest {
         parsersField.setAccessible(true);
         parsersField.set(searchService, List.of(parser));
 
-        ParsedSearchQuery parsed = new ParsedSearchQuery(null, null, "unknown", null,
+        SearchQuery parsed = new SearchQuery(null, null, "unknown", null,
                 List.of("java"), "java developer", "jobs");
         when(parser.parse("java developer")).thenReturn(Optional.of(parsed));
 
@@ -176,7 +176,7 @@ class SearchServiceTest {
     }
 
     @Test
-    void search_withResults_scoresAndReturnsItems() {
+    void search_withResults_scoresAndReturnsItems() throws Exception {
         when(consentService.hasActiveConsent(userId, "professional_matching")).thenReturn(true);
         when(embeddingService.generateEmbedding(anyString())).thenReturn(new float[]{0.5f, 0.5f});
 
@@ -185,9 +185,18 @@ class SearchServiceTest {
                 nodeId, "USER", "Alice Engineer", "Backend Developer",
                 new String[]{"Java", "Python"}, "US",
                 Timestamp.from(Instant.now()),
-                "{\"languages_spoken\":[\"English\"],\"city\":\"NYC\",\"email\":\"alice@test.com\"}",
+                "{\"languages_spoken\":[\"English\"],\"city\":\"NYC\",\"email\":\"alice@test.com\",\"linkedin_url\":\"https://linkedin.com/in/alice\"}",
                 0.85
         };
+        when(objectMapper.readValue(
+                eq((String) userRow[7]),
+                org.mockito.ArgumentMatchers.<com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>>any()))
+                .thenReturn(new LinkedHashMap<>(Map.of(
+                        "languages_spoken", List.of("English"),
+                        "city", "NYC",
+                        "email", "alice@test.com",
+                        "linkedin_url", "https://linkedin.com/in/alice"
+                )));
         when(searchRepository.unifiedVectorSearch(any(float[].class), eq(userId),
                 any(), any(), anyInt())).thenReturn(rowList(userRow));
 
@@ -200,6 +209,7 @@ class SearchServiceTest {
             assertFalse(response.results().isEmpty());
             assertEquals(nodeId, response.results().get(0).id());
             assertEquals("profile", response.results().get(0).resultType());
+            assertEquals("https://linkedin.com/in/alice", response.results().get(0).linkedinUrl());
             assertTrue(response.results().get(0).score() > 0);
         }
     }
@@ -234,8 +244,8 @@ class SearchServiceTest {
         parsersField.setAccessible(true);
         parsersField.set(searchService, List.of(parser));
 
-        ParsedSearchQuery parsed = new ParsedSearchQuery(
-                new ParsedSearchQuery.MustHaveFilters(List.of("Java", "Python"),
+        SearchQuery parsed = new SearchQuery(
+                new SearchQuery.MustHaveFilters(List.of("Java", "Python"),
                         List.of("Developer"), List.of(), List.of(), List.of()),
                 null, "senior", null, List.of("Java", "Python"), "java python developer", null);
         when(parser.parse("java python developer")).thenReturn(Optional.of(parsed));
@@ -269,7 +279,7 @@ class SearchServiceTest {
         parsersField.setAccessible(true);
         parsersField.set(searchService, List.of(parser));
 
-        ParsedSearchQuery parsed = new ParsedSearchQuery(
+        SearchQuery parsed = new SearchQuery(
                 null, null, "SENIOR", null, List.of("devops"), "devops", null);
         when(parser.parse("senior devops")).thenReturn(Optional.of(parsed));
 
@@ -324,10 +334,10 @@ class SearchServiceTest {
         parsersField.setAccessible(true);
         parsersField.set(searchService, List.of(parser));
 
-        ParsedSearchQuery parsed = new ParsedSearchQuery(
-                new ParsedSearchQuery.MustHaveFilters(List.of("Java"),
+        SearchQuery parsed = new SearchQuery(
+                new SearchQuery.MustHaveFilters(List.of("Java"),
                         List.of(), List.of(), List.of(), List.of()),
-                new ParsedSearchQuery.NiceToHaveFilters(List.of("Docker", "Kubernetes"),
+                new SearchQuery.NiceToHaveFilters(List.of("Docker", "Kubernetes"),
                         List.of(), List.of()),
                 "unknown", null, List.of("Java"), "java docker kubernetes", null);
         when(parser.parse("java with docker")).thenReturn(Optional.of(parsed));
@@ -360,8 +370,8 @@ class SearchServiceTest {
         parsersField.setAccessible(true);
         parsersField.set(searchService, List.of(parser));
 
-        ParsedSearchQuery parsed = new ParsedSearchQuery(
-                new ParsedSearchQuery.MustHaveFilters(List.of("Python"),
+        SearchQuery parsed = new SearchQuery(
+                new SearchQuery.MustHaveFilters(List.of("Python"),
                         List.of(), List.of(), List.of(), List.of("Finance")),
                 null, "unknown", null, List.of("Python"), "python finance", null);
         when(parser.parse("python in finance")).thenReturn(Optional.of(parsed));
@@ -447,8 +457,8 @@ class SearchServiceTest {
         parsersField.setAccessible(true);
         parsersField.set(searchService, List.of(parser));
 
-        ParsedSearchQuery parsed = new ParsedSearchQuery(
-                new ParsedSearchQuery.MustHaveFilters(List.of(), List.of(),
+        SearchQuery parsed = new SearchQuery(
+                new SearchQuery.MustHaveFilters(List.of(), List.of(),
                         List.of("Italian"), List.of(), List.of()),
                 null, "unknown", null, List.of(), "Italian speaker", null);
         when(parser.parse("Italian speaker")).thenReturn(Optional.of(parsed));

@@ -45,7 +45,8 @@ public class MatchingService {
             List<String> causes,
             String avatarUrl,
             String slackHandle, String email,
-            String telegramHandle, String mobilePhone
+            String telegramHandle, String mobilePhone,
+            String linkedinUrl
     ) {
         static CandidateRow fromNativeRow(Object[] row) {
             return new CandidateRow(
@@ -63,7 +64,8 @@ public class MatchingService {
                     SqlParsingUtils.parseArray(row[19]),
                     (String) row[20],
                     (String) row[21], (String) row[22],
-                    (String) row[23], (String) row[24]
+                    (String) row[23], (String) row[24],
+                    (String) row[25]
             );
         }
 
@@ -179,6 +181,7 @@ public class MatchingService {
                     c.email(),
                     c.telegramHandle(),
                     c.mobilePhone(),
+                    c.linkedinUrl(),
                     new MatchScoreBreakdown(
                             StringUtils.round3(c.cosineSim()),
                             StringUtils.round3(skillsOverlap),
@@ -350,7 +353,8 @@ public class MatchingService {
                                 m.slackHandle(),
                                 m.email(),
                                 m.telegramHandle(),
-                                m.mobilePhone()
+                                m.mobilePhone(),
+                                m.linkedinUrl()
                         )
                 ));
             }
@@ -566,6 +570,7 @@ public class MatchingService {
             List<String> hobbies, List<String> sports, List<String> causes,
             String country, String city, String timezone,
             String slackHandle, String email, String telegramHandle, String mobilePhone,
+            String linkedinUrl,
             MatchScoreBreakdown breakdown
     ) {}
 

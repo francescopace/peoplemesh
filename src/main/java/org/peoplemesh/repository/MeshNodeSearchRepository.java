@@ -28,7 +28,8 @@ public class MeshNodeSearchRepository {
                     + "(SELECT COALESCE(array_agg(x), ARRAY[]::text[]) FROM jsonb_array_elements_text(COALESCE(n.structured_data->'causes', '[]'::jsonb)) AS t(x)), "
                     + "n.structured_data->>'avatar_url', "
                     + "n.structured_data->>'slack_handle', n.structured_data->>'email', "
-                    + "n.structured_data->>'telegram_handle', n.structured_data->>'mobile_phone' "
+                    + "n.structured_data->>'telegram_handle', n.structured_data->>'mobile_phone', "
+                    + "n.structured_data->>'linkedin_url' "
                     + "FROM mesh.mesh_node n "
                     + "WHERE n.node_type = 'USER' "
                     + "AND n.searchable = true AND n.embedding IS NOT NULL ";

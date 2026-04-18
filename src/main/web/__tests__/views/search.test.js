@@ -163,6 +163,14 @@ describe("search view skill highlighting", () => {
     expect(apiMock.post.mock.calls[1][0]).toContain("/api/v1/matches?type=PEOPLE");
     expect(apiMock.post.mock.calls[1][0]).toContain("limit=10");
     expect(apiMock.post.mock.calls[1][0]).toContain("offset=0");
+    expect(apiMock.post.mock.calls[1][1]).toEqual({
+      must_have: { roles: [], skills: ["community"], languages: [], location: [], industries: [] },
+      nice_to_have: { skills: [], industries: [], experience: [] },
+      seniority: "unknown",
+      negative_filters: { seniority: null, skills: [], location: [] },
+      keywords: ["community"],
+      embedding_text: "community in italy",
+    });
 
     const highlightedTag = [...container.querySelectorAll(".dc-tag")]
       .find((t) => t.textContent.trim() === "community");

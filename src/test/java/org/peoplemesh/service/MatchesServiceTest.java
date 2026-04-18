@@ -4,18 +4,15 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.peoplemesh.domain.dto.MeshMatchResult;
-import org.peoplemesh.domain.dto.ProfileSchema;
+import org.peoplemesh.domain.dto.SearchQuery;
 import org.peoplemesh.domain.dto.SearchRequest;
 import org.peoplemesh.domain.dto.SearchResponse;
 import org.peoplemesh.domain.exception.ForbiddenBusinessException;
 import org.peoplemesh.domain.exception.NotFoundBusinessException;
-import org.peoplemesh.domain.exception.ValidationBusinessException;
 import org.peoplemesh.domain.model.MeshNode;
 import org.peoplemesh.repository.NodeRepository;
-import org.peoplemesh.util.EmbeddingTextBuilder;
 
 import java.util.List;
 import java.util.Optional;
@@ -23,16 +20,12 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.Mockito.mockStatic;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class MatchesServiceTest {
 
-    @Mock
-    EmbeddingService embeddingService;
     @Mock
     MatchingService matchingService;
     @Mock
@@ -46,37 +39,18 @@ class MatchesServiceTest {
     MatchesService service;
 
     @Test
-    void matchFromSchema_whenEmbeddingMissing_throwsValidationError() {
+    void matchFromSchemaParsedQuery_delegatesToSearchService() {
         UUID userId = UUID.randomUUID();
-        ProfileSchema profile = mock(ProfileSchema.class);
-        try (MockedStatic<EmbeddingTextBuilder> embeddingTextBuilder = mockStatic(EmbeddingTextBuilder.class)) {
-            embeddingTextBuilder.when(() -> EmbeddingTextBuilder.buildFromSchema(profile))
-                    .thenReturn("profile text");
-            when(embeddingService.generateEmbedding("profile text")).thenReturn(null);
+        SearchQuery parsedQuery = new SearchQuery(
+                null, null, "unknown", null, List.of("java"), "java developer", "people");
+        SearchResponse expected = new SearchResponse(parsedQuery, List.of());
+        when(searchService.search(userId, "java developer", parsedQuery, "PEOPLE", "IT", 5, 1))
+                .thenReturn(expected);
 
-            assertThrows(ValidationBusinessException.class,
-                    () -> service.matchFromSchema(userId, profile, "PEOPLE", "IT"));
-        }
-    }
+        List<MeshMatchResult> result = service.matchFromSchema(userId, parsedQuery, "PEOPLE", "IT", 5, 1);
 
-    @Test
-    void matchFromSchema_delegatesToMatchingService() {
-        UUID userId = UUID.randomUUID();
-        ProfileSchema profile = mock(ProfileSchema.class);
-        float[] embedding = new float[]{0.1f, 0.2f};
-        List<MeshMatchResult> expected = List.of();
-
-        try (MockedStatic<EmbeddingTextBuilder> embeddingTextBuilder = mockStatic(EmbeddingTextBuilder.class)) {
-            embeddingTextBuilder.when(() -> EmbeddingTextBuilder.buildFromSchema(profile))
-                    .thenReturn("profile text");
-            when(embeddingService.generateEmbedding("profile text")).thenReturn(embedding);
-            when(matchingService.findAllMatches(userId, embedding, "PEOPLE", "IT", 5, 1)).thenReturn(expected);
-
-            List<MeshMatchResult> result = service.matchFromSchema(userId, profile, "PEOPLE", "IT", 5, 1);
-
-            assertEquals(expected, result);
-            verify(matchingService).findAllMatches(userId, embedding, "PEOPLE", "IT", 5, 1);
-        }
+        assertEquals(List.of(), result);
+        verify(searchService).search(userId, "java developer", parsedQuery, "PEOPLE", "IT", 5, 1);
     }
 
     @Test

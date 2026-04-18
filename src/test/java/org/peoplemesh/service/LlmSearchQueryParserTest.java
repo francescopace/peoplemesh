@@ -10,7 +10,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.peoplemesh.domain.dto.ParsedSearchQuery;
+import org.peoplemesh.domain.dto.SearchQuery;
 
 import java.lang.reflect.Field;
 import java.util.Optional;
@@ -55,7 +55,7 @@ class LlmSearchQueryParserTest {
                 """;
         mockChatResponse(json);
 
-        Optional<ParsedSearchQuery> result = parser.parse("looking for senior Java dev");
+        Optional<SearchQuery> result = parser.parse("looking for senior Java dev");
 
         assertTrue(result.isPresent());
         assertEquals("senior", result.get().seniority());
@@ -76,7 +76,7 @@ class LlmSearchQueryParserTest {
                 """;
         mockChatResponse(json);
 
-        Optional<ParsedSearchQuery> result = parser.parse("tutti i risultati con Java e Kubernetes");
+        Optional<SearchQuery> result = parser.parse("tutti i risultati con Java e Kubernetes");
 
         assertTrue(result.isPresent());
         assertEquals("all", result.get().resultScope());
@@ -113,7 +113,7 @@ class LlmSearchQueryParserTest {
                 """;
         mockChatResponse(json);
 
-        Optional<ParsedSearchQuery> result = parser.parse("community for java devs in Europe");
+        Optional<SearchQuery> result = parser.parse("community for java devs in Europe");
 
         assertTrue(result.isPresent());
         assertNotNull(result.get().mustHave());
@@ -166,7 +166,7 @@ class LlmSearchQueryParserTest {
                 """;
         mockChatResponse(json);
 
-        Optional<ParsedSearchQuery> result = parser.parse("Open roles in cloud architecture");
+        Optional<SearchQuery> result = parser.parse("Open roles in cloud architecture");
 
         assertTrue(result.isPresent());
         assertNotNull(result.get().mustHave());
@@ -202,7 +202,7 @@ class LlmSearchQueryParserTest {
                 """;
         mockChatResponse(json);
 
-        Optional<ParsedSearchQuery> result = parser.parse("python dev");
+        Optional<SearchQuery> result = parser.parse("python dev");
         assertTrue(result.isPresent());
     }
 
@@ -210,7 +210,7 @@ class LlmSearchQueryParserTest {
     void parse_llmThrows_returnsEmpty() {
         when(chatModel.chat(any(), any())).thenThrow(new RuntimeException("timeout"));
 
-        Optional<ParsedSearchQuery> result = parser.parse("test query");
+        Optional<SearchQuery> result = parser.parse("test query");
 
         assertTrue(result.isEmpty());
     }

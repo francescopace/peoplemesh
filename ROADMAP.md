@@ -48,14 +48,16 @@ Goal: Have a working end-to-end matching system for a small team.
 
 Goal: Prove real usage in staffing / expert discovery.
 
+Execution order for pilot validation: **track -> feedback -> improve**.
+
 ### MUST-HAVE
 
-- [ ] **Matching Quality Layer** — Skill normalization (OpenShift ↔ K8s, etc.), must-have vs nice-to-have logic in query parsing, language filtering (hard constraint), seniority boost formula. *Mostly done:* query parsing supports explicit `must_have` / `nice_to_have` (`LlmSearchQueryParser`, `ParsedSearchQuery`); language constraints are pushed into retrieval (`MeshNodeSearchRepository.unifiedVectorSearch`); scoring includes must-have penalty and seniority rerank (`SearchService`). *Remaining:* broaden/standardize synonym normalization coverage (beyond current alias handling and catalog reconciliation) and keep tuning/validation on pilot data.
-- [ ] **CV import enrichment: certifications** — Add dedicated `professional.certifications` support end-to-end (schema, `LlmProfileStructuring` extraction/normalization, `ProfileService` selective import, profile/import UI mapping, fake data + seed refresh, docs/tests).
 - [ ] **Usage Tracking** — Searches per user, clicks per result, contacts initiated. *Not implemented:* no analytics/telemetry layer; audit log tracks actions but no search-specific usage metrics or dashboards.
 - [ ] **Feedback Loop (Manual)** — Collect "good match / bad match" per result, adjust scoring. *Not implemented:* no feedback collection UI or storage.
-- [ ] **Share to Slack (Light)** — Copy profile summary, share in Slack channels. *Not implemented.*
+- [ ] **Matching Quality Layer** — Skill normalization (OpenShift ↔ K8s, etc.), must-have vs nice-to-have logic in query parsing, language filtering (hard constraint), seniority boost formula. *Mostly done:* query parsing supports explicit `must_have` / `nice_to_have` (`LlmSearchQueryParser`, `ParsedSearchQuery`); language constraints are pushed into retrieval (`MeshNodeSearchRepository.unifiedVectorSearch`); scoring includes must-have penalty and seniority rerank (`SearchService`). *Remaining:* broaden/standardize synonym normalization coverage (beyond current alias handling and catalog reconciliation) and keep tuning/validation on pilot data.
 - [ ] **Email Delivery in NotificationService** — `NotificationService` currently runs in dry-run mode (`dryRun=true`) and logs notifications without sending them. Add a real transport (SMTP via Quarkus Mailer or external provider such as SendGrid/SES) to enable actual email notifications (match alerts, welcome, consent changes, etc.).
+- [ ] **Share to Slack (Light)** — Copy profile summary, share in Slack channels. *Not implemented.*
+- [ ] **CV import enrichment: certifications** — Add dedicated `professional.certifications` support end-to-end (schema, `LlmProfileStructuring` extraction/normalization, `ProfileService` selective import, profile/import UI mapping, fake data + seed refresh, docs/tests).
 
 ### NICE-TO-HAVE
 
@@ -152,8 +154,8 @@ Goal: Grow sustainable revenue while keeping the open-source core and privacy co
 
 | Phase | Status | Done | Remaining |
 |-------|--------|------|-----------|
-| **Phase 0** | **COMPLETE** | 23/23 | — |
-| **Phase 1** | In progress | 0/6 must-have | Matching quality finalization, certifications import, usage tracking, feedback, Slack share, email notifications |
+| **Phase 0** | **COMPLETE** | 24/24 | — |
+| **Phase 1** | In progress | 0/6 must-have | Usage tracking, feedback loop, matching quality finalization, email notifications, Slack share, certifications import |
 | **Phase 2** | Not started | 0/4 | Multi-tenant, access control, metrics, better matching |
 | **Phase 3** | Not started | 0/4 (SSO + audit done in P0) | Integrations, RBAC, matching v2, deployment |
 | **Phase 4** | Not started | 0/3 (export done in P0) | Portability, enterprise integration pack, governance at scale |

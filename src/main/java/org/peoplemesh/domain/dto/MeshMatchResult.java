@@ -41,7 +41,8 @@ public record MeshMatchResult(
             String slackHandle,
             String email,
             String telegramHandle,
-            String mobilePhone
+            String mobilePhone,
+            String linkedinUrl
     ) {}
 
     public record MeshMatchBreakdown(

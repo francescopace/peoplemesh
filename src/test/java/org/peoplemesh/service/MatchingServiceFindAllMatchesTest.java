@@ -114,7 +114,7 @@ class MatchingServiceFindAllMatchesTest {
                 "HYBRID", "EMPLOYED", List.of(), List.of(),
                 "IT", "Europe/Rome", Instant.now(), "Rome", 0.9d,
                 "Jane", "Engineer,Developer", List.of(), List.of(), List.of(),
-                "https://img", "@jane", "jane@example.com", "@jane_tg", "+39123456789"
+                "https://img", "@jane", "jane@example.com", "@jane_tg", "+39123456789", "https://linkedin.com/in/jane"
         };
 
         Object[] nodeRow = new Object[]{
@@ -133,6 +133,7 @@ class MatchingServiceFindAllMatchesTest {
 
         assertEquals(2, out.size());
         assertEquals("PEOPLE", out.get(0).nodeType());
+        assertEquals("https://linkedin.com/in/jane", out.get(0).person().linkedinUrl());
         assertEquals("PROJECT", out.get(1).nodeType());
     }
 
@@ -157,7 +158,7 @@ class MatchingServiceFindAllMatchesTest {
                 "HYBRID", "EMPLOYED", List.of(), List.of(),
                 "IT", "Europe/Rome", Instant.now(), "Rome", 0.95d,
                 "Alice", "Engineer", List.of(), List.of(), List.of(),
-                "https://img", "@alice", "alice@example.com", "@alice_tg", "+39111111111"
+                "https://img", "@alice", "alice@example.com", "@alice_tg", "+39111111111", "https://linkedin.com/in/alice"
         };
         Object[] peopleB = new Object[]{
                 UUID.randomUUID(), UUID.randomUUID(), "MID",
@@ -165,7 +166,7 @@ class MatchingServiceFindAllMatchesTest {
                 "HYBRID", "EMPLOYED", List.of(), List.of(),
                 "IT", "Europe/Rome", Instant.now(), "Rome", 0.90d,
                 "Bob", "Engineer", List.of(), List.of(), List.of(),
-                "https://img", "@bob", "bob@example.com", "@bob_tg", "+39222222222"
+                "https://img", "@bob", "bob@example.com", "@bob_tg", "+39222222222", "https://linkedin.com/in/bob"
         };
         Object[] peopleC = new Object[]{
                 UUID.randomUUID(), UUID.randomUUID(), "MID",
@@ -173,7 +174,7 @@ class MatchingServiceFindAllMatchesTest {
                 "HYBRID", "EMPLOYED", List.of(), List.of(),
                 "IT", "Europe/Rome", Instant.now(), "Rome", 0.85d,
                 "Carol", "Engineer", List.of(), List.of(), List.of(),
-                "https://img", "@carol", "carol@example.com", "@carol_tg", "+39333333333"
+                "https://img", "@carol", "carol@example.com", "@carol_tg", "+39333333333", "https://linkedin.com/in/carol"
         };
 
         when(searchRepository.findUserCandidatesByEmbedding(any(float[].class), eq(userId), eq(50)))

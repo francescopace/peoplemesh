@@ -3,6 +3,6 @@ package org.peoplemesh.domain.dto;
 import java.util.List;
 
 public record SearchResponse(
-        ParsedSearchQuery parsedQuery,
+        SearchQuery parsedQuery,
         List<SearchResultItem> results
 ) {}

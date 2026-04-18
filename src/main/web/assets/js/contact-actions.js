@@ -63,16 +63,44 @@ export function mobileButton(mobilePhone) {
   );
 }
 
-export function contactFooter(slackHandle, email, telegramHandle, mobilePhone) {
+function normalizeLinkedinUrl(value) {
+  if (!value) return null;
+  const trimmed = String(value).trim();
+  if (!trimmed) return null;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+
+export function linkedinButton(linkedinUrl) {
+  const normalizedUrl = normalizeLinkedinUrl(linkedinUrl);
+  if (!normalizedUrl) return null;
+  return el("a", {
+    className: "btn btn-sm btn-secondary",
+    href: normalizedUrl,
+    target: "_blank",
+    rel: "noopener",
+    title: "Open LinkedIn profile",
+    "aria-label": "Open LinkedIn profile",
+  },
+    el("i", { className: "fa-brands fa-linkedin", style: "font-size:14px;color:#0a66c2" })
+  );
+}
+
+export function contactFooter(slackHandle, email, telegramHandle, mobilePhone, linkedinUrl) {
   const normalizedSlack = normalizeContactValue(slackHandle);
   const normalizedEmail = normalizeContactValue(email);
   const normalizedTelegram = normalizeContactValue(telegramHandle);
   const normalizedMobile = normalizeContactValue(mobilePhone);
+  const normalizedLinkedin = normalizeContactValue(linkedinUrl);
 
   const actions = el("div", { className: "dc-footer" });
-  if (normalizedSlack) actions.appendChild(slackButton(normalizedSlack));
-  if (normalizedEmail) actions.appendChild(copyEmailButton(normalizedEmail));
-  if (normalizedTelegram) actions.appendChild(telegramButton(normalizedTelegram));
   if (normalizedMobile) actions.appendChild(mobileButton(normalizedMobile));
+  if (normalizedSlack) actions.appendChild(slackButton(normalizedSlack));
+  if (normalizedTelegram) actions.appendChild(telegramButton(normalizedTelegram));
+  if (normalizedLinkedin) {
+    const linkedinAction = linkedinButton(normalizedLinkedin);
+    if (linkedinAction) actions.appendChild(linkedinAction);
+  }
+  if (normalizedEmail) actions.appendChild(copyEmailButton(normalizedEmail));
   return actions.children.length ? actions : null;
 }

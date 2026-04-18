@@ -22,7 +22,7 @@ The API enforces a security- and GDPR-first posture: authenticated access, scope
 
 | Mechanism | Where used |
 |-----------|-----------|
-| OIDC session cookie | All `/api/v1/` endpoints except Auth |
+| OIDC session cookie | All `/api/v1/` endpoints except Auth (plus `GET /api/v1/me`, which is `@PermitAll`) |
 | `@PermitAll` | Auth endpoints, `GET /api/v1/me` (returns 204 if anonymous) |
 | `is_admin` entitlement | System statistics, node create/update, skill catalog management |
 | `X-Maintenance-Key` header | All maintenance endpoints (+ optional IP/CIDR allowlist) |
@@ -125,7 +125,7 @@ Endpoints for finding similar profiles and nodes.
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/api/v1/matches/prompt` | Natural-language search |
-| POST | `/api/v1/matches` | Structured match from a `ProfileSchema` |
+| POST | `/api/v1/matches` | Structured match from a `SearchQuery` |
 | GET | `/api/v1/matches/me` | Match from the authenticated user's profile embedding |
 | GET | `/api/v1/matches/{nodeId}` | Match from a node's embedding |
 
@@ -134,7 +134,7 @@ Endpoints for finding similar profiles and nodes.
 | Endpoint | Parameters |
 |----------|-----------|
 | `POST /api/v1/matches/prompt` | Body: `SearchRequest` (JSON, `query` only). `?limit={1..100}`, `?offset={>=0}` |
-| `POST /api/v1/matches` | Body: `ProfileSchema` (JSON). `?type`, `?country` (validated), `?limit={1..100}`, `?offset={>=0}` |
+| `POST /api/v1/matches` | Body: `SearchQuery` (JSON). `?type`, `?country` (validated), `?limit={1..100}`, `?offset={>=0}` |
 | `GET /api/v1/matches/me` | `?type`, `?country`, `?limit={1..100}`, `?offset={>=0}` |
 | `GET /api/v1/matches/{nodeId}` | `?type`, `?country`. `{nodeId}` is a UUID |
 
@@ -163,14 +163,23 @@ Query parsing:
 Country filter behavior:
 - Prompt search derives country hard-filtering from parsed `must_have.location` when a country is clearly mappable to an ISO code.
 - `SearchRequest` for prompt search contains only `query`; country filtering is parser-driven.
+- Structured matches (`POST /api/v1/matches`) accept a direct `SearchQuery` body and reuse prompt-scoring logic for follow-up filtered requests without reparsing via LLM.
 - Prompt and schema match endpoints support `limit/offset`; if omitted, server defaults are applied (`limit=20`, `offset=0`).
 - In the current web UI (`search` view):
   - the initial request is `POST /api/v1/matches/prompt?limit=10&offset=0`
-  - subsequent type/country filter changes use `POST /api/v1/matches?type=...&country=...&limit=10&offset=0` with a frontend-derived `ProfileSchema` (skips LLM reparse)
+  - subsequent type/country filter changes use `POST /api/v1/matches?type=...&country=...&limit=10&offset=0` with `SearchQuery` as body (keeps `/matches` flow and preserves prompt scoring on backend)
   - `Load more` uses progressive `offset` calls (`offset += page_size`) against the active endpoint
   - the filter bar stays visible even when a search page returns zero results (to allow immediate filter changes)
 
 Tuning: see `peoplemesh.search.skill-match-threshold` in [configuration.md](configuration.md).
+
+Response shape highlights:
+- `POST /api/v1/matches/prompt` returns `SearchResponse` with:
+  - `parsedQuery`
+  - `results[]` (`SearchResultItem`)
+- For profile results (`resultType = "profile"`), `SearchResultItem` includes contact fields in camelCase:
+  - `slackHandle`, `email`, `telegramHandle`, `mobilePhone`, `linkedinUrl`
+- For node results (`resultType = "node"`), profile-only fields are `null`; node fields (`nodeType`, `title`, `description`, `tags`) are populated.
 
 ### My Mesh matching details (`GET /api/v1/matches/me`)
 
@@ -185,6 +194,9 @@ Candidate skill pool for PEOPLE results includes:
 
 Response shape note:
 - `breakdown.commonItems` contains matched overlap terms used for card highlighting and explanation.
+- PEOPLE results include `person` details with contact fields in camelCase:
+  - `person.slackHandle`, `person.email`, `person.telegramHandle`, `person.mobilePhone`, `person.linkedinUrl`
+- Input/storage naming can still use snake_case in profile structured data (for example `contacts.linkedin_url` / `linkedin_url`), while match/search API responses use camelCase.
 
 Current web UI behavior (`My Mesh` / `explore` view):
 - default tab is `People`

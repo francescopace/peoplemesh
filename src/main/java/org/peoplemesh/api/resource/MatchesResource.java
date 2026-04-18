@@ -17,7 +17,7 @@ import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.peoplemesh.domain.dto.MeshMatchResult;
-import org.peoplemesh.domain.dto.ProfileSchema;
+import org.peoplemesh.domain.dto.SearchQuery;
 import org.peoplemesh.domain.dto.SearchRequest;
 import org.peoplemesh.domain.dto.SearchResponse;
 import org.peoplemesh.service.CurrentUserService;
@@ -40,13 +40,14 @@ public class MatchesResource {
     @POST
     @Consumes(MediaType.APPLICATION_JSON)
     public Response matchFromSchema(
-            @Valid ProfileSchema profile,
+            @Valid SearchQuery parsedQuery,
             @QueryParam("type") @Size(max = 40) @Pattern(regexp = "^[A-Za-z_]*$") String type,
             @QueryParam("country") @Pattern(regexp = "^[A-Za-z]{2}$|^$") String country,
             @QueryParam("limit") @Min(1) @Max(100) Integer limit,
             @QueryParam("offset") @Min(0) Integer offset) {
         UUID userId = currentUserService.resolveUserId();
-        List<MeshMatchResult> matches = matchesService.matchFromSchema(userId, profile, type, country, limit, offset);
+        List<MeshMatchResult> matches = matchesService.matchFromSchema(
+                userId, parsedQuery, type, country, limit, offset);
         return Response.ok(matches).build();
     }
 

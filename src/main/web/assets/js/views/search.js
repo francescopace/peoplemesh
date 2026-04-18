@@ -5,7 +5,6 @@ import { contactFooter } from "../contact-actions.js";
 import { termsMatch } from "../utils/term-matching.js";
 import {
   adaptMatchesToSearchResponse,
-  buildProfileSchemaFromParsedQuery,
   inferAutoTypeFromParsedQuery,
   toMatchesTypeFilter,
 } from "../utils/search-query-mapper.js";
@@ -69,7 +68,6 @@ export async function renderSearch(container) {
 
   let lastQueryText = "";
   let lastParsedQuery = null;
-  let lastDerivedProfileSchema = null;
   let loadedResults = [];
   let currentOffset = 0;
   let hasMore = false;
@@ -122,7 +120,7 @@ export async function renderSearch(container) {
         query.set("limit", String(SEARCH_PAGE_SIZE));
         query.set("offset", String(currentOffset));
         const path = `/api/v1/matches?${query.toString()}`;
-        const matches = await api.post(path, lastDerivedProfileSchema);
+        const matches = await api.post(path, lastParsedQuery || {});
         const adapted = adaptMatchesToSearchResponse(matches, lastParsedQuery);
         pageResults = adapted.results || [];
       } else {
@@ -133,7 +131,6 @@ export async function renderSearch(container) {
         pageResults = data.results || [];
         if (!lastParsedQuery && data.parsedQuery) {
           lastParsedQuery = data.parsedQuery;
-          lastDerivedProfileSchema = buildProfileSchemaFromParsedQuery(lastParsedQuery);
           const autoType = inferAutoTypeFromParsedQuery(lastParsedQuery);
           if (autoType && RESULT_TYPE_TABS.some((t) => t.id === autoType)) {
             activeTypeFilter = autoType;
@@ -182,14 +179,14 @@ export async function renderSearch(container) {
     typeTabs.querySelectorAll(".explore-type-tab").forEach((t) =>
       t.classList.toggle("active", t.dataset.type === activeTypeFilter));
     if (!hasSearched) return;
-    activeBackendMode = lastDerivedProfileSchema ? "matches" : "prompt";
+    activeBackendMode = lastParsedQuery ? "matches" : "prompt";
     resetPagedState();
     loadPagedResults(false);
   });
 
   countrySelect.addEventListener("change", () => {
     if (!hasSearched) return;
-    activeBackendMode = lastDerivedProfileSchema ? "matches" : "prompt";
+    activeBackendMode = lastParsedQuery ? "matches" : "prompt";
     resetPagedState();
     loadPagedResults(false);
   });
@@ -218,7 +215,6 @@ export async function renderSearch(container) {
     lastQueryText = query;
     hasSearched = true;
     lastParsedQuery = null;
-    lastDerivedProfileSchema = null;
     activeTypeFilter = "";
     activeBackendMode = "prompt";
     resetPagedState();
@@ -374,7 +370,8 @@ function renderProfileCard(result) {
     result.slackHandle,
     result.email,
     result.telegramHandle,
-    result.mobilePhone
+    result.mobilePhone,
+    result.linkedinUrl
   );
   if (actions) card.appendChild(actions);
 

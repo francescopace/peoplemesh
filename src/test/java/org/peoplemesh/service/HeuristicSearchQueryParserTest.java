@@ -1,7 +1,7 @@
 package org.peoplemesh.service;
 
 import org.junit.jupiter.api.Test;
-import org.peoplemesh.domain.dto.ParsedSearchQuery;
+import org.peoplemesh.domain.dto.SearchQuery;
 
 import java.util.Optional;
 
@@ -20,9 +20,9 @@ class HeuristicSearchQueryParserTest {
 
     @Test
     void parse_detectsRoleAndLanguageAndSkills() {
-        Optional<ParsedSearchQuery> result = parser.parse("looking for senior java developer italian");
+        Optional<SearchQuery> result = parser.parse("looking for senior java developer italian");
         assertTrue(result.isPresent());
-        ParsedSearchQuery parsed = result.get();
+        SearchQuery parsed = result.get();
 
         assertTrue(parsed.mustHave().roles().contains("developer"));
         assertTrue(parsed.mustHave().languages().contains("Italian"));
@@ -33,7 +33,7 @@ class HeuristicSearchQueryParserTest {
 
     @Test
     void parse_keepsContextKeywordsAsKeywords() {
-        Optional<ParsedSearchQuery> result = parser.parse("java meetup communities");
+        Optional<SearchQuery> result = parser.parse("java meetup communities");
         assertTrue(result.isPresent());
         assertTrue(result.get().keywords().contains("meetup"));
         assertTrue(result.get().keywords().contains("communities"));
@@ -42,28 +42,28 @@ class HeuristicSearchQueryParserTest {
 
     @Test
     void parse_setsDefaultSeniority() {
-        Optional<ParsedSearchQuery> result = parser.parse("python engineer");
+        Optional<SearchQuery> result = parser.parse("python engineer");
         assertTrue(result.isPresent());
         assertEquals("unknown", result.get().seniority());
     }
 
     @Test
     void parse_allSignal_returnsScopeAll() {
-        Optional<ParsedSearchQuery> result = parser.parse("tutti i risultati con Java e Kubernetes");
+        Optional<SearchQuery> result = parser.parse("tutti i risultati con Java e Kubernetes");
         assertTrue(result.isPresent());
         assertEquals("all", result.get().resultScope());
     }
 
     @Test
     void parse_communityKeyword_returnsScopeCommunities() {
-        Optional<ParsedSearchQuery> result = parser.parse("community data engineering in europe");
+        Optional<SearchQuery> result = parser.parse("community data engineering in europe");
         assertTrue(result.isPresent());
         assertEquals("communities", result.get().resultScope());
     }
 
     @Test
     void parse_skillQueryNoEntity_returnsScopePeople() {
-        Optional<ParsedSearchQuery> result = parser.parse("java architect");
+        Optional<SearchQuery> result = parser.parse("java architect");
         assertTrue(result.isPresent());
         assertEquals("people", result.get().resultScope());
     }

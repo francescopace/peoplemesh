@@ -63,19 +63,30 @@ public class SearchService {
     SemanticSkillMatcher semanticSkillMatcher;
 
     public SearchResponse search(UUID userId, String queryText) {
-        return search(userId, queryText, null, null);
+        return search(userId, queryText, null, null, null, null, null);
     }
 
     public SearchResponse search(UUID userId, String queryText, Integer limit, Integer offset) {
+        return search(userId, queryText, null, null, null, limit, offset);
+    }
+
+    public SearchResponse search(
+            UUID userId,
+            String queryText,
+            SearchQuery preParsedQuery,
+            String requestedType,
+            String requestedCountry,
+            Integer limit,
+            Integer offset) {
         if (!consentService.hasActiveConsent(userId, "professional_matching")) {
             return new SearchResponse(null, Collections.emptyList());
         }
 
-        SearchQueryParser parser = selectQueryParser().orElse(null);
-        SearchQueryParser effectiveParser = parser != null ? parser : FALLBACK_QUERY_PARSER;
-        ParsedSearchQuery parsedQuery = effectiveParser.parse(queryText)
-                .or(() -> FALLBACK_QUERY_PARSER.parse(queryText))
-                .orElse(new ParsedSearchQuery(null, null, "unknown", null, Collections.emptyList(), queryText, "unknown"));
+        SearchQuery parsedQuery = resolveParsedQuery(queryText, preParsedQuery);
+        Optional<NodeType> typeFilter = resolveNodeTypeFilter(requestedType);
+        if (requestedType != null && !requestedType.isBlank() && typeFilter.isEmpty()) {
+            return new SearchResponse(parsedQuery, Collections.emptyList());
+        }
 
         String embeddingText = parsedQuery.embeddingText();
         if (embeddingText == null || embeddingText.isBlank()) {
@@ -87,11 +98,19 @@ public class SearchService {
             return new SearchResponse(parsedQuery, Collections.emptyList());
         }
 
-        String countryFilter = extractCountryFilter(parsedQuery);
+        String countryFilter = requestedCountry != null && !requestedCountry.isBlank()
+                ? requestedCountry
+                : extractCountryFilter(parsedQuery);
         List<RawNodeCandidate> rawCandidates = unifiedVectorSearch(queryEmbedding, userId, parsedQuery, countryFilter);
         SkillLevelContext skillLevelContext = loadSkillLevelsContext(rawCandidates);
         List<ScoredCandidate> allScored = unifiedScore(rawCandidates, parsedQuery, skillLevelContext.levelsByNodeForScoring());
         allScored = rerank(allScored, parsedQuery);
+        if (typeFilter.isPresent()) {
+            NodeType expectedType = typeFilter.get();
+            allScored = allScored.stream()
+                    .filter(sc -> sc.node.nodeType == expectedType)
+                    .toList();
+        }
         double minScore = config.search().minScore();
         List<ScoredCandidate> filtered = allScored.stream()
                 .filter(sc -> sc.score >= minScore)
@@ -103,10 +122,35 @@ public class SearchService {
         return new SearchResponse(parsedQuery, results);
     }
 
+    private SearchQuery resolveParsedQuery(String queryText, SearchQuery preParsedQuery) {
+        if (preParsedQuery != null) {
+            return preParsedQuery;
+        }
+        SearchQueryParser parser = selectQueryParser().orElse(null);
+        SearchQueryParser effectiveParser = parser != null ? parser : FALLBACK_QUERY_PARSER;
+        return effectiveParser.parse(queryText)
+                .or(() -> FALLBACK_QUERY_PARSER.parse(queryText))
+                .orElse(new SearchQuery(null, null, "unknown", null, Collections.emptyList(), queryText, "unknown"));
+    }
+
+    private Optional<NodeType> resolveNodeTypeFilter(String requestedType) {
+        if (requestedType == null || requestedType.isBlank()) {
+            return Optional.empty();
+        }
+        if ("PEOPLE".equalsIgnoreCase(requestedType) || "PROFILE".equalsIgnoreCase(requestedType)) {
+            return Optional.of(NodeType.USER);
+        }
+        try {
+            return Optional.of(NodeType.valueOf(requestedType.toUpperCase(Locale.ROOT)));
+        } catch (IllegalArgumentException e) {
+            return Optional.empty();
+        }
+    }
+
     // === Unified vector search on mesh_node (USER + JOB + COMMUNITY + ...) ===
 
     private List<RawNodeCandidate> unifiedVectorSearch(float[] queryEmbedding, UUID userId,
-                                                       ParsedSearchQuery parsed, String countryFilter) {
+                                                       SearchQuery parsed, String countryFilter) {
         List<String> languages = (parsed.mustHave() != null && parsed.mustHave().languages() != null
                 && !parsed.mustHave().languages().isEmpty())
                 ? parsed.mustHave().languages() : null;
@@ -145,7 +189,7 @@ public class SearchService {
 
     private List<ScoredCandidate> unifiedScore(
             List<RawNodeCandidate> candidates,
-            ParsedSearchQuery parsed,
+            SearchQuery parsed,
             Map<UUID, Map<String, Short>> levelCacheByNode) {
         List<String> mustHaveSkills = parsed.mustHave() != null && parsed.mustHave().skills() != null
                 ? parsed.mustHave().skills() : Collections.emptyList();
@@ -368,7 +412,7 @@ public class SearchService {
         return new ScoredCandidate(c, breakdown, rawScore);
     }
 
-    private List<ScoredCandidate> rerank(List<ScoredCandidate> candidates, ParsedSearchQuery parsed) {
+    private List<ScoredCandidate> rerank(List<ScoredCandidate> candidates, SearchQuery parsed) {
         String targetSeniority = parsed.seniority();
         Seniority target = (targetSeniority == null || "unknown".equalsIgnoreCase(targetSeniority))
                 ? null
@@ -413,6 +457,7 @@ public class SearchService {
                 String slackHandle = sdString(c.structuredData, "slack_handle");
                 String telegramHandle = sdString(c.structuredData, "telegram_handle");
                 String mobilePhone = sdString(c.structuredData, "mobile_phone");
+                String linkedinUrl = sdString(c.structuredData, "linkedin_url");
                 List<String> languagesSpoken = sdListOrEmpty(c.structuredData, "languages_spoken");
                 Seniority seniority = SqlParsingUtils.parseEnum(Seniority.class,
                         sdString(c.structuredData, "seniority"));
@@ -431,7 +476,7 @@ public class SearchService {
                         c.tags, toolsAndTech,
                         languagesSpoken, c.country, city,
                         workMode, employmentType,
-                        slackHandle, email, telegramHandle, mobilePhone,
+                        slackHandle, email, telegramHandle, mobilePhone, linkedinUrl,
                         sc.breakdown, skillLevels
                 ));
             } else {
@@ -488,7 +533,7 @@ public class SearchService {
         return prefix + embeddingText;
     }
 
-    private String extractCountryFilter(ParsedSearchQuery parsed) {
+    private String extractCountryFilter(SearchQuery parsed) {
         if (parsed == null || parsed.mustHave() == null || parsed.mustHave().location() == null) {
             return null;
         }

@@ -1,7 +1,7 @@
 package org.peoplemesh.service;
 
 import jakarta.enterprise.context.ApplicationScoped;
-import org.peoplemesh.domain.dto.ParsedSearchQuery;
+import org.peoplemesh.domain.dto.SearchQuery;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -91,7 +91,7 @@ public class HeuristicSearchQueryParser implements SearchQueryParser {
     );
 
     @Override
-    public Optional<ParsedSearchQuery> parse(String userQuery) {
+    public Optional<SearchQuery> parse(String userQuery) {
         if (userQuery == null || userQuery.isBlank()) {
             return Optional.empty();
         }
@@ -131,8 +131,8 @@ public class HeuristicSearchQueryParser implements SearchQueryParser {
 
         String resultScope = inferResultScope(userQuery, skills, roles, keywords);
 
-        return Optional.of(new ParsedSearchQuery(
-                new ParsedSearchQuery.MustHaveFilters(
+        return Optional.of(new SearchQuery(
+                new SearchQuery.MustHaveFilters(
                         skills,
                         null,
                         new ArrayList<>(roles),
@@ -140,7 +140,7 @@ public class HeuristicSearchQueryParser implements SearchQueryParser {
                         Collections.emptyList(),
                         Collections.emptyList()
                 ),
-                new ParsedSearchQuery.NiceToHaveFilters(
+                new SearchQuery.NiceToHaveFilters(
                         Collections.emptyList(),
                         null,
                         Collections.emptyList(),

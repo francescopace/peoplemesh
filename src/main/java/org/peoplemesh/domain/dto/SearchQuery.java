@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.List;
 
-public record ParsedSearchQuery(
+public record SearchQuery(
         @JsonProperty("must_have") MustHaveFilters mustHave,
         @JsonProperty("nice_to_have") NiceToHaveFilters niceToHave,
         String seniority,

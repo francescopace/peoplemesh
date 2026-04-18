@@ -283,7 +283,8 @@ export async function renderExplore(container) {
         m.person?.slackHandle,
         m.person?.email,
         m.person?.telegramHandle,
-        m.person?.mobilePhone
+        m.person?.mobilePhone,
+        m.person?.linkedinUrl
       );
       if (actions) card.appendChild(actions);
     }
