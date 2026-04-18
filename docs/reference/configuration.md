@@ -121,15 +121,15 @@ Current migration includes:
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `peoplemesh.search.min-score` | `0.05` | Minimum result score threshold |
-| `peoplemesh.search.skill-match-threshold` | `0.70` | Minimum semantic similarity for query-skill to candidate-skill matching in prompt search (`/api/v1/matches/prompt`) and PEOPLE matching in My Mesh (`/api/v1/matches/me`) |
+| `peoplemesh.search.min-score` | `0.05` | Minimum result score threshold for the unified search/matching pipeline (`/api/v1/matches`, `/api/v1/matches/prompt`, `/api/v1/matches/me`) |
+| `peoplemesh.search.skill-match-threshold` | `0.70` | Minimum semantic similarity for query-skill to candidate-skill matching in the unified search/matching pipeline |
 
 Search matching notes:
 
 - Prompt search uses a hybrid strategy:
   - exact/fallback term matching (`termsMatch`)
   - semantic matching over skill embeddings (catalog skill vectors)
-- PEOPLE matching in My Mesh (`GET /api/v1/matches/me`) reuses the same semantic skill matcher for skills overlap scoring.
+- My Mesh (`GET /api/v1/matches/me`) uses the same `SearchService` pipeline as Search endpoints, with a backend-built `SearchQuery` derived from the current profile.
 - `peoplemesh.search.skill-match-threshold` tunes the semantic gate only (higher = stricter precision, lower = higher recall).
 - This threshold is independent from `peoplemesh.skills.reconciliation-threshold` (used by catalog reconciliation workflows, not search scoring).
 

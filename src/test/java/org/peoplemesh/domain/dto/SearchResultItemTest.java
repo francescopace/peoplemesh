@@ -18,8 +18,8 @@ class SearchResultItemTest {
     void profile_setsResultTypeAndProfileFields() {
         UUID id = UUID.randomUUID();
         SearchMatchBreakdown breakdown = new SearchMatchBreakdown(
-                0.85, 0.9, 0.5, 1.0, 0.3, 0.78,
-                List.of("Java"), List.of("Go"), List.of("Rust"), List.of("SEMANTIC_SIMILARITY"));
+                0.85, 0.9, 0.5, 1.0, 0.3, 0.4, 0.78,
+                List.of("Java"), List.of("Go"), List.of("Rust"), List.of("SEMANTIC_SIMILARITY"), "same_country");
         Map<String, Integer> levels = Map.of("Java", 4);
 
         SearchResultItem item = SearchResultItem.profile(
@@ -62,8 +62,8 @@ class SearchResultItemTest {
     void node_setsResultTypeAndNodeFields() {
         UUID id = UUID.randomUUID();
         SearchMatchBreakdown breakdown = new SearchMatchBreakdown(
-                0.7, 0.5, 0, 0, 0, 0.65,
-                List.of("Docker"), List.of(), List.of(), List.of("TAG_MATCH"));
+                0.7, 0.5, 0, 0, 0, 0.2, 0.65,
+                List.of("Docker"), List.of(), List.of(), List.of("TAG_MATCH"), "same_continent");
 
         SearchResultItem item = SearchResultItem.node(
                 id, 0.65, NodeType.PROJECT, "My Project",

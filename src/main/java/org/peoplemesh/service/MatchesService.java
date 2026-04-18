@@ -26,6 +26,9 @@ public class MatchesService {
     SearchService searchService;
 
     @Inject
+    ProfileSearchQueryBuilder profileSearchQueryBuilder;
+
+    @Inject
     NodeRepository nodeRepository;
 
     @Inject
@@ -38,8 +41,9 @@ public class MatchesService {
             String country,
             Integer limit,
             Integer offset) {
+        SearchService.MatchContext context = resolveMatchContext(userId);
         SearchResponse searchResponse = searchService.search(
-                userId, resolveSearchQueryText(parsedQuery), parsedQuery, type, country, limit, offset);
+                userId, resolveSearchQueryText(parsedQuery), parsedQuery, type, country, limit, offset, context);
         return toMeshResults(searchResponse.results());
     }
 
@@ -48,7 +52,8 @@ public class MatchesService {
     }
 
     public SearchResponse matchFromPrompt(UUID userId, SearchRequest request, Integer limit, Integer offset) {
-        return searchService.search(userId, request.query(), limit, offset);
+        SearchService.MatchContext context = resolveMatchContext(userId);
+        return searchService.search(userId, request.query(), null, null, null, limit, offset, context);
     }
 
     public List<MeshMatchResult> matchMyProfile(UUID userId, String type, String country) {
@@ -56,7 +61,27 @@ public class MatchesService {
     }
 
     public List<MeshMatchResult> matchMyProfile(UUID userId, String type, String country, Integer limit, Integer offset) {
-        return matchingService.findAllMatches(userId, type, country, limit, offset);
+        MeshNode myNode = nodeRepository.findPublishedUserNode(userId).orElse(null);
+        if (myNode == null || myNode.embedding == null) {
+            return List.of();
+        }
+        SearchQuery profileQuery = profileSearchQueryBuilder.buildFromUserNode(myNode);
+        SearchService.MatchContext context = new SearchService.MatchContext(
+                myNode.country,
+                MatchingUtils.structuredWorkMode(myNode),
+                MatchingUtils.structuredEmploymentType(myNode)
+        );
+        SearchResponse searchResponse = searchService.search(
+                userId,
+                resolveSearchQueryText(profileQuery),
+                profileQuery,
+                type,
+                country,
+                limit,
+                offset,
+                context
+        );
+        return toMeshResults(searchResponse.results());
     }
 
     public List<MeshMatchResult> matchFromNode(UUID userId, UUID nodeId, String type, String country) {
@@ -78,6 +103,18 @@ public class MatchesService {
             return String.join(" ", parsedQuery.keywords());
         }
         return "search";
+    }
+
+    private SearchService.MatchContext resolveMatchContext(UUID userId) {
+        MeshNode myNode = nodeRepository.findPublishedUserNode(userId).orElse(null);
+        if (myNode == null) {
+            return SearchService.MatchContext.empty();
+        }
+        return new SearchService.MatchContext(
+                myNode.country,
+                MatchingUtils.structuredWorkMode(myNode),
+                MatchingUtils.structuredEmploymentType(myNode)
+        );
     }
 
     private List<MeshMatchResult> toMeshResults(List<SearchResultItem> items) {
@@ -144,15 +181,26 @@ public class MatchesService {
         if (breakdown == null) {
             return null;
         }
+        List<String> commonItems = new java.util.ArrayList<>();
+        if (breakdown.matchedMustHaveSkills() != null) {
+            commonItems.addAll(breakdown.matchedMustHaveSkills());
+        }
+        if (breakdown.matchedNiceToHaveSkills() != null) {
+            for (String skill : breakdown.matchedNiceToHaveSkills()) {
+                if (!commonItems.contains(skill)) {
+                    commonItems.add(skill);
+                }
+            }
+        }
         return new MeshMatchResult.MeshMatchBreakdown(
                 breakdown.embeddingScore(),
                 breakdown.mustHaveSkillCoverage(),
-                0.0,
+                breakdown.geographyScore(),
                 breakdown.finalScore(),
                 1.0,
                 breakdown.finalScore(),
-                breakdown.matchedMustHaveSkills(),
-                null
+                commonItems,
+                breakdown.geographyReason()
         );
     }
 }

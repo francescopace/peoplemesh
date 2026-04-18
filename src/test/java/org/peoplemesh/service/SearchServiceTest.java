@@ -215,6 +215,36 @@ class SearchServiceTest {
     }
 
     @Test
+    void search_withMatchContext_populatesGeographyBreakdown() throws Exception {
+        when(consentService.hasActiveConsent(userId, "professional_matching")).thenReturn(true);
+        when(embeddingService.generateEmbedding(anyString())).thenReturn(new float[]{0.5f, 0.5f});
+
+        UUID nodeId = UUID.randomUUID();
+        Object[] userRow = new Object[]{
+                nodeId, "USER", "Alice Engineer", "Backend Developer",
+                new String[]{"Java"}, "IT",
+                Timestamp.from(Instant.now()),
+                "{\"work_mode\":\"REMOTE\"}",
+                0.85
+        };
+        when(objectMapper.readValue(
+                eq((String) userRow[7]),
+                org.mockito.ArgumentMatchers.<com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>>any()))
+                .thenReturn(new LinkedHashMap<>(Map.of("work_mode", "REMOTE")));
+        when(searchRepository.unifiedVectorSearch(any(float[].class), eq(userId),
+                any(), any(), anyInt())).thenReturn(rowList(userRow));
+
+        SearchService.MatchContext context = new SearchService.MatchContext("IT", org.peoplemesh.domain.enums.WorkMode.REMOTE, null);
+        SearchResponse response = searchService.search(
+                userId, "java developer", null, null, null, 10, 0, context);
+
+        assertFalse(response.results().isEmpty());
+        assertNotNull(response.results().get(0).breakdown());
+        assertEquals("remote_friendly", response.results().get(0).breakdown().geographyReason());
+        assertTrue(response.results().get(0).breakdown().geographyScore() > 0);
+    }
+
+    @Test
     void search_withNodeResult_returnsNodeType() {
         when(consentService.hasActiveConsent(userId, "professional_matching")).thenReturn(true);
         when(embeddingService.generateEmbedding(anyString())).thenReturn(new float[]{0.5f});

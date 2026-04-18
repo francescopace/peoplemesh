@@ -126,7 +126,7 @@ Endpoints for finding similar profiles and nodes.
 |--------|------|-------------|
 | POST | `/api/v1/matches/prompt` | Natural-language search |
 | POST | `/api/v1/matches` | Structured match from a `SearchQuery` |
-| GET | `/api/v1/matches/me` | Match from the authenticated user's profile embedding |
+| GET | `/api/v1/matches/me` | Match from a backend-built `SearchQuery` derived from the authenticated user's profile |
 | GET | `/api/v1/matches/{nodeId}` | Match from a node's embedding |
 
 **Access:** `@Authenticated`.
@@ -154,6 +154,8 @@ Response `breakdown` fields per result:
 - `matchedMustHaveSkills` — query-side must-have skills considered matched
 - `matchedNiceToHaveSkills` — query-side nice-to-have skills considered matched
 - `missingMustHaveSkills` — query-side must-have skills not matched
+- `geographyScore` — geography compatibility contribution used in ranking
+- `geographyReason` — human-readable geography reason code (for example `same_country`, `same_continent`, `remote_friendly`)
 
 Query parsing:
 - Preferred: LLM parser (`must_have`, `nice_to_have`, `keywords`, `embedding_text`)
@@ -164,6 +166,7 @@ Country filter behavior:
 - Prompt search derives country hard-filtering from parsed `must_have.location` when a country is clearly mappable to an ISO code.
 - `SearchRequest` for prompt search contains only `query`; country filtering is parser-driven.
 - Structured matches (`POST /api/v1/matches`) accept a direct `SearchQuery` body and reuse prompt-scoring logic for follow-up filtered requests without reparsing via LLM.
+- Prompt and structured matching both include geography scoring in result breakdown.
 - Prompt and schema match endpoints support `limit/offset`; if omitted, server defaults are applied (`limit=20`, `offset=0`).
 - In the current web UI (`search` view):
   - the initial request is `POST /api/v1/matches/prompt?limit=10&offset=0`
@@ -183,17 +186,12 @@ Response shape highlights:
 
 ### My Mesh matching details (`GET /api/v1/matches/me`)
 
-For PEOPLE results in My Mesh, skill overlap now uses the same centralized semantic matcher used by prompt search:
-- semantic skill matching via catalog embeddings (`SemanticSkillMatcher`)
-- exact/fallback term matching (`termsMatch`) as part of the hybrid matching behavior
-
-Candidate skill pool for PEOPLE results includes:
-- Technical skills (`tags`)
-- `tools_and_tech`
-- `skills_soft`
+My Mesh now runs through the same `SearchService` ranking pipeline used by `/api/v1/matches`.
+The backend builds a `SearchQuery` from the authenticated user's profile (roles, skills, tools, soft skills, languages, industries, location) and executes unified search/ranking.
 
 Response shape note:
 - `breakdown.commonItems` contains matched overlap terms used for card highlighting and explanation.
+- `breakdown.geographyReason` and `breakdown.geographyScore` are propagated from unified search breakdown.
 - PEOPLE results include `person` details with contact fields in camelCase:
   - `person.slackHandle`, `person.email`, `person.telegramHandle`, `person.mobilePhone`, `person.linkedinUrl`
 - Input/storage naming can still use snake_case in profile structured data (for example `contacts.linkedin_url` / `linkedin_url`), while match/search API responses use camelCase.

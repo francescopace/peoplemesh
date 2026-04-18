@@ -19,6 +19,7 @@ const RESULT_TYPE_TABS = [
   { id: "INTEREST_GROUP", label: "Groups", icon: "interests" },
 ];
 const SEARCH_PAGE_SIZE = 10;
+const GEO_POSITIVE = new Set(["same_country", "same_continent", "remote_friendly"]);
 
 export async function renderSearch(container) {
   container.dataset.page = "search";
@@ -325,8 +326,13 @@ function renderProfileCard(result) {
   }, "PROFILE"));
   const locationParts = [result.city, result.country].filter(Boolean);
   if (locationParts.length) {
+    const geoReason = result.breakdown?.geographyReason;
+    const positiveGeo = geoReason && GEO_POSITIVE.has(geoReason);
+    const locStyle = positiveGeo
+      ? `background:${colors.bg}; color:${colors.color}; border:1px solid ${colors.border}; padding:0.1rem 0.45rem; border-radius:4px; font-size:0.72rem`
+      : "background:rgba(148,163,184,0.08); color:var(--color-gray-400); border:1px solid rgba(148,163,184,0.2); padding:0.1rem 0.45rem; border-radius:4px; font-size:0.72rem";
     subtitle.appendChild(el("span", { className: "dc-sep" }, "\u00B7"));
-    subtitle.appendChild(el("span", { style: "font-size:0.72rem" }, locationParts.join(", ")));
+    subtitle.appendChild(el("span", { style: locStyle }, locationParts.join(", ")));
   }
   info.appendChild(subtitle);
   avatarWrap.appendChild(info);
@@ -362,6 +368,7 @@ function renderProfileCard(result) {
       }
       row.appendChild(tag);
     });
+    appendGeoTag(row, result.breakdown?.geographyReason, matchStyle);
     tagsArea.appendChild(row);
     card.appendChild(tagsArea);
   }
@@ -412,8 +419,13 @@ function renderNodeCard(result) {
     style: `background:${colors.bg}; color:${colors.color}; border:1px solid ${colors.border}`,
   }, nType.replace("_", " ")));
   if (result.country) {
+    const geoReason = result.breakdown?.geographyReason;
+    const positiveGeo = geoReason && GEO_POSITIVE.has(geoReason);
+    const locStyle = positiveGeo
+      ? `background:${colors.bg}; color:${colors.color}; border:1px solid ${colors.border}; padding:0.1rem 0.45rem; border-radius:4px; font-size:0.72rem`
+      : "background:rgba(148,163,184,0.08); color:var(--color-gray-400); border:1px solid rgba(148,163,184,0.2); padding:0.1rem 0.45rem; border-radius:4px; font-size:0.72rem";
     subtitle.appendChild(el("span", { className: "dc-sep" }, "\u00B7"));
-    subtitle.appendChild(el("span", { style: "font-size:0.72rem" }, result.country));
+    subtitle.appendChild(el("span", { style: locStyle }, result.country));
   }
   info.appendChild(subtitle);
   avatarWrap.appendChild(info);
@@ -438,6 +450,7 @@ function renderNodeCard(result) {
       const isMatch = matchedTerms.some((m) => termsMatch(m, t));
       row.appendChild(el("span", { className: "dc-tag", style: isMatch ? matchStyle : undefined }, t));
     });
+    appendGeoTag(row, result.breakdown?.geographyReason, matchStyle);
     tagsArea.appendChild(row);
     card.appendChild(tagsArea);
   }
@@ -454,5 +467,12 @@ function findSkillLevel(skillLevels, skillName) {
     if (k.toLowerCase() === sLow) return v;
   }
   return 0;
+}
+
+function appendGeoTag(row, geographyReason, style) {
+  if (!geographyReason || !GEO_POSITIVE.has(geographyReason)) {
+    return;
+  }
+  row.appendChild(el("span", { className: "dc-tag", style }, geographyReason.replace(/_/g, " ")));
 }
 

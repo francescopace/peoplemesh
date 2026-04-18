@@ -33,6 +33,7 @@ public class SearchService {
     private static final double W_NICE_TO_HAVE = 0.10;
     private static final double W_LANGUAGE = 0.10;
     private static final double W_INDUSTRY = 0.05;
+    private static final double W_GEOGRAPHY = 0.05;
 
     private static final int VECTOR_POOL_SIZE = 100;
     private static final int DEFAULT_RESULT_LIMIT = 20;
@@ -63,11 +64,11 @@ public class SearchService {
     SemanticSkillMatcher semanticSkillMatcher;
 
     public SearchResponse search(UUID userId, String queryText) {
-        return search(userId, queryText, null, null, null, null, null);
+        return search(userId, queryText, null, null, null, null, null, MatchContext.empty());
     }
 
     public SearchResponse search(UUID userId, String queryText, Integer limit, Integer offset) {
-        return search(userId, queryText, null, null, null, limit, offset);
+        return search(userId, queryText, null, null, null, limit, offset, MatchContext.empty());
     }
 
     public SearchResponse search(
@@ -78,6 +79,26 @@ public class SearchService {
             String requestedCountry,
             Integer limit,
             Integer offset) {
+        return search(
+                userId,
+                queryText,
+                preParsedQuery,
+                requestedType,
+                requestedCountry,
+                limit,
+                offset,
+                MatchContext.empty());
+    }
+
+    public SearchResponse search(
+            UUID userId,
+            String queryText,
+            SearchQuery preParsedQuery,
+            String requestedType,
+            String requestedCountry,
+            Integer limit,
+            Integer offset,
+            MatchContext context) {
         if (!consentService.hasActiveConsent(userId, "professional_matching")) {
             return new SearchResponse(null, Collections.emptyList());
         }
@@ -103,7 +124,9 @@ public class SearchService {
                 : extractCountryFilter(parsedQuery);
         List<RawNodeCandidate> rawCandidates = unifiedVectorSearch(queryEmbedding, userId, parsedQuery, countryFilter);
         SkillLevelContext skillLevelContext = loadSkillLevelsContext(rawCandidates);
-        List<ScoredCandidate> allScored = unifiedScore(rawCandidates, parsedQuery, skillLevelContext.levelsByNodeForScoring());
+        MatchContext effectiveContext = context != null ? context : MatchContext.empty();
+        List<ScoredCandidate> allScored = unifiedScore(
+                rawCandidates, parsedQuery, skillLevelContext.levelsByNodeForScoring(), effectiveContext);
         allScored = rerank(allScored, parsedQuery);
         if (typeFilter.isPresent()) {
             NodeType expectedType = typeFilter.get();
@@ -190,7 +213,8 @@ public class SearchService {
     private List<ScoredCandidate> unifiedScore(
             List<RawNodeCandidate> candidates,
             SearchQuery parsed,
-            Map<UUID, Map<String, Short>> levelCacheByNode) {
+            Map<UUID, Map<String, Short>> levelCacheByNode,
+            MatchContext context) {
         List<String> mustHaveSkills = parsed.mustHave() != null && parsed.mustHave().skills() != null
                 ? parsed.mustHave().skills() : Collections.emptyList();
         List<String> niceToHaveSkills = parsed.niceToHave() != null && parsed.niceToHave().skills() != null
@@ -216,9 +240,9 @@ public class SearchService {
             if (c.nodeType == NodeType.USER) {
                 scored.add(scoreUserNode(c, mustHaveSkills, niceToHaveSkills,
                         mustHaveLanguages, mustHaveIndustries, niceToHaveIndustries,
-                        mustHaveWithLevel, niceToHaveWithLevel, levelCacheByNode.get(c.nodeId), negativeSkills));
+                        mustHaveWithLevel, niceToHaveWithLevel, levelCacheByNode.get(c.nodeId), negativeSkills, context));
             } else {
-                scored.add(scoreGenericNode(c, keywords, mustHaveSkills, niceToHaveSkills, negativeSkills));
+                scored.add(scoreGenericNode(c, keywords, mustHaveSkills, niceToHaveSkills, negativeSkills, context));
             }
         }
 
@@ -233,7 +257,8 @@ public class SearchService {
                                            List<SkillWithLevel> mustHaveWithLevel,
                                            List<SkillWithLevel> niceToHaveWithLevel,
                                            Map<String, Short> cachedLevelsBySkillName,
-                                           List<String> negativeSkills) {
+                                           List<String> negativeSkills,
+                                           MatchContext context) {
         List<String> candidateSkills = c.tags != null ? new ArrayList<>(c.tags) : new ArrayList<>();
         List<String> toolsAndTech = sdListOrEmpty(c.structuredData, "tools_and_tech");
         List<String> softSkills = sdListOrEmpty(c.structuredData, "skills_soft");
@@ -281,18 +306,23 @@ public class SearchService {
         List<String> allIndustries = MatchingUtils.combineLists(mustHaveIndustries, niceToHaveIndustries);
         double industryScore = 0.0;
         if (!allIndustries.isEmpty()) {
-            List<String> candidateIndustries = sdListOrEmpty(c.structuredData, "industries");
+            List<String> candidateIndustries = structuredStringList(c.structuredData, "industries");
             if (!candidateIndustries.isEmpty()) {
                 List<String> matched = MatchingUtils.intersectCaseInsensitive(allIndustries, candidateIndustries);
                 industryScore = (double) matched.size() / allIndustries.size();
             }
         }
+        double geographyScore = GeographyUtils.geographyScore(
+                context.referenceCountry(), c.country, context.referenceWorkMode());
+        String geographyReason = GeographyUtils.geographyReason(
+                context.referenceCountry(), c.country, context.referenceWorkMode());
 
         double rawScore = c.cosineSim * W_EMBEDDING
                 + mustHaveCoverage * W_MUST_HAVE
                 + niceToHaveBonus * W_NICE_TO_HAVE
                 + languageScore * W_LANGUAGE
-                + industryScore * W_INDUSTRY;
+                + industryScore * W_INDUSTRY
+                + geographyScore * W_GEOGRAPHY;
 
         if (!missingMust.isEmpty() && !mustHaveSkills.isEmpty()) {
             double missingRatio = (double) missingMust.size() / mustHaveSkills.size();
@@ -315,6 +345,7 @@ public class SearchService {
         if (!matchedNice.isEmpty()) reasonCodes.add("NICE_TO_HAVE_SKILLS");
         if (languageScore > 0) reasonCodes.add("LANGUAGE_MATCH");
         if (industryScore > 0) reasonCodes.add("INDUSTRY_MATCH");
+        if (geographyScore > 0) reasonCodes.add("LOCATION_COMPATIBLE");
 
         SearchMatchBreakdown breakdown = new SearchMatchBreakdown(
                 StringUtils.round3(c.cosineSim),
@@ -322,11 +353,13 @@ public class SearchService {
                 StringUtils.round3(niceToHaveBonus),
                 StringUtils.round3(languageScore),
                 StringUtils.round3(industryScore),
+                StringUtils.round3(geographyScore),
                 StringUtils.round3(rawScore),
                 matchedMust,
                 matchedNice,
                 missingMust,
-                reasonCodes
+                reasonCodes,
+                geographyReason
         );
 
         return new ScoredCandidate(c, breakdown, rawScore);
@@ -336,7 +369,8 @@ public class SearchService {
                                              List<String> keywords,
                                              List<String> mustHaveSkills,
                                              List<String> niceToHaveSkills,
-                                             List<String> negativeSkills) {
+                                             List<String> negativeSkills,
+                                             MatchContext context) {
         List<String> nodeTags = c.tags != null ? c.tags : Collections.emptyList();
         double skillMatchThreshold = config.search().skillMatchThreshold();
         List<String> matchedMustSemantic = semanticSkillMatcher.matchSkills(mustHaveSkills, nodeTags, skillMatchThreshold).stream()
@@ -369,11 +403,16 @@ public class SearchService {
                 : (double) matchedNice.size() / niceToHaveSkills.size();
         double keywordScore = keywords.isEmpty() ? 0.0
                 : (double) matchedKeywordTerms.size() / keywords.size();
+        double geographyScore = GeographyUtils.geographyScore(
+                context.referenceCountry(), c.country, context.referenceWorkMode());
+        String geographyReason = GeographyUtils.geographyReason(
+                context.referenceCountry(), c.country, context.referenceWorkMode());
 
         double rawScore = c.cosineSim * 0.65
                 + mustHaveCoverage * 0.20
                 + niceToHaveBonus * 0.10
-                + keywordScore * 0.05;
+                + keywordScore * 0.05
+                + geographyScore * W_GEOGRAPHY;
 
         if (!mustHaveSkills.isEmpty() && !missingMust.isEmpty()) {
             double missingRatio = (double) missingMust.size() / mustHaveSkills.size();
@@ -395,18 +434,22 @@ public class SearchService {
         if (!matchedMust.isEmpty()) reasonCodes.add("MUST_HAVE_SKILLS");
         if (!matchedNice.isEmpty()) reasonCodes.add("NICE_TO_HAVE_SKILLS");
         if (!matchedKeywordTerms.isEmpty()) reasonCodes.add("KEYWORD_MATCH");
+        if (geographyScore > 0) reasonCodes.add("LOCATION_COMPATIBLE");
         reasonCodes.add("NODE_" + c.nodeType.name());
 
         SearchMatchBreakdown breakdown = new SearchMatchBreakdown(
                 StringUtils.round3(c.cosineSim),
                 StringUtils.round3(mustHaveCoverage),
                 StringUtils.round3(niceToHaveBonus),
-                0, 0,
+                0,
+                0,
+                StringUtils.round3(geographyScore),
                 StringUtils.round3(rawScore),
                 matchedMust,
                 matchedNice,
                 missingMust,
-                reasonCodes
+                reasonCodes,
+                geographyReason
         );
 
         return new ScoredCandidate(c, breakdown, rawScore);
@@ -546,6 +589,28 @@ public class SearchService {
         return null;
     }
 
+    private List<String> structuredStringList(Map<String, Object> structuredData, String key) {
+        if (structuredData == null) {
+            return Collections.emptyList();
+        }
+        Object raw = structuredData.get(key);
+        if (raw instanceof List<?> list) {
+            return list.stream().map(Object::toString).toList();
+        }
+        if (raw instanceof String str && !str.isBlank()) {
+            String[] split = str.split(",");
+            List<String> out = new ArrayList<>(split.length);
+            for (String token : split) {
+                String trimmed = token != null ? token.trim() : "";
+                if (!trimmed.isEmpty()) {
+                    out.add(trimmed);
+                }
+            }
+            return out;
+        }
+        return Collections.emptyList();
+    }
+
     private SkillLevelContext loadSkillLevelsContext(List<RawNodeCandidate> candidates) {
         if (candidates == null || candidates.isEmpty()) {
             return SkillLevelContext.empty();
@@ -606,5 +671,15 @@ public class SearchService {
             SearchMatchBreakdown breakdown,
             double score
     ) {}
+
+    public record MatchContext(
+            String referenceCountry,
+            WorkMode referenceWorkMode,
+            EmploymentType referenceEmploymentType
+    ) {
+        static MatchContext empty() {
+            return new MatchContext(null, null, null);
+        }
+    }
 
 }

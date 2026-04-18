@@ -1,7 +1,5 @@
 package org.peoplemesh.service;
 
-import static org.peoplemesh.util.StructuredDataUtils.sdListOrEmpty;
-
 import org.peoplemesh.config.AppConfig;
 import org.peoplemesh.domain.dto.*;
 import org.peoplemesh.domain.enums.EmploymentType;
@@ -9,9 +7,7 @@ import org.peoplemesh.domain.enums.NodeType;
 import org.peoplemesh.domain.enums.Seniority;
 import org.peoplemesh.domain.enums.WorkMode;
 
-import org.peoplemesh.domain.model.MeshNode;
 import org.peoplemesh.repository.MeshNodeSearchRepository;
-import org.peoplemesh.repository.NodeRepository;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
@@ -82,9 +78,6 @@ public class MatchingService {
 
     @Inject
     ConsentService consentService;
-
-    @Inject
-    NodeRepository nodeRepository;
 
     @Inject
     SkillLevelResolutionService skillLevelResolutionService;
@@ -219,46 +212,8 @@ public class MatchingService {
     }
 
     /**
-     * Unified match method: returns people + nodes in a single list (uses the caller's published profile).
-     */
-    public List<MeshMatchResult> findAllMatches(UUID userId, String typeFilter, String country) {
-        return findAllMatches(userId, typeFilter, country, null, null);
-    }
-
-    public List<MeshMatchResult> findAllMatches(
-            UUID userId, String typeFilter, String country, Integer limit, Integer offset) {
-        if (!consentService.hasActiveConsent(userId, "professional_matching")) {
-            return Collections.emptyList();
-        }
-        MeshNode myNode = nodeRepository.findPublishedUserNode(userId).orElse(null);
-        if (myNode == null || myNode.embedding == null) {
-            return Collections.emptyList();
-        }
-        List<String> referenceTags = MatchingUtils.combineLists(
-                myNode.tags != null ? myNode.tags : Collections.emptyList(),
-                sdListOrEmpty(myNode.structuredData, "tools_and_tech"));
-        referenceTags = MatchingUtils.combineLists(referenceTags, sdListOrEmpty(myNode.structuredData, "skills_soft"));
-        List<String> nodeReferenceTags = MatchingUtils.combineLists(referenceTags, sdListOrEmpty(myNode.structuredData, "hobbies"));
-        nodeReferenceTags = MatchingUtils.combineLists(nodeReferenceTags, sdListOrEmpty(myNode.structuredData, "sports"));
-        MatchFilters peopleFilters = new MatchFilters(null, null, null, country);
-        return doFindAllMatches(
-                userId,
-                myNode.embedding,
-                referenceTags,
-                nodeReferenceTags,
-                myNode.country,
-                MatchingUtils.structuredWorkMode(myNode),
-                MatchingUtils.structuredEmploymentType(myNode),
-                peopleFilters,
-                typeFilter,
-                country,
-                limit,
-                offset);
-    }
-
-    /**
      * Unified matches using a caller-supplied embedding (e.g. job vector search). Reference tags and
-     * geography fields default to empty / null when not profiling a specific {@link MeshNode}.
+     * geography fields default to empty / null when not profiling a specific user node.
      */
     public List<MeshMatchResult> findAllMatches(
             UUID excludeUserId, float[] embedding,

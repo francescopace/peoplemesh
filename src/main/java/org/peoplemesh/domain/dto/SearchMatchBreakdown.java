@@ -8,9 +8,11 @@ public record SearchMatchBreakdown(
         double niceToHaveBonus,
         double languageScore,
         double industryScore,
+        double geographyScore,
         double finalScore,
         List<String> matchedMustHaveSkills,
         List<String> matchedNiceToHaveSkills,
         List<String> missingMustHaveSkills,
-        List<String> reasonCodes
+        List<String> reasonCodes,
+        String geographyReason
 ) {}

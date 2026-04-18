@@ -265,6 +265,44 @@ describe("search view skill highlighting", () => {
     expect(container.querySelectorAll(".discover-card").length).toBe(11);
   });
 
+  it("shows geography tag when backend provides positive geography reason", async () => {
+    apiMock.post.mockResolvedValue({
+      results: [
+        {
+          id: "u-geo",
+          resultType: "profile",
+          displayName: "Geo User",
+          score: 0.81,
+          city: "Milan",
+          country: "IT",
+          skillsTechnical: ["Java"],
+          toolsAndTech: [],
+          breakdown: {
+            matchedMustHaveSkills: ["Java"],
+            matchedNiceToHaveSkills: [],
+            geographyReason: "same_country",
+            geographyScore: 1,
+          },
+          skill_levels: {},
+        },
+      ],
+    });
+
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    await renderSearch(container);
+
+    const input = container.querySelector(".search-input");
+    const form = container.querySelector("form.search-input-wrap");
+    input.value = "java";
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await flushPromises();
+
+    const geoTag = [...container.querySelectorAll(".dc-tag")]
+      .find((t) => t.textContent.trim() === "same country");
+    expect(geoTag).toBeTruthy();
+  });
+
   it("keeps filter bar visible when a search returns no results", async () => {
     apiMock.post.mockResolvedValue({
       parsedQuery: {

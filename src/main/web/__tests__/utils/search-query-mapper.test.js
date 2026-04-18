@@ -73,12 +73,13 @@ describe("search-query-mapper", () => {
           skillsTechnical: ["Java"],
           toolsAndTech: ["Docker"],
         },
-        breakdown: { commonItems: ["Java"] },
+        breakdown: { commonItems: ["Java"], geographyReason: "same_country", geographyScore: 1 },
       },
     ]);
     expect(adapted.results).toHaveLength(1);
     expect(adapted.results[0].resultType).toBe("profile");
     expect(adapted.results[0].breakdown.matchedMustHaveSkills).toEqual(["Java"]);
+    expect(adapted.results[0].breakdown.geographyReason).toBe("same_country");
   });
 
   it("maps profile tab to PEOPLE type filter", () => {

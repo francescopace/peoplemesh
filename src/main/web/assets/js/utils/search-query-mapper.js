@@ -150,6 +150,8 @@ function mapSingleMatch(item, highlight) {
     matchedMustHaveSkills: matchedMust,
     matchedNiceToHaveSkills: matchedNice,
     missingMustHaveSkills: [],
+    geographyScore: Number(item?.breakdown?.geographyScore || 0),
+    geographyReason: item?.breakdown?.geographyReason || null,
   };
   if (isPeople) {
     return {
