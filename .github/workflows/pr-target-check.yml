@@ -14,6 +14,11 @@ jobs:
     steps:
       - name: Check PR target branch
         run: |
+          if [ "${{ github.actor }}" = "dependabot[bot]" ]; then
+            echo "Dependabot PR detected: skipping target branch restriction."
+            exit 0
+          fi
+
           if [ "${{ github.base_ref }}" = "main" ]; then
             echo "::error::Please target 'develop' for regular contributions."
             echo ""
