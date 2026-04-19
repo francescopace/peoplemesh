@@ -134,19 +134,19 @@ jobs:
           cache: maven
 
       - name: Download JaCoCo unit execution data
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: jacoco-unit-exec
           path: target/jacoco-parts/unit
 
       - name: Download JaCoCo integration execution data
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: jacoco-integration-exec
           path: target/jacoco-parts/integration
 
       - name: Download frontend coverage
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: frontend-lcov
           path: target/frontend-coverage
