@@ -37,7 +37,7 @@ jobs:
 
       - name: Upload JaCoCo unit execution data
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: jacoco-unit-exec
           path: target/jacoco.exec
@@ -45,7 +45,7 @@ jobs:
 
       - name: Upload surefire reports on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: surefire-reports
           path: target/surefire-reports
@@ -75,7 +75,7 @@ jobs:
 
       - name: Upload frontend coverage
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frontend-lcov
           path: src/main/web/coverage/lcov.info
@@ -101,7 +101,7 @@ jobs:
 
       - name: Upload JaCoCo integration execution data
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: jacoco-integration-exec
           path: target/jacoco.exec
@@ -109,7 +109,7 @@ jobs:
 
       - name: Upload failsafe reports on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: failsafe-reports
           path: target/failsafe-reports
@@ -168,7 +168,7 @@ jobs:
 
       - name: Upload JaCoCo report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: jacoco-report
           path: |
