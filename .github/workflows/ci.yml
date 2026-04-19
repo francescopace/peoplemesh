@@ -181,6 +181,7 @@ jobs:
         uses: codecov/codecov-action@v6
         with:
           files: target/site/jacoco/jacoco.xml
+          disable_search: true
           flags: backend
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
@@ -191,6 +192,7 @@ jobs:
         uses: codecov/codecov-action@v6
         with:
           files: target/frontend-coverage/lcov.info
+          disable_search: true
           flags: frontend
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false

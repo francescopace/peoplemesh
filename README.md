@@ -1,8 +1,6 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/francescopace/peoplemesh/ci.yml?branch=main&label=CI&logo=githubactions&logoColor=white&color=2EA043)](https://github.com/francescopace/peoplemesh/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/francescopace/peoplemesh/graph/badge.svg?token=YXGLL6C7LH)](https://codecov.io/gh/francescopace/peoplemesh)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-A435F0.svg)](https://www.gnu.org/licenses/agpl-3.0)
-[![Quarkus](https://img.shields.io/badge/Quarkus-3.33.1-4695EB?logo=quarkus&logoColor=white)](https://quarkus.io/)
-[![Granite](https://img.shields.io/badge/IBM%20Granite-LLM%20%2B%20Embeddings-0F62FE)](https://www.ibm.com/granite)
 [![Docker Hub](https://img.shields.io/badge/Docker%20Hub-frapax%2Fpeoplemesh-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/frapax/peoplemesh)
 
 # PeopleMesh

@@ -19,6 +19,7 @@ import org.peoplemesh.util.IpAllowlistUtils;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -87,6 +88,51 @@ class MaintenanceResourceTest {
     @Test
     void matchesAnyCidr_emptyList_returnsFalse() {
         assertFalse(IpAllowlistUtils.matchesAnyCidr("10.0.0.1", List.of()));
+    }
+
+    @Test
+    void purgeConsentTokens_validKey_returnsResult() {
+        when(config.maintenance()).thenReturn(maintenanceConfig);
+        when(maintenanceConfig.apiKey()).thenReturn(Optional.of("valid-key"));
+        when(maintenanceConfig.allowedCidrs()).thenReturn(Optional.empty());
+        Map<String, Object> result = Map.of("action", "purge-consent-tokens", "purged", 3);
+        when(maintenanceService.purgeConsentTokens()).thenReturn(result);
+
+        Response response = resource.purgeConsentTokens("valid-key");
+
+        assertEquals(200, response.getStatus());
+        assertSame(result, response.getEntity());
+        verify(maintenanceService).purgeConsentTokens();
+    }
+
+    @Test
+    void enforceRetention_validKey_returnsResult() {
+        when(config.maintenance()).thenReturn(maintenanceConfig);
+        when(maintenanceConfig.apiKey()).thenReturn(Optional.of("valid-key"));
+        when(maintenanceConfig.allowedCidrs()).thenReturn(Optional.empty());
+        Map<String, Object> result = Map.of("action", "enforce-retention", "deleted", 5);
+        when(maintenanceService.enforceRetention()).thenReturn(result);
+
+        Response response = resource.enforceRetention("valid-key");
+
+        assertEquals(200, response.getStatus());
+        assertSame(result, response.getEntity());
+        verify(maintenanceService).enforceRetention();
+    }
+
+    @Test
+    void runClustering_validKey_returnsResult() {
+        when(config.maintenance()).thenReturn(maintenanceConfig);
+        when(maintenanceConfig.apiKey()).thenReturn(Optional.of("valid-key"));
+        when(maintenanceConfig.allowedCidrs()).thenReturn(Optional.empty());
+        Map<String, Object> result = Map.of("action", "run-clustering", "status", "completed");
+        when(maintenanceService.runClustering()).thenReturn(result);
+
+        Response response = resource.runClustering("valid-key");
+
+        assertEquals(200, response.getStatus());
+        assertSame(result, response.getEntity());
+        verify(maintenanceService).runClustering();
     }
 
     @Test
