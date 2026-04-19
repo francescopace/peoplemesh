@@ -6,9 +6,15 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.peoplemesh.domain.dto.MeshMatchResult;
+import org.peoplemesh.domain.dto.SearchMatchBreakdown;
 import org.peoplemesh.domain.dto.SearchQuery;
 import org.peoplemesh.domain.dto.SearchRequest;
+import org.peoplemesh.domain.dto.SearchResultItem;
 import org.peoplemesh.domain.dto.SearchResponse;
+import org.peoplemesh.domain.enums.EmploymentType;
+import org.peoplemesh.domain.enums.NodeType;
+import org.peoplemesh.domain.enums.Seniority;
+import org.peoplemesh.domain.enums.WorkMode;
 import org.peoplemesh.domain.exception.ForbiddenBusinessException;
 import org.peoplemesh.domain.exception.NotFoundBusinessException;
 import org.peoplemesh.domain.model.MeshNode;
@@ -19,7 +25,9 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -155,5 +163,107 @@ class MatchesServiceTest {
 
         assertEquals(expected, result);
         verify(matchingService).findAllMatches(userId, node.embedding, "PEOPLE", "IT");
+    }
+
+    @Test
+    void matchFromSchema_withKeywordOnlyQuery_usesJoinedKeywords() {
+        UUID userId = UUID.randomUUID();
+        SearchQuery parsedQuery = new SearchQuery(
+                null, null, "unknown", null, List.of("java", "spring"), null, "people");
+        when(nodeRepository.findPublishedUserNode(userId)).thenReturn(Optional.empty());
+        when(searchService.search(userId, "java spring", parsedQuery, "PEOPLE", null, 5, 0,
+                SearchService.MatchContext.empty()))
+                .thenReturn(new SearchResponse(parsedQuery, List.of()));
+
+        List<MeshMatchResult> out = service.matchFromSchema(userId, parsedQuery, "PEOPLE", null, 5, 0);
+
+        assertTrue(out.isEmpty());
+        verify(searchService).search(userId, "java spring", parsedQuery, "PEOPLE", null, 5, 0,
+                SearchService.MatchContext.empty());
+    }
+
+    @Test
+    void matchFromSchema_withEmptyTextAndKeywords_usesFallbackSearchText() {
+        UUID userId = UUID.randomUUID();
+        SearchQuery parsedQuery = new SearchQuery(
+                null, null, "unknown", null, List.of(), "   ", "people");
+        when(nodeRepository.findPublishedUserNode(userId)).thenReturn(Optional.empty());
+        when(searchService.search(userId, "search", parsedQuery, null, null, null, null,
+                SearchService.MatchContext.empty()))
+                .thenReturn(new SearchResponse(parsedQuery, List.of()));
+
+        List<MeshMatchResult> out = service.matchFromSchema(userId, parsedQuery, null, null, null, null);
+
+        assertTrue(out.isEmpty());
+        verify(searchService).search(userId, "search", parsedQuery, null, null, null, null,
+                SearchService.MatchContext.empty());
+    }
+
+    @Test
+    void matchFromSchema_mapsProfileAndNodeItemsIntoMeshResults() {
+        UUID userId = UUID.randomUUID();
+        SearchQuery parsedQuery = new SearchQuery(
+                null, null, "unknown", null, List.of("java"), "java", "all");
+        SearchMatchBreakdown profileBreakdown = new SearchMatchBreakdown(
+                0.91, 0.5, 0.2, 0.0, 0.0, 1.0, 0.87,
+                List.of("Java", "SQL"),
+                List.of("SQL", "Kubernetes"),
+                List.of(),
+                List.of("SEMANTIC_SIMILARITY"),
+                "same_country"
+        );
+        SearchResultItem profile = SearchResultItem.profile(
+                UUID.randomUUID(),
+                0.87,
+                "Alice",
+                "https://avatar",
+                List.of("Engineer"),
+                Seniority.MID,
+                List.of("Java", "SQL"),
+                List.of("Docker"),
+                List.of("EN"),
+                "IT",
+                "Milan",
+                WorkMode.REMOTE,
+                EmploymentType.EMPLOYED,
+                "@alice",
+                "alice@example.com",
+                "@alice_tg",
+                "555",
+                "https://linkedin",
+                profileBreakdown,
+                null
+        );
+        SearchResultItem node = SearchResultItem.node(
+                UUID.randomUUID(),
+                0.55,
+                NodeType.JOB,
+                "Backend Engineer",
+                "Role description",
+                List.of("java", "backend"),
+                "IT",
+                null
+        );
+        SearchResponse response = new SearchResponse(parsedQuery, List.of(profile, node));
+
+        when(nodeRepository.findPublishedUserNode(userId)).thenReturn(Optional.empty());
+        when(searchService.search(userId, "java", parsedQuery, null, null, null, null,
+                SearchService.MatchContext.empty())).thenReturn(response);
+
+        List<MeshMatchResult> out = service.matchFromSchema(userId, parsedQuery, null, null, null, null);
+
+        assertEquals(2, out.size());
+        MeshMatchResult people = out.get(0);
+        assertEquals("PEOPLE", people.nodeType());
+        assertEquals("Alice", people.title());
+        assertEquals(List.of("Java", "SQL", "Kubernetes"), people.breakdown().commonItems());
+        assertEquals("same_country", people.breakdown().geographyReason());
+        assertEquals("MID", people.person().seniority());
+
+        MeshMatchResult job = out.get(1);
+        assertEquals("JOB", job.nodeType());
+        assertEquals("Backend Engineer", job.title());
+        assertNull(job.person());
+        assertNull(job.breakdown());
     }
 }

@@ -347,6 +347,7 @@ class OAuthTokenExchangeServiceTest {
             @Override public EntitlementsConfig entitlements() { return null; }
             @Override public SkillsConfig skills() { return null; }
             @Override public LdapConfig ldap() { return null; }
+            @Override public FrontendConfig frontend() { return null; }
         };
     }
 

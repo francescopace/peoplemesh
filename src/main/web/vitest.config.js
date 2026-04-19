@@ -5,5 +5,10 @@ export default defineConfig({
     environment: "jsdom",
     include: ["__tests__/**/*.test.js"],
     globals: true,
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "lcov"],
+      reportsDirectory: "coverage",
+    },
   },
 });

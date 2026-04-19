@@ -96,6 +96,7 @@ Dev model defaults are configured in `application-dev.properties`:
 | `peoplemesh.consent-token.secret` | — | HMAC signing key for consent tokens |
 | `peoplemesh.session.secret` | — | HMAC signing key for session cookies |
 | `peoplemesh.oauth.state-secret` | — | HMAC signing key for OAuth state values |
+| `peoplemesh.frontend.enabled` | `false` | Enable serving static frontend resources from backend |
 
 ## Persistence and Database Tuning
 

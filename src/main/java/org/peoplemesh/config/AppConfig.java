@@ -21,6 +21,7 @@ public interface AppConfig {
     EntitlementsConfig entitlements();
     SkillsConfig skills();
     LdapConfig ldap();
+    FrontendConfig frontend();
 
     interface ProblemsConfig {
         @WithDefault("about:blank")
@@ -145,6 +146,11 @@ public interface AppConfig {
         double skillMatchThreshold();
 
         java.util.Optional<String> queryPrefix();
+    }
+
+    interface FrontendConfig {
+        @WithDefault("false")
+        boolean enabled();
     }
 
 }

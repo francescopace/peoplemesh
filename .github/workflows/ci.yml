@@ -1,0 +1,272 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [develop]
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend-unit-tests:
+    name: Backend Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Run unit tests
+        run: make test-backend
+
+      - name: Upload JaCoCo unit execution data
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-unit-exec
+          path: target/jacoco.exec
+          if-no-files-found: warn
+
+      - name: Upload surefire reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: target/surefire-reports
+          if-no-files-found: ignore
+
+  frontend-unit-tests:
+    name: Frontend Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: src/main/web/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: src/main/web
+        run: npm ci
+
+      - name: Run frontend tests with coverage
+        working-directory: src/main/web
+        run: npm run test:coverage
+
+      - name: Upload frontend coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-lcov
+          path: src/main/web/coverage/lcov.info
+          if-no-files-found: warn
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [backend-unit-tests, frontend-unit-tests]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Run integration tests
+        run: make test-integration
+
+      - name: Upload JaCoCo integration execution data
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-integration-exec
+          path: target/jacoco.exec
+          if-no-files-found: warn
+
+      - name: Upload failsafe reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failsafe-reports
+          path: target/failsafe-reports
+          if-no-files-found: ignore
+
+  code-coverage:
+    name: Backend Coverage
+    runs-on: ubuntu-latest
+    needs:
+      - backend-unit-tests
+      - frontend-unit-tests
+      - integration-tests
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Download JaCoCo unit execution data
+        uses: actions/download-artifact@v4
+        with:
+          name: jacoco-unit-exec
+          path: target/jacoco-parts/unit
+
+      - name: Download JaCoCo integration execution data
+        uses: actions/download-artifact@v4
+        with:
+          name: jacoco-integration-exec
+          path: target/jacoco-parts/integration
+
+      - name: Download frontend coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-lcov
+          path: target/frontend-coverage
+
+      - name: Merge JaCoCo execution data
+        run: |
+          mvn --batch-mode --no-transfer-progress \
+            org.apache.maven.plugins:maven-dependency-plugin:3.8.1:get \
+            -Dartifact=org.jacoco:org.jacoco.cli:0.8.12:jar:nodeps
+          java -jar "$HOME/.m2/repository/org/jacoco/org.jacoco.cli/0.8.12/org.jacoco.cli-0.8.12-nodeps.jar" merge \
+            target/jacoco-parts/unit/jacoco.exec \
+            target/jacoco-parts/integration/jacoco.exec \
+            --destfile target/jacoco.exec
+
+      - name: Generate coverage report and enforce threshold
+        run: |
+          mvn --batch-mode --no-transfer-progress -DskipTests=true compile
+          mvn --batch-mode --no-transfer-progress -DskipTests=true jacoco:report@report jacoco:check@check
+
+      - name: Upload JaCoCo report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: |
+            target/site/jacoco
+            target/jacoco.exec
+          if-no-files-found: ignore
+
+      - name: Upload coverage to Codecov
+        if: hashFiles('target/site/jacoco/jacoco.xml') != ''
+        uses: codecov/codecov-action@v5
+        with:
+          files: target/site/jacoco/jacoco.xml
+          flags: backend
+          fail_ci_if_error: false
+          verbose: true
+
+      - name: Upload frontend coverage to Codecov
+        if: hashFiles('target/frontend-coverage/lcov.info') != ''
+        uses: codecov/codecov-action@v5
+        with:
+          files: target/frontend-coverage/lcov.info
+          flags: frontend
+          fail_ci_if_error: false
+          verbose: true
+
+      - name: Publish coverage summary
+        if: always()
+        run: |
+          if [ -f target/site/jacoco/jacoco.csv ]; then
+            awk -F',' 'NR>1 {missed+=$8; covered+=$9} END { \
+              total=missed+covered; \
+              pct=(total>0)?(covered*100/total):0; \
+              printf "## Coverage\n\n- Line coverage: %.2f%% (%d/%d)\n", pct, covered, total \
+            }' target/site/jacoco/jacoco.csv >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "## Coverage" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "- JaCoCo CSV report not found." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  publish-dockerhub-image:
+    name: Publish Docker Hub Image
+    runs-on: ubuntu-latest
+    needs:
+      - backend-unit-tests
+      - frontend-unit-tests
+      - integration-tests
+      - code-coverage
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Generate TLS certs for Quarkus build
+        run: |
+          mkdir -p .certs
+          openssl req -x509 -newkey rsa:2048 -sha256 -days 1 -nodes \
+            -keyout .certs/privkey.pem \
+            -out .certs/fullchain.pem \
+            -subj "/CN=localhost"
+
+      - name: Compute image tags
+        id: image
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+        run: |
+          if [ -z "${DOCKERHUB_USERNAME}" ]; then
+            echo "DOCKERHUB_USERNAME secret is required"
+            exit 1
+          fi
+          image_repo="${DOCKERHUB_USERNAME}/peoplemesh"
+          image_sha="${image_repo}:sha-${GITHUB_SHA::12}"
+          image_main="${image_repo}:main"
+          echo "repo=${image_repo}" >> "$GITHUB_OUTPUT"
+          echo "sha=${image_sha}" >> "$GITHUB_OUTPUT"
+          echo "main=${image_main}" >> "$GITHUB_OUTPUT"
+
+      - name: Build JVM image
+        env:
+          IMAGE_NAME: ${{ steps.image.outputs.sha }}
+        run: make image
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Tag image for main
+        run: docker tag "${{ steps.image.outputs.sha }}" "${{ steps.image.outputs.main }}"
+
+      - name: Push image tags
+        run: |
+          docker push "${{ steps.image.outputs.sha }}"
+          docker push "${{ steps.image.outputs.main }}"

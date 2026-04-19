@@ -1,18 +1,22 @@
+[![CI](https://img.shields.io/github/actions/workflow/status/francescopace/peoplemesh/ci.yml?branch=develop&label=CI&logo=githubactions&logoColor=white&color=2EA043)](https://github.com/francescopace/peoplemesh/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/codecov/c/github/francescopace/peoplemesh?branch=develop&label=Coverage&logo=codecov&logoColor=white&color=F27A1A)](https://codecov.io/gh/francescopace/peoplemesh)
+[![Nightly Build](https://img.shields.io/github/actions/workflow/status/francescopace/peoplemesh/nightly-build.yml?branch=main&label=Nightly&logo=githubactions&logoColor=white&color=6F42C1)](https://github.com/francescopace/peoplemesh/actions/workflows/nightly-build.yml)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-A435F0.svg)](https://www.gnu.org/licenses/agpl-3.0)
+[![Quarkus](https://img.shields.io/badge/Quarkus-3.33.1-4695EB?logo=quarkus&logoColor=white)](https://quarkus.io/)
+[![Granite](https://img.shields.io/badge/IBM%20Granite-LLM%20%2B%20Embeddings-0F62FE)](https://www.ibm.com/granite)
+[![Docker Hub](https://img.shields.io/badge/Docker%20Hub-frapax%2Fpeoplemesh-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/frapax/peoplemesh)
+
 # PeopleMesh
 
 *The right match in your mesh.*
 
-PeopleMesh is the AI-powered matching layer for modern organizations. We help people discover the right colleagues, internal opportunities, communities, and projects through semantic search that understands context, not just keywords.
+PeopleMesh is the AI-powered matching layer for modern organizations. It helps people discover the right colleagues, internal opportunities, communities, and projects through semantic search that understands context, not just keywords.
 
 By combining embeddings with metadata-based ranking, PeopleMesh surfaces high-signal matches faster, cuts through noise, and improves internal mobility and collaboration.
 
 Built privacy-first, PeopleMesh includes granular consent controls, configurable retention, and GDPR-aligned data rights workflows. Available via web app, API, and MCP integrations for AI assistants.
 
 Open-source at the core. Enterprise-ready in practice. Never built on personal data monetization.
-
-> Website: [peoplemesh.org](https://peoplemesh.org)
->
-> **Status:** MVP — under active development, not production-ready.
 
 ## Why PeopleMesh
 
@@ -94,5 +98,6 @@ PeopleMesh is open-source first. See [BUSINESS_MODEL.md](BUSINESS_MODEL.md) for 
 
 ## Author
 
-- Author: Francesco Pace
+- Author: [Francesco Pace](mailto:francesco.pace@peoplemesh.org)
 - Website: [peoplemesh.org](https://peoplemesh.org)
+- Repo: [github.com/francescopace/peoplemesh](https://github.com/francescopace/peoplemesh)

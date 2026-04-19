@@ -56,15 +56,15 @@ PeopleMesh uses a transparent dual approach: open-source adoption plus paid ente
 
 ---
 
-## What We Monetize vs. What We Do Not
+## What PeopleMesh Monetizes vs. What It Does Not
 
-### We monetize
+### PeopleMesh monetizes
 
 - Enterprise reliability, compliance, operations, and support
 - Advanced capabilities required at scale
 - Commercial terms for organizations with specific legal requirements
 
-### We do not monetize
+### PeopleMesh does not monetize
 
 - Selling personal employee data
 - Pay-for-visibility ranking that undermines relevance

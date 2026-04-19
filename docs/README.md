@@ -13,6 +13,7 @@ This is the canonical index for technical documentation under `docs/`.
 ## Common Tasks
 
 - Build and run the container: [`how-to/build-and-run-container.md`](how-to/build-and-run-container.md)
+- Run full stack with Docker Compose: [`how-to/run-compose-stack.md`](how-to/run-compose-stack.md)
 - Configure OIDC: [`how-to/configure-oidc.md`](how-to/configure-oidc.md)
 - Configure LDAP import: [`how-to/configure-ldap-import.md`](how-to/configure-ldap-import.md)
 - Import skills CSV (Skills Base/ESCO): [`how-to/import-skill-catalog-csv.md`](how-to/import-skill-catalog-csv.md)

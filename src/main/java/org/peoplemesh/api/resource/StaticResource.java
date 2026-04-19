@@ -1,7 +1,7 @@
 package org.peoplemesh.api.resource;
 
-import io.quarkus.arc.profile.IfBuildProfile;
 import io.smallrye.common.annotation.Blocking;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import jakarta.annotation.Priority;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
@@ -16,7 +16,6 @@ import java.nio.file.Paths;
 
 @Path("/")
 @Priority(Priorities.USER + 1000)
-@IfBuildProfile("dev")
 @Blocking
 public class StaticResource {
 
@@ -24,9 +23,15 @@ public class StaticResource {
 
     private static final java.nio.file.Path BASE_DIR = Paths.get(FRONTEND_DIR).toAbsolutePath().normalize();
 
+    @ConfigProperty(name = "peoplemesh.frontend.enabled", defaultValue = "false")
+    boolean staticFrontendEnabled;
+
     @GET
     @Path("{path: .*}")
     public Response serveFile(@PathParam("path") String path) throws IOException {
+        if (!staticFrontendEnabled) {
+            return Response.status(Response.Status.NOT_FOUND).build();
+        }
         if (path.isEmpty() || path.equals("/")) {
             path = "index.html";
         } else if (path.startsWith("/")) {
