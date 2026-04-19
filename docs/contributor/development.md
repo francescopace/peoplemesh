@@ -65,5 +65,22 @@ src/main/web/
 - Avoid cosmetic DTOs and trivial dedicated mappers; see architecture policy for details.
 - Keep API errors centralized in `api/error`.
 - Follow the full architecture guardrails in [`architecture.md`](architecture.md).
-- For AI-assisted refactors, use [`refactor-prompt.md`](refactor-prompt.md) as baseline prompt.
+- For AI-assisted refactors, use:
+  - Frontend baseline prompt: [`../../tools/prompts/refactor-frontend-prompt.md`](../../tools/prompts/refactor-frontend-prompt.md)
+  - Backend baseline prompt: [`../../tools/prompts/refactor-backend-prompt.md`](../../tools/prompts/refactor-backend-prompt.md)
 - For licensing details, review [`../../CLA.md`](../../CLA.md).
+
+## AI-assisted refactor workflow
+
+1. Choose one bounded feature slice and avoid broad rewrites.
+2. Start from the matching baseline prompt and adapt scope to touched files.
+3. Preserve external contracts (routes, API payload shape, and behavior) unless explicitly requested.
+4. Keep architecture boundaries intact:
+   - Frontend flow: `views/components -> services -> api`
+   - Backend flow: `api/resource -> service -> repository` and `mcp -> service -> repository`
+5. Run relevant tests before and after changes.
+6. Publish outcomes with this checklist:
+   - Key problems found (by impact)
+   - Files changed and rationale
+   - Tests executed
+   - Residual risks and trade-offs

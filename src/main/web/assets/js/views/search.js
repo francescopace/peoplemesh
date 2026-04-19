@@ -4,8 +4,7 @@ import { contactFooter } from "../contact-actions.js";
 import { termsMatch } from "../utils/term-matching.js";
 import { getUserFacingErrorMessage } from "../utils/errors.js";
 import {
-  fetchPromptMatches,
-  fetchStructuredMatches,
+  fetchSearchResultsPage,
 } from "../services/matches-service.js";
 import {
   GEO_POSITIVE,
@@ -13,7 +12,6 @@ import {
   matchedTagStyle,
 } from "../utils/match-visuals.js";
 import {
-  adaptMatchesToSearchResponse,
   inferAutoTypeFromParsedQuery,
   toMatchesTypeFilter,
 } from "../utils/search-query-mapper.js";
@@ -118,34 +116,24 @@ export async function renderSearch(container) {
 
     try {
       const t0 = performance.now();
-      let pageResults = [];
-
-      if (mode === "matches") {
-        const typeParam = toMatchesTypeFilter(activeTypeFilter);
-        const matches = await fetchStructuredMatches({
-          schema: lastParsedQuery || {},
-          type: typeParam,
-          country: countrySelect.value,
-          limit: SEARCH_PAGE_SIZE,
-          offset: currentOffset,
-        });
-        const adapted = adaptMatchesToSearchResponse(matches, lastParsedQuery);
-        pageResults = adapted.results || [];
-      } else {
-        const data = await fetchPromptMatches({
-          queryText: lastQueryText,
-          limit: SEARCH_PAGE_SIZE,
-          offset: currentOffset,
-        });
-        pageResults = data.results || [];
-        if (!lastParsedQuery && data.parsedQuery) {
-          lastParsedQuery = data.parsedQuery;
-          const autoType = inferAutoTypeFromParsedQuery(lastParsedQuery);
-          if (autoType && RESULT_TYPE_TABS.some((t) => t.id === autoType)) {
-            activeTypeFilter = autoType;
-            typeTabs.querySelectorAll(".explore-type-tab").forEach((t) =>
-              t.classList.toggle("active", t.dataset.type === activeTypeFilter));
-          }
+      const typeParam = toMatchesTypeFilter(activeTypeFilter);
+      const page = await fetchSearchResultsPage({
+        mode,
+        queryText: lastQueryText,
+        parsedQuery: lastParsedQuery,
+        type: typeParam,
+        country: countrySelect.value,
+        limit: SEARCH_PAGE_SIZE,
+        offset: currentOffset,
+      });
+      const pageResults = page.results || [];
+      if (!lastParsedQuery && page.parsedQuery) {
+        lastParsedQuery = page.parsedQuery;
+        const autoType = inferAutoTypeFromParsedQuery(lastParsedQuery);
+        if (autoType && RESULT_TYPE_TABS.some((t) => t.id === autoType)) {
+          activeTypeFilter = autoType;
+          typeTabs.querySelectorAll(".explore-type-tab").forEach((t) =>
+            t.classList.toggle("active", t.dataset.type === activeTypeFilter));
         }
       }
 
