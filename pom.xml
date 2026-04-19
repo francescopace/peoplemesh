@@ -16,8 +16,7 @@
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
         <quarkus.platform.version>3.33.1</quarkus.platform.version>
-        <quarkus-mcp-server.version>1.11.0</quarkus-mcp-server.version>
-        <quarkus-amazon-services.version>3.15.1</quarkus-amazon-services.version>
+        <quarkus-mcp-server.version>1.11.1</quarkus-mcp-server.version>
         <pgvector.version>0.1.6</pgvector.version>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <compiler-plugin.version>3.15.0</compiler-plugin.version>
@@ -39,13 +38,6 @@
                 <groupId>io.quarkiverse.mcp</groupId>
                 <artifactId>quarkus-mcp-server-bom</artifactId>
                 <version>${quarkus-mcp-server.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-            <dependency>
-                <groupId>io.quarkiverse.amazonservices</groupId>
-                <artifactId>quarkus-amazon-services-bom</artifactId>
-                <version>${quarkus-amazon-services.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -235,7 +227,7 @@
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.8.12</version>
+                <version>0.8.14</version>
                 <configuration>
                     <excludes>
                         <!-- Infrastructure-bound: LDAP SDK, real LDAP server required -->
