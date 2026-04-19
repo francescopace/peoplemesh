@@ -182,6 +182,7 @@ jobs:
         with:
           files: target/site/jacoco/jacoco.xml
           flags: backend
+          token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
           verbose: true
 
@@ -191,6 +192,7 @@ jobs:
         with:
           files: target/frontend-coverage/lcov.info
           flags: frontend
+          token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
           verbose: true
 
