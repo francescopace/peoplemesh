@@ -15,7 +15,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
-        <quarkus.platform.version>3.33.1</quarkus.platform.version>
+        <quarkus.platform.version>3.34.5</quarkus.platform.version>
         <quarkus-mcp-server.version>1.11.1</quarkus-mcp-server.version>
         <pgvector.version>0.1.6</pgvector.version>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
