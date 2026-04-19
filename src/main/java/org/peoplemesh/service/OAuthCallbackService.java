@@ -4,14 +4,15 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.peoplemesh.config.AppConfig;
+import org.peoplemesh.domain.dto.GitHubEnrichedResult;
+import org.peoplemesh.domain.dto.OidcSubject;
 import org.peoplemesh.domain.dto.ProfileSchema;
 import org.peoplemesh.domain.enums.NodeType;
 import org.peoplemesh.domain.model.MeshNode;
 import org.peoplemesh.domain.model.UserIdentity;
 import org.peoplemesh.repository.NodeRepository;
 import org.peoplemesh.repository.UserIdentityRepository;
-import org.peoplemesh.service.OAuthTokenExchangeService.GitHubEnrichedResult;
-import org.peoplemesh.service.OAuthTokenExchangeService.OidcSubject;
+import org.peoplemesh.util.OAuthProfileParser;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -46,19 +47,22 @@ public class OAuthCallbackService {
     public LoginResult handleLogin(String provider, OidcSubject subject) {
         String email = normalizeEmail(subject.email());
 
-        UserIdentity existingIdentity = findIdentityByOauth(provider, subject.subject()).orElse(null);
+        Optional<UserIdentity> existingIdentityOpt = findIdentityByOauth(provider, subject.subject());
+        UserIdentity existingIdentity = existingIdentityOpt.isPresent() ? existingIdentityOpt.get() : null;
         MeshNode userNode;
         boolean isNewUser;
 
         if (existingIdentity != null) {
-            userNode = findNodeById(existingIdentity.nodeId).orElse(null);
+            Optional<MeshNode> existingNodeOpt = findNodeById(existingIdentity.nodeId);
+            userNode = existingNodeOpt.isPresent() ? existingNodeOpt.get() : null;
             if (userNode == null) {
                 userNode = createUserNode(email);
                 existingIdentity.nodeId = userNode.id;
             }
             isNewUser = false;
         } else {
-            userNode = (email != null) ? findUserNodeByExternalId(email).orElse(null) : null;
+            Optional<MeshNode> byEmailOpt = (email != null) ? findUserNodeByExternalId(email) : Optional.empty();
+            userNode = byEmailOpt.isPresent() ? byEmailOpt.get() : null;
             isNewUser = userNode == null;
             if (isNewUser) {
                 userNode = createUserNode(email);

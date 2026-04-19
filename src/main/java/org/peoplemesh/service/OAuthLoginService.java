@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
+import org.peoplemesh.domain.dto.OidcSubject;
 import org.peoplemesh.domain.dto.ProfileSchema;
 import org.peoplemesh.util.OAuthHtmlRenderer;
 
@@ -96,7 +97,7 @@ public class OAuthLoginService {
             return handleImportCallback(provider, code, callbackUri, origin);
         }
 
-        OAuthTokenExchangeService.OidcSubject subject;
+        OidcSubject subject;
         try {
             subject = tokenExchangeService.exchangeAndResolveSubject(provider, code, callbackUri);
         } catch (Exception e) {

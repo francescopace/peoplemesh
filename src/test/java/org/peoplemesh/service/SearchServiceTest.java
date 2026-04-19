@@ -10,6 +10,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.peoplemesh.config.AppConfig;
 import org.peoplemesh.domain.dto.SearchQuery;
 import org.peoplemesh.domain.dto.SearchResponse;
+import org.peoplemesh.util.MatchingUtils;
 
 import java.lang.reflect.Field;
 import java.sql.Timestamp;
@@ -35,6 +36,8 @@ class SearchServiceTest {
 
     @InjectMocks
     SearchService searchService;
+
+    private SearchScoringEngine searchScoringEngine;
 
     private final UUID userId = UUID.randomUUID();
 
@@ -69,6 +72,22 @@ class SearchServiceTest {
         Field parsersField = SearchService.class.getDeclaredField("queryParsers");
         parsersField.setAccessible(true);
         parsersField.set(searchService, Collections.emptyList());
+
+        Field heuristicField = SearchService.class.getDeclaredField("heuristicSearchQueryParser");
+        heuristicField.setAccessible(true);
+        heuristicField.set(searchService, new HeuristicSearchQueryParser());
+
+        searchScoringEngine = new SearchScoringEngine();
+        Field scoringConfigField = SearchScoringEngine.class.getDeclaredField("config");
+        scoringConfigField.setAccessible(true);
+        scoringConfigField.set(searchScoringEngine, config);
+        Field semanticMatcherField = SearchScoringEngine.class.getDeclaredField("semanticSkillMatcher");
+        semanticMatcherField.setAccessible(true);
+        semanticMatcherField.set(searchScoringEngine, semanticSkillMatcher);
+
+        Field scoringEngineField = SearchService.class.getDeclaredField("searchScoringEngine");
+        scoringEngineField.setAccessible(true);
+        scoringEngineField.set(searchService, searchScoringEngine);
     }
 
     @Test
@@ -475,6 +494,40 @@ class SearchServiceTest {
 
         verify(searchRepository).unifiedVectorSearch(any(float[].class), eq(userId),
                 any(), eq(List.of("Italian")), anyInt());
+    }
+
+    @Test
+    void search_invalidRequestedType_returnsEmptyWithoutEmbeddingCall() {
+        when(consentService.hasActiveConsent(userId, "professional_matching")).thenReturn(true);
+
+        SearchResponse response = searchService.search(
+                userId, "java", null, "NOT_A_TYPE", null, null, null);
+
+        assertNotNull(response.parsedQuery());
+        assertTrue(response.results().isEmpty());
+        verifyNoInteractions(embeddingService);
+    }
+
+    @Test
+    void search_withMinScore_filtersOutLowScoreResults() {
+        when(consentService.hasActiveConsent(userId, "professional_matching")).thenReturn(true);
+        when(searchConfig.minScore()).thenReturn(0.8);
+        when(embeddingService.generateEmbedding(anyString())).thenReturn(new float[]{0.5f});
+        SearchQuery parsed = new SearchQuery(null, null, "unknown", null, List.of(), "test", "unknown");
+
+        UUID idHigh = UUID.randomUUID();
+        UUID idLow = UUID.randomUUID();
+        List<Object[]> rows = List.of(
+                new Object[]{idHigh, "USER", "High", "desc", new String[]{}, "US", Timestamp.from(Instant.now()), null, 0.95},
+                new Object[]{idLow, "USER", "Low", "desc", new String[]{}, "US", Timestamp.from(Instant.now()), null, 0.55}
+        );
+        when(searchRepository.unifiedVectorSearch(any(float[].class), eq(userId), any(), any(), anyInt()))
+                .thenReturn(rows);
+
+        SearchResponse response = searchService.search(userId, "test", parsed, null, null, null, null);
+
+        assertEquals(1, response.results().size());
+        assertEquals(idHigh, response.results().get(0).id());
     }
 
     private static List<Object[]> rowList(Object[]... rows) {

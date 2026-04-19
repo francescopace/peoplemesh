@@ -1,6 +1,7 @@
 package org.peoplemesh.api.resource;
 
 import io.quarkus.arc.profile.IfBuildProfile;
+import io.smallrye.common.annotation.Blocking;
 import jakarta.annotation.Priority;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
@@ -16,6 +17,7 @@ import java.nio.file.Paths;
 @Path("/")
 @Priority(Priorities.USER + 1000)
 @IfBuildProfile("dev")
+@Blocking
 public class StaticResource {
 
     private static final String FRONTEND_DIR = "src/main/web";

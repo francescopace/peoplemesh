@@ -1,11 +1,9 @@
-package org.peoplemesh.service;
+package org.peoplemesh.util;
 
 import org.junit.jupiter.api.Test;
 import org.peoplemesh.domain.enums.EmploymentType;
 import org.peoplemesh.domain.enums.WorkMode;
 import org.peoplemesh.domain.model.MeshNode;
-import org.peoplemesh.util.SqlParsingUtils;
-import org.peoplemesh.util.StringUtils;
 
 import java.sql.SQLException;
 import java.time.Instant;

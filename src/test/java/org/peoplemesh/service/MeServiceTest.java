@@ -201,4 +201,28 @@ class MeServiceTest {
         when(consentService.getActiveScopes(userId)).thenReturn(List.of("professional_matching"));
         assertEquals(List.of("professional_matching"), service.getActiveConsentScopes(userId));
     }
+
+    @Test
+    void resolveProfile_upsertsAndReturnsPersistedProfile() {
+        UUID userId = UUID.randomUUID();
+        ProfileSchema updates = mock(ProfileSchema.class);
+        ProfileSchema persisted = mock(ProfileSchema.class);
+        when(profileService.getProfile(userId)).thenReturn(Optional.of(persisted));
+
+        ProfileSchema result = service.resolveProfile(userId, updates);
+
+        verify(profileService).upsertProfile(userId, updates);
+        assertEquals(persisted, result);
+    }
+
+    @Test
+    void getConsentView_containsDefaultScopesAndActiveScopes() {
+        UUID userId = UUID.randomUUID();
+        when(consentService.getActiveScopes(userId)).thenReturn(List.of("professional_matching"));
+
+        Map<String, Object> view = service.getConsentView(userId);
+
+        assertEquals(ConsentService.DEFAULT_CONSENT_SCOPES, view.get("scopes"));
+        assertEquals(List.of("professional_matching"), view.get("active"));
+    }
 }

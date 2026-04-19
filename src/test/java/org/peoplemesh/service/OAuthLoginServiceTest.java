@@ -6,6 +6,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.peoplemesh.domain.dto.OidcSubject;
 import org.peoplemesh.domain.dto.ProfileSchema;
 
 import java.net.URI;
@@ -89,7 +90,7 @@ class OAuthLoginServiceTest {
     @Test
     void callback_successfulLogin_returnsSessionCookie() {
         SessionService.OAuthStatePayload payload = new SessionService.OAuthStatePayload("");
-        OAuthTokenExchangeService.OidcSubject subject = new OAuthTokenExchangeService.OidcSubject(
+        OidcSubject subject = new OidcSubject(
                 "sub", "Name", "Given", "Family", "email@test.com", null, null, null, null, null);
         OAuthCallbackService.LoginResult loginResult = new OAuthCallbackService.LoginResult(UUID.randomUUID(), "Name", false);
 

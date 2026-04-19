@@ -1,15 +1,14 @@
 package org.peoplemesh.service;
 
 import static org.peoplemesh.util.StructuredDataUtils.sdListOrEmpty;
-import static org.peoplemesh.util.StructuredDataUtils.sdStringListOrEmpty;
 import static org.peoplemesh.util.StructuredDataUtils.sdString;
 
 import io.quarkus.arc.All;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import org.peoplemesh.repository.MeshNodeSearchRepository;
 import org.jboss.logging.Logger;
 import org.peoplemesh.config.AppConfig;
+import org.peoplemesh.repository.MeshNodeSearchRepository;
 import org.peoplemesh.util.GeographyUtils;
 import org.peoplemesh.util.SearchMatchingUtils;
 import org.peoplemesh.util.SqlParsingUtils;
@@ -23,26 +22,20 @@ import org.peoplemesh.domain.enums.Seniority;
 import org.peoplemesh.domain.enums.WorkMode;
 import java.time.Instant;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @ApplicationScoped
 public class SearchService {
 
     private static final Logger LOG = Logger.getLogger(SearchService.class);
 
-    private static final double W_EMBEDDING = 0.50;
-    private static final double W_MUST_HAVE = 0.25;
-    private static final double W_NICE_TO_HAVE = 0.10;
-    private static final double W_LANGUAGE = 0.10;
-    private static final double W_INDUSTRY = 0.05;
-    private static final double W_GEOGRAPHY = 0.05;
-
     private static final int VECTOR_POOL_SIZE = 100;
     private static final int DEFAULT_RESULT_LIMIT = 20;
-    private static final HeuristicSearchQueryParser FALLBACK_QUERY_PARSER = new HeuristicSearchQueryParser();
 
     @Inject @All
     List<SearchQueryParser> queryParsers;
+
+    @Inject
+    HeuristicSearchQueryParser heuristicSearchQueryParser;
 
     @Inject
     EmbeddingService embeddingService;
@@ -63,7 +56,7 @@ public class SearchService {
     SkillLevelResolutionService skillLevelResolutionService;
 
     @Inject
-    SemanticSkillMatcher semanticSkillMatcher;
+    SearchScoringEngine searchScoringEngine;
 
     public SearchResponse search(UUID userId, String queryText) {
         return search(userId, queryText, null, null, null, null, null, MatchContext.empty());
@@ -127,9 +120,8 @@ public class SearchService {
         List<RawNodeCandidate> rawCandidates = unifiedVectorSearch(queryEmbedding, userId, parsedQuery, countryFilter);
         SkillLevelContext skillLevelContext = loadSkillLevelsContext(rawCandidates);
         MatchContext effectiveContext = context != null ? context : MatchContext.empty();
-        List<ScoredCandidate> allScored = unifiedScore(
+        List<ScoredCandidate> allScored = searchScoringEngine.scoreAndRank(
                 rawCandidates, parsedQuery, skillLevelContext.levelsByNodeForScoring(), effectiveContext);
-        allScored = rerank(allScored, parsedQuery);
         if (typeFilter.isPresent()) {
             NodeType expectedType = typeFilter.get();
             allScored = allScored.stream()
@@ -151,10 +143,9 @@ public class SearchService {
         if (preParsedQuery != null) {
             return preParsedQuery;
         }
-        SearchQueryParser parser = selectQueryParser().orElse(null);
-        SearchQueryParser effectiveParser = parser != null ? parser : FALLBACK_QUERY_PARSER;
-        return effectiveParser.parse(queryText)
-                .or(() -> FALLBACK_QUERY_PARSER.parse(queryText))
+        SearchQueryParser parser = selectQueryParser().orElse(heuristicSearchQueryParser);
+        return parser.parse(queryText)
+                .or(() -> heuristicSearchQueryParser.parse(queryText))
                 .orElse(new SearchQuery(null, null, "unknown", null, Collections.emptyList(), queryText, "unknown"));
     }
 
@@ -185,6 +176,8 @@ public class SearchService {
 
         List<RawNodeCandidate> candidates = new ArrayList<>();
         for (Object[] row : rows) {
+            // Column mapping follows MeshNodeSearchRepository.unifiedVectorSearch select order:
+            // [0]=id [1]=node_type [2]=title [3]=description [4]=tags [5]=country [6]=updated_at [7]=structured_data [8]=cosine_sim
             String sdRaw = row[7] != null ? row[7].toString() : null;
             Map<String, Object> sd = null;
             NodeType nodeType = SqlParsingUtils.parseEnum(NodeType.class, (String) row[1]);
@@ -208,283 +201,6 @@ public class SearchService {
             ));
         }
         return candidates;
-    }
-
-    // === Unified scoring ===
-
-    private List<ScoredCandidate> unifiedScore(
-            List<RawNodeCandidate> candidates,
-            SearchQuery parsed,
-            Map<UUID, Map<String, Short>> levelCacheByNode,
-            MatchContext context) {
-        List<String> mustHaveSkills = parsed.mustHave() != null && parsed.mustHave().skills() != null
-                ? parsed.mustHave().skills() : Collections.emptyList();
-        List<String> niceToHaveSkills = parsed.niceToHave() != null && parsed.niceToHave().skills() != null
-                ? parsed.niceToHave().skills() : Collections.emptyList();
-        List<String> mustHaveLanguages = parsed.mustHave() != null && parsed.mustHave().languages() != null
-                ? parsed.mustHave().languages() : Collections.emptyList();
-        List<String> mustHaveIndustries = parsed.mustHave() != null && parsed.mustHave().industries() != null
-                ? parsed.mustHave().industries() : Collections.emptyList();
-        List<String> niceToHaveIndustries = parsed.niceToHave() != null && parsed.niceToHave().industries() != null
-                ? parsed.niceToHave().industries() : Collections.emptyList();
-        List<String> keywords = parsed.keywords() != null ? parsed.keywords() : Collections.emptyList();
-        List<String> negativeSkills = parsed.negativeFilters() != null && parsed.negativeFilters().skills() != null
-                ? parsed.negativeFilters().skills() : Collections.emptyList();
-
-        List<SkillWithLevel> mustHaveWithLevel = parsed.mustHave() != null
-                ? parsed.mustHave().skillsWithLevel() : null;
-        List<SkillWithLevel> niceToHaveWithLevel = parsed.niceToHave() != null
-                ? parsed.niceToHave().skillsWithLevel() : null;
-
-        List<ScoredCandidate> scored = new ArrayList<>();
-
-        for (RawNodeCandidate c : candidates) {
-            if (c.nodeType == NodeType.USER) {
-                scored.add(scoreUserNode(c, mustHaveSkills, niceToHaveSkills,
-                        mustHaveLanguages, mustHaveIndustries, niceToHaveIndustries,
-                        mustHaveWithLevel, niceToHaveWithLevel, levelCacheByNode.get(c.nodeId), negativeSkills, context));
-            } else {
-                scored.add(scoreGenericNode(c, keywords, mustHaveSkills, niceToHaveSkills, negativeSkills, context));
-            }
-        }
-
-        scored.sort(Comparator.comparingDouble(ScoredCandidate::score).reversed());
-        return scored;
-    }
-
-    private ScoredCandidate scoreUserNode(RawNodeCandidate c,
-                                           List<String> mustHaveSkills, List<String> niceToHaveSkills,
-                                           List<String> mustHaveLanguages,
-                                           List<String> mustHaveIndustries, List<String> niceToHaveIndustries,
-                                           List<SkillWithLevel> mustHaveWithLevel,
-                                           List<SkillWithLevel> niceToHaveWithLevel,
-                                           Map<String, Short> cachedLevelsBySkillName,
-                                           List<String> negativeSkills,
-                                           MatchContext context) {
-        List<String> candidateSkills = c.tags != null ? new ArrayList<>(c.tags) : new ArrayList<>();
-        List<String> toolsAndTech = sdListOrEmpty(c.structuredData, "tools_and_tech");
-        List<String> softSkills = sdListOrEmpty(c.structuredData, "skills_soft");
-        candidateSkills.addAll(toolsAndTech);
-        candidateSkills.addAll(softSkills);
-        if (cachedLevelsBySkillName != null && !cachedLevelsBySkillName.isEmpty()) {
-            candidateSkills.addAll(cachedLevelsBySkillName.keySet());
-        }
-        candidateSkills = SearchMatchingUtils.deduplicateTerms(candidateSkills);
-
-        double skillMatchThreshold = config.search().skillMatchThreshold();
-        List<String> matchedMust = semanticSkillMatcher.matchSkills(mustHaveSkills, candidateSkills, skillMatchThreshold).stream()
-                .map(SemanticSkillMatcher.SemanticMatch::querySkill)
-                .distinct()
-                .toList();
-        Set<String> matchedMustNormalized = matchedMust.stream()
-                .map(MatchingUtils::normalizeTerm)
-                .collect(Collectors.toSet());
-        List<String> missingMust = mustHaveSkills.stream()
-                .filter(s -> !matchedMustNormalized.contains(MatchingUtils.normalizeTerm(s)))
-                .toList();
-        double mustHaveCoverage = mustHaveSkills.isEmpty() ? 1.0
-                : (double) matchedMust.size() / mustHaveSkills.size();
-
-        if (mustHaveWithLevel != null && !mustHaveWithLevel.isEmpty()) {
-            mustHaveCoverage = MatchingUtils.computeLevelAwareCoverage(mustHaveWithLevel, candidateSkills, cachedLevelsBySkillName);
-        }
-
-        List<String> matchedNice = semanticSkillMatcher.matchSkills(niceToHaveSkills, candidateSkills, skillMatchThreshold).stream()
-                .map(SemanticSkillMatcher.SemanticMatch::querySkill)
-                .distinct()
-                .toList();
-        double niceToHaveBonus = niceToHaveSkills.isEmpty() ? 0.0
-                : (double) matchedNice.size() / niceToHaveSkills.size();
-
-        if (niceToHaveWithLevel != null && !niceToHaveWithLevel.isEmpty()) {
-            double levelBonus = MatchingUtils.computeLevelAwareCoverage(niceToHaveWithLevel, candidateSkills, cachedLevelsBySkillName);
-            niceToHaveBonus = Math.max(niceToHaveBonus, levelBonus);
-        }
-
-        List<String> languagesSpoken = sdListOrEmpty(c.structuredData, "languages_spoken");
-        double languageScore = mustHaveLanguages.isEmpty() ? 1.0
-                : MatchingUtils.intersectCaseInsensitive(mustHaveLanguages, languagesSpoken).isEmpty() ? 0.0 : 1.0;
-
-        List<String> allIndustries = MatchingUtils.combineLists(mustHaveIndustries, niceToHaveIndustries);
-        double industryScore = 0.0;
-        if (!allIndustries.isEmpty()) {
-            List<String> candidateIndustries = sdStringListOrEmpty(c.structuredData, "industries");
-            if (!candidateIndustries.isEmpty()) {
-                List<String> matched = MatchingUtils.intersectCaseInsensitive(allIndustries, candidateIndustries);
-                industryScore = (double) matched.size() / allIndustries.size();
-            }
-        }
-        double geographyScore = GeographyUtils.geographyScore(
-                context.referenceCountry(), c.country, context.referenceWorkMode());
-        String geographyReason = GeographyUtils.geographyReason(
-                context.referenceCountry(), c.country, context.referenceWorkMode());
-
-        double rawScore = c.cosineSim * W_EMBEDDING
-                + mustHaveCoverage * W_MUST_HAVE
-                + niceToHaveBonus * W_NICE_TO_HAVE
-                + languageScore * W_LANGUAGE
-                + industryScore * W_INDUSTRY
-                + geographyScore * W_GEOGRAPHY;
-
-        if (!missingMust.isEmpty() && !mustHaveSkills.isEmpty()) {
-            double missingRatio = (double) missingMust.size() / mustHaveSkills.size();
-            rawScore *= Math.max(0.0, 1.0 - missingRatio * 0.8);
-        }
-        if (!mustHaveSkills.isEmpty() && mustHaveCoverage == 0.0) {
-            // Hard precision gate: if no must-have matches, suppress semantic-only false positives.
-            rawScore = 0.0;
-        }
-
-        List<String> matchedNegative = MatchingUtils.intersectCaseInsensitive(negativeSkills, candidateSkills);
-        if (!matchedNegative.isEmpty() && !negativeSkills.isEmpty()) {
-            double matchedNegativeRatio = (double) matchedNegative.size() / negativeSkills.size();
-            rawScore *= Math.max(0.0, 1.0 - matchedNegativeRatio * 0.8);
-        }
-
-        List<String> reasonCodes = new ArrayList<>();
-        if (c.cosineSim >= 0.65) reasonCodes.add("SEMANTIC_SIMILARITY");
-        if (!matchedMust.isEmpty()) reasonCodes.add("MUST_HAVE_SKILLS");
-        if (!matchedNice.isEmpty()) reasonCodes.add("NICE_TO_HAVE_SKILLS");
-        if (languageScore > 0) reasonCodes.add("LANGUAGE_MATCH");
-        if (industryScore > 0) reasonCodes.add("INDUSTRY_MATCH");
-        if (geographyScore > 0) reasonCodes.add("LOCATION_COMPATIBLE");
-
-        SearchMatchBreakdown breakdown = new SearchMatchBreakdown(
-                StringUtils.round3(c.cosineSim),
-                StringUtils.round3(mustHaveCoverage),
-                StringUtils.round3(niceToHaveBonus),
-                StringUtils.round3(languageScore),
-                StringUtils.round3(industryScore),
-                StringUtils.round3(geographyScore),
-                StringUtils.round3(rawScore),
-                matchedMust,
-                matchedNice,
-                missingMust,
-                reasonCodes,
-                geographyReason
-        );
-
-        return new ScoredCandidate(c, breakdown, rawScore);
-    }
-
-    private ScoredCandidate scoreGenericNode(RawNodeCandidate c,
-                                             List<String> keywords,
-                                             List<String> mustHaveSkills,
-                                             List<String> niceToHaveSkills,
-                                             List<String> negativeSkills,
-                                             MatchContext context) {
-        List<String> nodeTags = c.tags != null ? c.tags : Collections.emptyList();
-        double skillMatchThreshold = config.search().skillMatchThreshold();
-        List<String> matchedMustSemantic = semanticSkillMatcher.matchSkills(mustHaveSkills, nodeTags, skillMatchThreshold).stream()
-                .map(SemanticSkillMatcher.SemanticMatch::querySkill)
-                .distinct()
-                .toList();
-        List<String> matchedNice = semanticSkillMatcher.matchSkills(niceToHaveSkills, nodeTags, skillMatchThreshold).stream()
-                .map(SemanticSkillMatcher.SemanticMatch::querySkill)
-                .distinct()
-                .toList();
-
-        List<String> nodeText = new ArrayList<>(nodeTags);
-        if (c.title != null) nodeText.add(c.title);
-        if (c.description != null) nodeText.add(c.description);
-
-        List<String> matchedKeywordTerms = MatchingUtils.intersectCaseInsensitive(keywords, nodeText);
-        List<String> matchedMustText = MatchingUtils.intersectCaseInsensitive(mustHaveSkills, nodeText);
-        List<String> matchedMust = SearchMatchingUtils.deduplicateTerms(
-                MatchingUtils.combineLists(matchedMustSemantic, matchedMustText));
-        Set<String> matchedMustNormalized = matchedMust.stream()
-                .map(MatchingUtils::normalizeTerm)
-                .collect(Collectors.toSet());
-        List<String> missingMust = mustHaveSkills.stream()
-                .filter(s -> !matchedMustNormalized.contains(MatchingUtils.normalizeTerm(s)))
-                .toList();
-
-        double mustHaveCoverage = mustHaveSkills.isEmpty() ? 1.0
-                : (double) matchedMust.size() / mustHaveSkills.size();
-        double niceToHaveBonus = niceToHaveSkills.isEmpty() ? 0.0
-                : (double) matchedNice.size() / niceToHaveSkills.size();
-        double keywordScore = keywords.isEmpty() ? 0.0
-                : (double) matchedKeywordTerms.size() / keywords.size();
-        double geographyScore = GeographyUtils.geographyScore(
-                context.referenceCountry(), c.country, context.referenceWorkMode());
-        String geographyReason = GeographyUtils.geographyReason(
-                context.referenceCountry(), c.country, context.referenceWorkMode());
-
-        double rawScore = c.cosineSim * 0.65
-                + mustHaveCoverage * 0.20
-                + niceToHaveBonus * 0.10
-                + keywordScore * 0.05
-                + geographyScore * W_GEOGRAPHY;
-
-        if (!mustHaveSkills.isEmpty() && !missingMust.isEmpty()) {
-            double missingRatio = (double) missingMust.size() / mustHaveSkills.size();
-            rawScore *= Math.max(0.0, 1.0 - missingRatio * 0.8);
-        }
-        if (!mustHaveSkills.isEmpty() && mustHaveCoverage == 0.0) {
-            rawScore = 0.0;
-        }
-        if (!negativeSkills.isEmpty()) {
-            List<String> negativeMatches = MatchingUtils.intersectCaseInsensitive(negativeSkills, nodeText);
-            if (!negativeMatches.isEmpty()) {
-                double negativeRatio = (double) negativeMatches.size() / negativeSkills.size();
-                rawScore *= Math.max(0.0, 1.0 - negativeRatio * 0.8);
-            }
-        }
-
-        List<String> reasonCodes = new ArrayList<>();
-        if (c.cosineSim >= 0.60) reasonCodes.add("SEMANTIC_SIMILARITY");
-        if (!matchedMust.isEmpty()) reasonCodes.add("MUST_HAVE_SKILLS");
-        if (!matchedNice.isEmpty()) reasonCodes.add("NICE_TO_HAVE_SKILLS");
-        if (!matchedKeywordTerms.isEmpty()) reasonCodes.add("KEYWORD_MATCH");
-        if (geographyScore > 0) reasonCodes.add("LOCATION_COMPATIBLE");
-        reasonCodes.add("NODE_" + c.nodeType.name());
-
-        SearchMatchBreakdown breakdown = new SearchMatchBreakdown(
-                StringUtils.round3(c.cosineSim),
-                StringUtils.round3(mustHaveCoverage),
-                StringUtils.round3(niceToHaveBonus),
-                0,
-                0,
-                StringUtils.round3(geographyScore),
-                StringUtils.round3(rawScore),
-                matchedMust,
-                matchedNice,
-                missingMust,
-                reasonCodes,
-                geographyReason
-        );
-
-        return new ScoredCandidate(c, breakdown, rawScore);
-    }
-
-    private List<ScoredCandidate> rerank(List<ScoredCandidate> candidates, SearchQuery parsed) {
-        String targetSeniority = parsed.seniority();
-        Seniority target = (targetSeniority == null || "unknown".equalsIgnoreCase(targetSeniority))
-                ? null
-                : SqlParsingUtils.parseEnum(Seniority.class, targetSeniority.toUpperCase());
-        if (target == null) {
-            return candidates;
-        }
-
-        List<ScoredCandidate> reranked = new ArrayList<>(candidates);
-        for (int i = 0; i < reranked.size(); i++) {
-            ScoredCandidate sc = reranked.get(i);
-            if (sc.node.nodeType != NodeType.USER) continue;
-            double adjusted = sc.score;
-
-            String seniorityStr = sdString(sc.node.structuredData, "seniority");
-            Seniority candidateSeniority = SqlParsingUtils.parseEnum(Seniority.class, seniorityStr);
-            if (candidateSeniority == target) {
-                adjusted *= 1.05;
-            } else if (candidateSeniority != null) {
-                adjusted *= 0.95;
-            }
-
-            reranked.set(i, new ScoredCandidate(sc.node, sc.breakdown, adjusted));
-        }
-
-        reranked.sort(Comparator.comparingDouble(ScoredCandidate::score).reversed());
-        return reranked;
     }
 
     // === Result conversion ===
@@ -607,14 +323,14 @@ public class SearchService {
         }
     }
 
-    private record RawNodeCandidate(
+    record RawNodeCandidate(
             UUID nodeId, NodeType nodeType, String title, String description,
             List<String> tags, String country,
             Instant updatedAt, Map<String, Object> structuredData,
             double cosineSim
     ) {}
 
-    private record ScoredCandidate(
+    record ScoredCandidate(
             RawNodeCandidate node,
             SearchMatchBreakdown breakdown,
             double score

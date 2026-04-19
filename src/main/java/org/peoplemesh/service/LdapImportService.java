@@ -159,7 +159,8 @@ public class LdapImportService {
         boolean isNew;
 
         if (existing.isPresent()) {
-            node = nodeRepository.findById(existing.get().nodeId).orElse(null);
+            Optional<MeshNode> existingNode = nodeRepository.findById(existing.get().nodeId);
+            node = existingNode.isPresent() ? existingNode.get() : null;
             if (node == null) {
                 node = createUserNode(mail);
                 existing.get().nodeId = node.id;
@@ -167,7 +168,8 @@ public class LdapImportService {
             }
             isNew = false;
         } else {
-            MeshNode existingByEmail = nodeRepository.findUserByExternalId(mail).orElse(null);
+            Optional<MeshNode> existingByEmailOpt = nodeRepository.findUserByExternalId(mail);
+            MeshNode existingByEmail = existingByEmailOpt.isPresent() ? existingByEmailOpt.get() : null;
             if (existingByEmail != null) {
                 node = existingByEmail;
             } else {
@@ -195,19 +197,6 @@ public class LdapImportService {
         }
 
         return isNew;
-    }
-
-    @Transactional(Transactional.TxType.REQUIRES_NEW)
-    void generateSingleEmbedding(UUID nodeId) {
-        MeshNode node = nodeRepository.findById(nodeId).orElse(null);
-        if (node == null) return;
-        String text = EmbeddingTextBuilder.buildText(node);
-        float[] embedding = embeddingService.generateEmbedding(text);
-        if (embedding != null) {
-            node.embedding = embedding;
-            node.searchable = true;
-            nodeRepository.persist(node);
-        }
     }
 
     @Transactional(Transactional.TxType.REQUIRES_NEW)

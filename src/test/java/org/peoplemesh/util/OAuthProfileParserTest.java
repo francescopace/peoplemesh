@@ -1,10 +1,10 @@
-package org.peoplemesh.service;
+package org.peoplemesh.util;
 
+import org.junit.jupiter.api.Test;
+import org.peoplemesh.domain.dto.GitHubEnrichedResult;
+import org.peoplemesh.domain.dto.OidcSubject;
 import org.peoplemesh.domain.dto.ProfileSchema;
 import org.peoplemesh.domain.enums.Seniority;
-import org.peoplemesh.service.OAuthTokenExchangeService.GitHubEnrichedResult;
-import org.peoplemesh.service.OAuthTokenExchangeService.OidcSubject;
-import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -108,35 +108,35 @@ class OAuthProfileParserTest {
 
     @Test
     void fullNameOrNull_fullNameProvided_returnsIt() {
-        OAuthTokenExchangeService.OidcSubject subject = new OAuthTokenExchangeService.OidcSubject(
+        OidcSubject subject = new OidcSubject(
                 "sub", "Pat Example", null, null, null, null, null, null, null, null);
         assertEquals("Pat Example", OAuthProfileParser.fullNameOrNull(subject));
     }
 
     @Test
     void fullNameOrNull_firstAndLastProvided_returnsCombined() {
-        OAuthTokenExchangeService.OidcSubject subject = new OAuthTokenExchangeService.OidcSubject(
+        OidcSubject subject = new OidcSubject(
                 "sub", null, "Pat", "Example", null, null, null, null, null, null);
         assertEquals("Pat Example", OAuthProfileParser.fullNameOrNull(subject));
     }
 
     @Test
     void fullNameOrNull_onlyFirst_returnsFirst() {
-        OAuthTokenExchangeService.OidcSubject subject = new OAuthTokenExchangeService.OidcSubject(
+        OidcSubject subject = new OidcSubject(
                 "sub", null, "Pat", null, null, null, null, null, null, null);
         assertEquals("Pat", OAuthProfileParser.fullNameOrNull(subject));
     }
 
     @Test
     void fullNameOrNull_onlyLast_returnsLast() {
-        OAuthTokenExchangeService.OidcSubject subject = new OAuthTokenExchangeService.OidcSubject(
+        OidcSubject subject = new OidcSubject(
                 "sub", null, null, "Example", null, null, null, null, null, null);
         assertEquals("Example", OAuthProfileParser.fullNameOrNull(subject));
     }
 
     @Test
     void fullNameOrNull_allNull_returnsNull() {
-        OAuthTokenExchangeService.OidcSubject subject = new OAuthTokenExchangeService.OidcSubject(
+        OidcSubject subject = new OidcSubject(
                 "sub", null, null, null, null, null, null, null, null, null);
         assertNull(OAuthProfileParser.fullNameOrNull(subject));
     }
@@ -213,7 +213,6 @@ class OAuthProfileParserTest {
         OidcSubject subject = new OidcSubject(
                 "sub123", "Bob", null, null,
                 null, null, null, null, null, null);
-        // headline=null, email=null, industry=null, locale=null
 
         ProfileSchema schema = OAuthProfileParser.buildImportSchema("google", subject);
 

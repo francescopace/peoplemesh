@@ -96,6 +96,11 @@ public class MeService {
         return assessments.size();
     }
 
+    public ProfileSchema resolveProfile(UUID userId, ProfileSchema updates) {
+        profileService.upsertProfile(userId, updates);
+        return profileService.getProfile(userId).orElse(updates);
+    }
+
     public void applySelectiveImport(UUID userId, ProfileSchema selectedFields, String source) {
         if (source == null || source.isBlank()) {
             throw new ValidationBusinessException("Missing source parameter");
@@ -117,6 +122,12 @@ public class MeService {
 
     public List<String> getActiveConsentScopes(UUID userId) {
         return consentService.getActiveScopes(userId);
+    }
+
+    public Map<String, Object> getConsentView(UUID userId) {
+        return Map.of(
+                "scopes", ConsentService.DEFAULT_CONSENT_SCOPES,
+                "active", getActiveConsentScopes(userId));
     }
 
     public void validateConsentScope(String scope, Collection<String> allowedScopes) {

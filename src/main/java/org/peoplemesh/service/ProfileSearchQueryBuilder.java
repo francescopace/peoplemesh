@@ -7,6 +7,7 @@ import static org.peoplemesh.util.StructuredDataUtils.sdString;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.peoplemesh.domain.dto.SearchQuery;
 import org.peoplemesh.domain.model.MeshNode;
+import org.peoplemesh.util.MatchingUtils;
 import org.peoplemesh.util.SearchMatchingUtils;
 import org.peoplemesh.util.StringUtils;
 

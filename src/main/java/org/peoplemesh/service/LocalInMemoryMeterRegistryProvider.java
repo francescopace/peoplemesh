@@ -4,10 +4,10 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.quarkus.runtime.StartupEvent;
+import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
-import jakarta.inject.Singleton;
 
-@Singleton
+@ApplicationScoped
 public class LocalInMemoryMeterRegistryProvider {
 
     void attachLocalInMemoryRegistry(@Observes StartupEvent ignored, MeterRegistry meterRegistry) {

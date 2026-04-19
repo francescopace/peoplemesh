@@ -3,9 +3,9 @@ package org.peoplemesh.service;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.peoplemesh.config.AppConfig;
+import org.peoplemesh.domain.dto.OidcSubject;
 import org.peoplemesh.domain.model.MeshNode;
 import org.peoplemesh.domain.model.UserIdentity;
-import org.peoplemesh.service.OAuthTokenExchangeService.OidcSubject;
 
 import java.time.Instant;
 import java.util.ArrayList;

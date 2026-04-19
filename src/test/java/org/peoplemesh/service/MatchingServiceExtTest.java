@@ -8,6 +8,7 @@ import org.peoplemesh.domain.enums.EmploymentType;
 import org.peoplemesh.domain.enums.Seniority;
 import org.peoplemesh.domain.enums.WorkMode;
 import org.peoplemesh.util.GeographyUtils;
+import org.peoplemesh.util.MatchingUtils;
 import org.peoplemesh.util.SqlParsingUtils;
 import org.peoplemesh.util.StringUtils;
 

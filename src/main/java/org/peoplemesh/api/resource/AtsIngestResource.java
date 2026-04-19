@@ -1,7 +1,9 @@
 package org.peoplemesh.api.resource;
 
+import io.smallrye.common.annotation.Blocking;
 import jakarta.inject.Inject;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Size;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.HeaderParam;
 import jakarta.ws.rs.POST;
@@ -28,6 +30,7 @@ import org.peoplemesh.service.AtsIngestService;
  */
 @Path("/api/v1/maintenance/ingest")
 @Produces(MediaType.APPLICATION_JSON)
+@Blocking
 public class AtsIngestResource {
 
     @Inject
@@ -68,7 +71,7 @@ public class AtsIngestResource {
     @POST
     @Path("/jobs")
     @Consumes(MediaType.APPLICATION_JSON)
-    public Response ingestJobs(@HeaderParam("X-Maintenance-Key") String key,
+    public Response ingestJobs(@HeaderParam("X-Maintenance-Key") @Size(max = 256) String key,
                                @Valid AtsIngestRequestDto request) {
         assertAuthorized(key);
         if (request == null) {

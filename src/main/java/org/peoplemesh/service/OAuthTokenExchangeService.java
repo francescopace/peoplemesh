@@ -6,6 +6,8 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
 import org.peoplemesh.config.AppConfig;
+import org.peoplemesh.domain.dto.GitHubEnrichedResult;
+import org.peoplemesh.domain.dto.OidcSubject;
 
 import java.net.URI;
 import java.net.URLEncoder;
@@ -32,19 +34,6 @@ public class OAuthTokenExchangeService {
 
     @Inject
     AppConfig appConfig;
-
-    public record OidcSubject(
-            String subject,
-            String fullName,
-            String givenName,
-            String familyName,
-            String email,
-            String headline,
-            String industry,
-            String locale,
-            String picture,
-            String hostedDomain
-    ) {}
 
     public OidcSubject exchangeAndResolveSubject(String provider, String code, String redirectUri) {
         try {
@@ -176,8 +165,6 @@ public class OAuthTokenExchangeService {
                 null, null,
                 text(u, "avatar_url"), null);
     }
-
-    public record GitHubEnrichedResult(OidcSubject subject, List<String> languages, List<String> topics) {}
 
     public GitHubEnrichedResult exchangeGitHubEnriched(String code, String redirectUri) {
         try {

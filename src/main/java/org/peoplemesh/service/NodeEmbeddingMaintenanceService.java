@@ -129,6 +129,8 @@ public class NodeEmbeddingMaintenanceService {
     }
 
     private BatchData loadBatchData(List<UUID> batchIds) {
+        // Keep this read in its own short transaction so long-running embedding
+        // generation does not pin a single transaction open for the whole job.
         return QuarkusTransaction.requiringNew().call(() -> {
             List<MeshNode> nodes = nodeRepository.findByIds(batchIds);
             Map<UUID, MeshNode> byId = nodes.stream().collect(Collectors.toMap(n -> n.id, n -> n));
@@ -148,6 +150,8 @@ public class NodeEmbeddingMaintenanceService {
     }
 
     private void persistBatchEmbeddings(List<BatchItem> items, List<float[]> embeddings) {
+        // Persist each batch in a fresh transaction for isolation and to avoid
+        // keeping one large transaction across external embedding calls.
         QuarkusTransaction.requiringNew().run(() -> {
             List<UUID> ids = items.stream().map(BatchItem::nodeId).toList();
             List<MeshNode> nodes = nodeRepository.findByIds(ids);
@@ -240,7 +244,8 @@ public class NodeEmbeddingMaintenanceService {
 
     void regenerateSingleNodeEmbedding(UUID nodeId) {
         QuarkusTransaction.requiringNew().run(() -> {
-            MeshNode node = nodeRepository.findById(nodeId).orElse(null);
+            Optional<MeshNode> nodeOpt = nodeRepository.findById(nodeId);
+            MeshNode node = nodeOpt.isPresent() ? nodeOpt.get() : null;
             if (node == null) {
                 return;
             }

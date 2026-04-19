@@ -12,8 +12,10 @@ import org.peoplemesh.domain.exception.ForbiddenBusinessException;
 import org.peoplemesh.domain.exception.NotFoundBusinessException;
 import org.peoplemesh.domain.model.MeshNode;
 import org.peoplemesh.repository.NodeRepository;
+import org.peoplemesh.util.MatchingUtils;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @ApplicationScoped
@@ -61,7 +63,8 @@ public class MatchesService {
     }
 
     public List<MeshMatchResult> matchMyProfile(UUID userId, String type, String country, Integer limit, Integer offset) {
-        MeshNode myNode = nodeRepository.findPublishedUserNode(userId).orElse(null);
+        Optional<MeshNode> myNodeOpt = nodeRepository.findPublishedUserNode(userId);
+        MeshNode myNode = myNodeOpt.isPresent() ? myNodeOpt.get() : null;
         if (myNode == null || myNode.embedding == null) {
             return List.of();
         }
@@ -85,7 +88,8 @@ public class MatchesService {
     }
 
     public List<MeshMatchResult> matchFromNode(UUID userId, UUID nodeId, String type, String country) {
-        MeshNode node = nodeRepository.findById(nodeId).orElse(null);
+        Optional<MeshNode> nodeOpt = nodeRepository.findById(nodeId);
+        MeshNode node = nodeOpt.isPresent() ? nodeOpt.get() : null;
         if (node == null || node.embedding == null) {
             throw new NotFoundBusinessException("Node not found or has no embedding");
         }
@@ -106,7 +110,8 @@ public class MatchesService {
     }
 
     private SearchService.MatchContext resolveMatchContext(UUID userId) {
-        MeshNode myNode = nodeRepository.findPublishedUserNode(userId).orElse(null);
+        Optional<MeshNode> myNodeOpt = nodeRepository.findPublishedUserNode(userId);
+        MeshNode myNode = myNodeOpt.isPresent() ? myNodeOpt.get() : null;
         if (myNode == null) {
             return SearchService.MatchContext.empty();
         }

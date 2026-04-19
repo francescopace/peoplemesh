@@ -7,9 +7,10 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.peoplemesh.config.AppConfig;
+import org.peoplemesh.domain.dto.GitHubEnrichedResult;
+import org.peoplemesh.domain.dto.OidcSubject;
 import org.peoplemesh.domain.dto.ProfileSchema;
-import org.peoplemesh.service.OAuthTokenExchangeService.GitHubEnrichedResult;
-import org.peoplemesh.service.OAuthTokenExchangeService.OidcSubject;
+import org.peoplemesh.util.OAuthProfileParser;
 
 import java.util.*;
 

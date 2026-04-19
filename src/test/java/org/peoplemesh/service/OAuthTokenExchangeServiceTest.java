@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.peoplemesh.config.AppConfig;
+import org.peoplemesh.domain.dto.GitHubEnrichedResult;
+import org.peoplemesh.domain.dto.OidcSubject;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -176,7 +178,7 @@ class OAuthTokenExchangeServiceTest {
         fake.enqueueGet("https://www.googleapis.com/oauth2/v3/userinfo",
                 "{\"sub\":\"sub-g\",\"name\":\"Google User\",\"given_name\":\"Google\",\"family_name\":\"User\",\"email\":\"g@example.com\",\"locale\":\"en\",\"picture\":\"pic\",\"hd\":\"acme.com\"}");
 
-        OAuthTokenExchangeService.OidcSubject s =
+        OidcSubject s =
                 fake.exchangeAndResolveSubject("google", "code", "https://cb");
 
         assertNotNull(s);
@@ -206,7 +208,7 @@ class OAuthTokenExchangeServiceTest {
                 "[{\"email\":\"secondary@example.com\",\"primary\":false,\"verified\":true}," +
                         "{\"email\":\"primary@example.com\",\"primary\":true,\"verified\":true}]");
 
-        OAuthTokenExchangeService.OidcSubject s =
+        OidcSubject s =
                 fake.exchangeAndResolveSubject("github", "code", "https://cb");
 
         assertNotNull(s);
@@ -231,7 +233,7 @@ class OAuthTokenExchangeServiceTest {
         fake.enqueueGet("https://api.github.com/repos/octo/repo1/languages", "{\"Java\":100,\"Kotlin\":50}");
         fake.enqueueGet("https://api.github.com/repos/octo/repo2/languages", "{\"Java\":20,\"Go\":80}");
 
-        OAuthTokenExchangeService.GitHubEnrichedResult result =
+        GitHubEnrichedResult result =
                 fake.exchangeGitHubEnriched("code", "https://cb");
 
         assertNotNull(result);
@@ -272,7 +274,7 @@ class OAuthTokenExchangeServiceTest {
         fake.throwOnGet("https://api.github.com/user/repos?sort=pushed&per_page=20&type=owner",
                 new RuntimeException("repos down"));
 
-        OAuthTokenExchangeService.GitHubEnrichedResult result =
+        GitHubEnrichedResult result =
                 fake.exchangeGitHubEnriched("code", "https://cb");
 
         assertNotNull(result);

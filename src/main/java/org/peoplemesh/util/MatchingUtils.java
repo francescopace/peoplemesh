@@ -1,17 +1,15 @@
-package org.peoplemesh.service;
+package org.peoplemesh.util;
 
 import org.peoplemesh.domain.dto.SkillWithLevel;
 import org.peoplemesh.domain.enums.EmploymentType;
 import org.peoplemesh.domain.enums.WorkMode;
 import org.peoplemesh.domain.model.MeshNode;
-import org.peoplemesh.util.SqlParsingUtils;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
 /**
  * Shared utilities for matching and search pipelines.
- * Extracted from MatchingService to avoid duplication.
  */
 public final class MatchingUtils {
 
@@ -23,14 +21,14 @@ public final class MatchingUtils {
 
     private MatchingUtils() {}
 
-    static List<String> combineLists(List<String> a, List<String> b) {
+    public static List<String> combineLists(List<String> a, List<String> b) {
         List<String> combined = new ArrayList<>();
         if (a != null) combined.addAll(a);
         if (b != null) combined.addAll(b);
         return combined;
     }
 
-    static double jaccardSimilarity(List<String> a, List<String> b) {
+    public static double jaccardSimilarity(List<String> a, List<String> b) {
         if (a == null || b == null || a.isEmpty() || b.isEmpty()) return 0.0;
         Set<String> setA = a.stream().map(String::toLowerCase).collect(Collectors.toSet());
         Set<String> setB = b.stream().map(String::toLowerCase).collect(Collectors.toSet());
@@ -40,7 +38,7 @@ public final class MatchingUtils {
         return unionSize <= 0 ? 0.0 : (double) matched / unionSize;
     }
 
-    static List<String> intersectCaseInsensitive(List<String> a, List<String> b) {
+    public static List<String> intersectCaseInsensitive(List<String> a, List<String> b) {
         if (a == null || b == null || a.isEmpty() || b.isEmpty()) {
             return Collections.emptyList();
         }
@@ -62,7 +60,7 @@ public final class MatchingUtils {
         return intersection;
     }
 
-    static boolean termsMatch(String left, String right) {
+    public static boolean termsMatch(String left, String right) {
         if (left == null || right == null) return false;
         String leftNormalized = normalizeTerm(left);
         String rightNormalized = normalizeTerm(right);
@@ -134,14 +132,14 @@ public final class MatchingUtils {
     /**
      * Compute level-aware skill coverage when no per-node cached levels are available.
      */
-    static double computeLevelAwareCoverage(UUID nodeId, List<SkillWithLevel> required,
-                                             List<String> candidateSkills) {
+    public static double computeLevelAwareCoverage(UUID nodeId, List<SkillWithLevel> required,
+                                                   List<String> candidateSkills) {
         return computeLevelAwareCoverage(required, candidateSkills, null);
     }
 
-    static double computeLevelAwareCoverage(List<SkillWithLevel> required,
-                                            List<String> candidateSkills,
-                                            Map<String, Short> levelsBySkillName) {
+    public static double computeLevelAwareCoverage(List<SkillWithLevel> required,
+                                                   List<String> candidateSkills,
+                                                   Map<String, Short> levelsBySkillName) {
         if (required == null || required.isEmpty()) {
             return 0;
         }
@@ -167,7 +165,7 @@ public final class MatchingUtils {
         return totalWeight == 0 ? 0 : matchedWeight / totalWeight;
     }
 
-    static WorkMode structuredWorkMode(MeshNode n) {
+    public static WorkMode structuredWorkMode(MeshNode n) {
         if (n == null || n.structuredData == null) {
             return null;
         }
@@ -175,7 +173,7 @@ public final class MatchingUtils {
         return v == null ? null : SqlParsingUtils.parseEnum(WorkMode.class, v.toString());
     }
 
-    static EmploymentType structuredEmploymentType(MeshNode n) {
+    public static EmploymentType structuredEmploymentType(MeshNode n) {
         if (n == null || n.structuredData == null) {
             return null;
         }

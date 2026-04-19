@@ -4,6 +4,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.peoplemesh.domain.model.SkillDefinition;
 import org.peoplemesh.repository.SkillDefinitionRepository;
+import org.peoplemesh.util.MatchingUtils;
 import org.peoplemesh.util.SqlParsingUtils;
 import org.peoplemesh.util.VectorMath;
 

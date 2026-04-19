@@ -12,6 +12,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
 import org.peoplemesh.util.GeographyUtils;
+import org.peoplemesh.util.MatchingUtils;
 import org.peoplemesh.util.SearchMatchingUtils;
 import org.peoplemesh.util.SqlParsingUtils;
 import org.peoplemesh.util.StringUtils;

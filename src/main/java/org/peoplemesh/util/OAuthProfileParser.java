@@ -1,10 +1,9 @@
-package org.peoplemesh.service;
+package org.peoplemesh.util;
 
-import org.peoplemesh.util.StringUtils;
+import org.peoplemesh.domain.dto.GitHubEnrichedResult;
+import org.peoplemesh.domain.dto.OidcSubject;
 import org.peoplemesh.domain.dto.ProfileSchema;
 import org.peoplemesh.domain.enums.Seniority;
-import org.peoplemesh.service.OAuthTokenExchangeService.GitHubEnrichedResult;
-import org.peoplemesh.service.OAuthTokenExchangeService.OidcSubject;
 
 import java.time.Instant;
 import java.time.ZoneOffset;

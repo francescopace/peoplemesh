@@ -114,8 +114,7 @@ public class MeResource {
     @Consumes(MediaType.APPLICATION_JSON)
     public Response updateProfile(@Valid ProfileSchema updates) {
         UUID userId = currentUserService.resolveUserId();
-        profileService.upsertProfile(userId, updates);
-        ProfileSchema profile = profileService.getProfile(userId).orElse(updates);
+        ProfileSchema profile = meService.resolveProfile(userId, updates);
         return Response.ok(profile).build();
     }
 
@@ -207,8 +206,7 @@ public class MeResource {
     @Path("/consents")
     public Response getConsents() {
         UUID userId = currentUserService.resolveUserId();
-        List<String> active = meService.getActiveConsentScopes(userId);
-        return Response.ok(Map.of("scopes", ConsentService.DEFAULT_CONSENT_SCOPES, "active", active)).build();
+        return Response.ok(meService.getConsentView(userId)).build();
     }
 
     @POST
@@ -263,8 +261,8 @@ public class MeResource {
     }
 
     private static String resolveClientIpHash(HttpHeaders headers) {
-        return ClientIpResolver.resolveClientIp(headers)
-                .map(HashUtils::sha256)
-                .orElse(null);
+        var resolved = ClientIpResolver.resolveClientIp(headers)
+                .map(HashUtils::sha256);
+        return resolved.isPresent() ? resolved.get() : null;
     }
 }
