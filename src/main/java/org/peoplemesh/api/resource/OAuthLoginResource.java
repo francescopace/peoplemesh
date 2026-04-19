@@ -17,6 +17,7 @@ import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriBuilder;
 import jakarta.ws.rs.core.UriInfo;
 import org.peoplemesh.api.error.ProblemDetail;
+import org.peoplemesh.config.AppConfig;
 import org.peoplemesh.service.OAuthLoginService;
 import org.peoplemesh.service.SessionService;
 
@@ -36,6 +37,9 @@ public class OAuthLoginResource {
 
     @Inject
     SessionService sessionService;
+
+    @Inject
+    AppConfig appConfig;
 
     @GET
     @Path("/providers")
@@ -108,7 +112,32 @@ public class OAuthLoginResource {
     }
 
     private String resolveOrigin() {
-        return uriInfo.getBaseUri().resolve("/").toString().replaceAll("/+$", "");
+        String requestOrigin = uriInfo.getBaseUri().resolve("/").toString().replaceAll("/+$", "");
+        String normalizedRequestOrigin = normalizeOrigin(requestOrigin);
+        return appConfig.frontend().origin()
+                .map(this::normalizeOrigin)
+                .filter(origin -> origin != null && !origin.isBlank())
+                .orElse(normalizedRequestOrigin);
+    }
+
+    private String normalizeOrigin(String rawOrigin) {
+        try {
+            URI uri = URI.create(rawOrigin).normalize();
+            String scheme = uri.getScheme();
+            String host = uri.getHost();
+            if (scheme == null || host == null) {
+                return null;
+            }
+            if (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme)) {
+                return null;
+            }
+            int port = uri.getPort();
+            return port > 0
+                    ? (scheme.toLowerCase() + "://" + host + ":" + port)
+                    : (scheme.toLowerCase() + "://" + host);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     private boolean isSecure() {

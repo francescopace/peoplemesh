@@ -151,6 +151,8 @@ public interface AppConfig {
     interface FrontendConfig {
         @WithDefault("false")
         boolean enabled();
+
+        java.util.Optional<String> origin();
     }
 
 }
