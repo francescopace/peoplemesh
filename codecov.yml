@@ -33,7 +33,7 @@ flags:
       - "src/main/resources"
   frontend:
     paths:
-      - "src/main/web/src"
+      - "src/main/web/assets"
 
 # Comment on PRs
 comment:

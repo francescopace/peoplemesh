@@ -1,6 +1,8 @@
 package org.peoplemesh.util;
 
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -10,8 +12,8 @@ public final class OAuthHtmlRenderer {
 
     public static RenderedHtml importSuccess(String jsonData, String source, String origin) {
         String nonce = UUID.randomUUID().toString();
-        String safeJson = jsonData.replace("</", "<\\/");
-        String safeSource = escapeForJsString(source, 200);
+        String encodedJson = encodeBase64(jsonData, 500_000);
+        String encodedSource = encodeBase64(source, 200);
         String safeOrigin = escapeForJsString(normalizeOrigin(origin), 2000);
         boolean hasSafeOrigin = safeOrigin != null && !safeOrigin.isBlank();
 
@@ -22,8 +24,8 @@ public final class OAuthHtmlRenderer {
                 <p>Import complete. This window will close automatically.</p>
                 <script nonce="%s">
                 (function() {
-                  var data = %s;
-                  var msg = {type: "import-result", imported: data, source: "%s"};
+                  var data = JSON.parse(atob("%s"));
+                  var msg = {type: "import-result", imported: data, source: atob("%s")};
                   if (window.opener && %s) {
                     window.opener.postMessage(msg, "%s");
                   }
@@ -31,7 +33,7 @@ public final class OAuthHtmlRenderer {
                 })();
                 </script>
                 </body></html>
-                """.formatted(nonce, safeJson, safeSource, hasSafeOrigin ? "true" : "false", safeOrigin);
+                """.formatted(nonce, encodedJson, encodedSource, hasSafeOrigin ? "true" : "false", safeOrigin);
 
         String csp = "default-src 'none'; script-src 'nonce-" + nonce + "'";
         return new RenderedHtml(html, csp);
@@ -42,12 +44,7 @@ public final class OAuthHtmlRenderer {
         boolean hasSafeOrigin = safeOrigin != null && !safeOrigin.isBlank();
         String nonce = UUID.randomUUID().toString();
         String safeHtmlMsg = SanitizeUtils.sanitize(errorMessage, 500);
-        String safeJsMsg = errorMessage
-                .replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("</", "<\\/")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r");
+        String encodedJsMsg = encodeBase64(errorMessage, 500);
 
         String html = """
                 <!DOCTYPE html>
@@ -57,13 +54,14 @@ public final class OAuthHtmlRenderer {
                 <script nonce="%s">
                 (function() {
                   if (window.opener && %s) {
-                    window.opener.postMessage({type: "import-error", error: "%s"}, "%s");
+                    var errorMsg = atob("%s");
+                    window.opener.postMessage({type: "import-error", error: errorMsg}, "%s");
                   }
                   setTimeout(function(){ window.close(); }, 3000);
                 })();
                 </script>
                 </body></html>
-                """.formatted(safeHtmlMsg, nonce, hasSafeOrigin ? "true" : "false", safeJsMsg, safeOrigin);
+                """.formatted(safeHtmlMsg, nonce, hasSafeOrigin ? "true" : "false", encodedJsMsg, safeOrigin);
 
         String csp = "default-src 'none'; script-src 'nonce-" + nonce + "'";
         return new RenderedHtml(html, csp);
@@ -98,5 +96,13 @@ public final class OAuthHtmlRenderer {
                 .replace("</", "<\\/")
                 .replace("\n", "\\n")
                 .replace("\r", "\\r");
+    }
+
+    private static String encodeBase64(String value, int maxLength) {
+        if (value == null) {
+            return "";
+        }
+        String truncated = value.length() > maxLength ? value.substring(0, maxLength) : value;
+        return Base64.getEncoder().encodeToString(truncated.getBytes(StandardCharsets.UTF_8));
     }
 }
