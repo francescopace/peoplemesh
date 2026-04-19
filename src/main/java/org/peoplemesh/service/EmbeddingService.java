@@ -17,7 +17,7 @@ import java.util.Locale;
 public class EmbeddingService {
 
     private static final Logger LOG = Logger.getLogger(EmbeddingService.class);
-    private static final int TARGET_VECTOR_DIMENSION = 1024;
+    private static final int TARGET_VECTOR_DIMENSION = 384;
     private static final int[] EMBEDDING_TEXT_LIMITS = {3000, 2000, 1400, 1000, 700, 500, 350};
     private static final int MAX_ATTEMPTS_PER_LIMIT = 3;
     private static final long RETRY_BASE_DELAY_MS = 250L;
@@ -74,7 +74,7 @@ public class EmbeddingService {
                 throw new IllegalStateException("Embedding batch response size mismatch");
             }
             for (int i = 0; i < validIndexes.size(); i++) {
-                result.set(validIndexes.get(i), normalizeVectorDimensions(embeddings.get(i).vector()));
+                result.set(validIndexes.get(i), validateVectorDimensions(embeddings.get(i).vector()));
             }
             return result;
         } catch (RuntimeException e) {
@@ -94,7 +94,7 @@ public class EmbeddingService {
             for (int attempt = 0; attempt < MAX_ATTEMPTS_PER_LIMIT; attempt++) {
                 try {
                     Embedding embedding = embeddingModel.embed(candidate).content();
-                    return embedding == null ? null : normalizeVectorDimensions(embedding.vector());
+                    return embedding == null ? null : validateVectorDimensions(embedding.vector());
                 } catch (RuntimeException e) {
                     if (isContextLengthError(e)) {
                         lastContextOverflow = e;
@@ -176,16 +176,19 @@ public class EmbeddingService {
         }
     }
 
-    private static float[] normalizeVectorDimensions(float[] vector) {
+    private static float[] validateVectorDimensions(float[] vector) {
         if (vector == null) {
             return null;
         }
         if (vector.length == TARGET_VECTOR_DIMENSION) {
             return vector;
         }
-        float[] normalized = new float[TARGET_VECTOR_DIMENSION];
-        System.arraycopy(vector, 0, normalized, 0, Math.min(vector.length, TARGET_VECTOR_DIMENSION));
-        return normalized;
+        throw new IllegalStateException(
+                "Embedding dimension mismatch: expected "
+                        + TARGET_VECTOR_DIMENSION
+                        + ", got "
+                        + vector.length
+        );
     }
 
 }

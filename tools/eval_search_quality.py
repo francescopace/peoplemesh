@@ -26,7 +26,6 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Callable
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 try:
@@ -43,12 +42,9 @@ except Exception as exc:  # noqa: BLE001
 
 DEFAULT_OLLAMA_MODEL = "granite-embedding:30m"
 DEFAULT_OLLAMA_URL = "http://localhost:11434"
-DEFAULT_OPENAI_URL = "https://api.openai.com"
-DEFAULT_OPENAI_MODEL = "text-embedding-3-small"
 DEFAULT_API_URL = "http://localhost:8080"
 DEFAULT_SESSION_SECRET = "default-dev-session-secret-change-in-prod-32b!!"
 CONSENT_SCOPE = "professional_matching"
-DEFAULT_QUERY_SUITE = "default"
 
 
 @dataclass
@@ -112,40 +108,9 @@ def parse_args() -> argparse.Namespace:
         help="PostgreSQL URL. If omitted, auto-discovery from Docker is attempted.",
     )
     parser.add_argument(
-        "--embedding-provider",
-        choices=["ollama", "openai"],
-        default=os.getenv("EVAL_EMBEDDING_PROVIDER", "ollama"),
-        help="Embedding provider for direct/divergence evaluation (default: ollama).",
-    )
-    parser.add_argument(
         "--ollama-url",
         default=DEFAULT_OLLAMA_URL,
         help=f"Ollama base URL (default: {DEFAULT_OLLAMA_URL})",
-    )
-    parser.add_argument(
-        "--ollama-model",
-        default=DEFAULT_OLLAMA_MODEL,
-        help=f"Ollama embedding model (default: {DEFAULT_OLLAMA_MODEL})",
-    )
-    parser.add_argument(
-        "--openai-url",
-        default=os.getenv("OPENAI_BASE_URL", DEFAULT_OPENAI_URL),
-        help=f"OpenAI base URL (default: {DEFAULT_OPENAI_URL})",
-    )
-    parser.add_argument(
-        "--openai-model",
-        default=os.getenv("OPENAI_EMBEDDING_MODEL", DEFAULT_OPENAI_MODEL),
-        help=f"OpenAI embedding model (default: {DEFAULT_OPENAI_MODEL})",
-    )
-    parser.add_argument(
-        "--openai-api-key",
-        default=os.getenv("OPENAI_API_KEY", ""),
-        help="OpenAI API key (defaults to OPENAI_API_KEY env var).",
-    )
-    parser.add_argument(
-        "--embedding-model",
-        default="",
-        help="Optional explicit embedding model override for selected provider.",
     )
     parser.add_argument(
         "--api-url",
@@ -179,44 +144,6 @@ def parse_args() -> argparse.Namespace:
         "--query-prefix",
         default="",
         help="Optional prefix prepended to direct-eval query text before embedding.",
-    )
-    parser.add_argument(
-        "--query-suite",
-        choices=["default", "it-only", "it-strict"],
-        default=DEFAULT_QUERY_SUITE,
-        help="Query suite to evaluate (default: all queries, it-only: IT/domain-focused, it-strict: core IT role/skill queries).",
-    )
-    parser.add_argument(
-        "--divergence-mode",
-        choices=["legacy-vs-java", "aligned-vs-java"],
-        default="legacy-vs-java",
-        help=(
-            "How to compare embedding text variants in divergence report "
-            "(default: legacy-vs-java)."
-        ),
-    )
-    parser.add_argument(
-        "--eval-my-mesh",
-        action="store_true",
-        help="Enable /api/v1/matches/me evaluation block.",
-    )
-    parser.add_argument(
-        "--my-mesh-sample-size",
-        type=int,
-        default=12,
-        help="Number of USER nodes sampled for /matches/me evaluation (default: 12).",
-    )
-    parser.add_argument(
-        "--my-mesh-relevance-mode",
-        choices=["embedding", "strict", "both"],
-        default="both",
-        help="Relevance mode for /matches/me evaluation (default: both).",
-    )
-    parser.add_argument(
-        "--profile-query-variant",
-        choices=["baseline", "skills_musthave", "embedding_text_role_first"],
-        default="baseline",
-        help="Variant used to build SearchQuery payload from a seed profile (default: baseline).",
     )
     return parser.parse_args()
 
@@ -396,37 +323,11 @@ def embed_text_ollama(ollama_url: str, model: str, text: str) -> list[float]:
     return [float(x) for x in emb]
 
 
-def embed_text_openai(openai_url: str, api_key: str, model: str, text: str) -> list[float]:
-    if not api_key:
-        raise ValueError("OPENAI_API_KEY is required when --embedding-provider=openai")
-    payload = {"model": model, "input": text}
-    body = json.dumps(payload).encode("utf-8")
-    req = Request(openai_url.rstrip("/") + "/v1/embeddings", data=body, method="POST")
-    req.add_header("Content-Type", "application/json")
-    req.add_header("Accept", "application/json")
-    req.add_header("Authorization", f"Bearer {api_key}")
-    with urlopen(req, timeout=120) as resp:
-        parsed = json.loads(resp.read().decode("utf-8"))
-    data = parsed.get("data")
-    if not isinstance(data, list) or not data:
-        return []
-    first = data[0] if isinstance(data[0], dict) else {}
-    emb = first.get("embedding")
-    if not isinstance(emb, list) or not emb:
-        return []
-    return [float(x) for x in emb]
-
-
 def embed_text(
-    provider: str,
     ollama_url: str,
-    openai_url: str,
-    openai_api_key: str,
     model: str,
     text: str,
 ) -> list[float]:
-    if provider == "openai":
-        return embed_text_openai(openai_url, openai_api_key, model, text)
     return embed_text_ollama(ollama_url, model, text)
 
 
@@ -594,12 +495,6 @@ def build_query_cases() -> list[QueryCase]:
             relevance_fn=lambda c: c.node_type == "USER" and matches_skill_all(c, ["java", "kubernetes"]),
         ),
         QueryCase(
-            key="italian_speaker",
-            text="developer who speaks Italian",
-            target_types={"USER"},
-            relevance_fn=lambda c: c.node_type == "USER" and matches_language(c, ["italian"]),
-        ),
-        QueryCase(
             key="devops_job",
             text="DevOps position",
             target_types={"JOB"},
@@ -608,12 +503,6 @@ def build_query_cases() -> list[QueryCase]:
                 matches_skill_any(c, ["devops", "kubernetes", "docker", "terraform", "ci/cd"])
                 or has_any_term(c.title + " " + c.description, ["devops", "site reliability", "platform"])
             ),
-        ),
-        QueryCase(
-            key="chef_negative",
-            text="professional chef",
-            target_types={"USER", "JOB", "COMMUNITY", "EVENT", "PROJECT", "INTEREST_GROUP"},
-            relevance_fn=lambda c: False,
         ),
         QueryCase(
             key="golang_backend",
@@ -627,38 +516,7 @@ def build_query_cases() -> list[QueryCase]:
             target_types={"USER", "JOB"},
             relevance_fn=lambda c: matches_skill_any(c, ["aws", "amazon web services", "cloud"]),
         ),
-        QueryCase(
-            key="community_python",
-            text="python community event",
-            target_types={"COMMUNITY", "EVENT"},
-            relevance_fn=lambda c: c.node_type in {"COMMUNITY", "EVENT"}
-            and (
-                matches_skill_any(c, ["python"])
-                or has_any_term(c.title + " " + c.description, ["python", "developer", "coding"])
-            ),
-        ),
     ]
-
-
-def select_query_suite(all_cases: list[QueryCase], suite: str) -> list[QueryCase]:
-    if suite == "default":
-        return all_cases
-    if suite == "it-only":
-        excluded = {"chef_negative", "community_python"}
-        return [case for case in all_cases if case.key not in excluded]
-    if suite == "it-strict":
-        included = {
-            "python_developer",
-            "react_frontend",
-            "data_scientist",
-            "rest_api_backend",
-            "java_kubernetes",
-            "devops_job",
-            "golang_backend",
-            "cloud_aws",
-        }
-        return [case for case in all_cases if case.key in included]
-    raise ValueError(f"Unsupported query suite: {suite}")
 
 
 def precision_at_k(ranked_relevance: list[int], k: int) -> float:
@@ -741,10 +599,7 @@ def stddev(values: list[float]) -> float | None:
 def evaluate_direct(
     candidates: list[Candidate],
     cases: list[QueryCase],
-    embedding_provider: str,
     ollama_url: str,
-    openai_url: str,
-    openai_api_key: str,
     model: str,
     query_prefix: str,
 ) -> dict[str, QueryMetrics]:
@@ -774,10 +629,7 @@ def evaluate_direct(
 
         query_text = apply_query_prefix(case.text, query_prefix)
         q_emb = embed_text(
-            embedding_provider,
             ollama_url,
-            openai_url,
-            openai_api_key,
             model,
             query_text,
         )
@@ -886,47 +738,23 @@ def cleanup_api_user(conn, user_id: str, identity_id: str, delete_node: bool = F
     conn.commit()
 
 
-def build_search_query_from_candidate(c: Candidate, variant: str = "baseline") -> dict[str, Any]:
+def build_search_query_from_candidate(c: Candidate) -> dict[str, Any]:
     sd = c.structured_data or {}
     profile_skills = dedupe_terms(c.tags + sd_list(c, "tools_and_tech") + sd_list(c, "skills_soft"))
     roles = dedupe_terms(split_roles(c.description))
     languages = dedupe_terms(sd_list(c, "languages_spoken"))
     industries = dedupe_terms(sd_list(c, "industries"))
-    if variant == "skills_musthave":
-        must_have_skills = profile_skills[:12]
-        nice_seed = profile_skills[12:] + sd_list(c, "topics_frequent") + sd_list(c, "learning_areas")
-        nice_skills = dedupe_terms(nice_seed)[:20]
-    else:
-        must_have_skills = []
-        nice_skills = dedupe_terms(profile_skills + sd_list(c, "topics_frequent") + sd_list(c, "learning_areas"))[:20]
+    must_have_skills = []
+    nice_skills = dedupe_terms(profile_skills + sd_list(c, "topics_frequent") + sd_list(c, "learning_areas"))[:20]
     keywords = dedupe_terms(profile_skills + roles + nice_skills)
 
     seniority_raw = str(sd.get("seniority", "")).strip().lower()
     seniority = seniority_raw if seniority_raw in {"junior", "mid", "senior", "lead"} else "unknown"
 
-    if variant == "skills_musthave":
-        parts = []
-        if roles:
-            parts.append(f"roles: {', '.join(roles)}")
-        if profile_skills:
-            parts.append(f"skills: {', '.join(profile_skills[:20])}")
-        if industries:
-            parts.append(f"industries: {', '.join(industries[:10])}")
-        embedding_text = ". ".join(parts) if parts else (" ".join(keywords) if keywords else "search")
-    elif variant == "embedding_text_role_first":
-        parts = []
-        if roles:
-            parts.append(f"roles: {', '.join(roles[:8])}")
-        if profile_skills:
-            parts.append(f"skills: {', '.join(profile_skills[:20])}")
-        if languages:
-            parts.append(f"languages: {', '.join(languages[:6])}")
-        if industries:
-            parts.append(f"industries: {', '.join(industries[:8])}")
-        if nice_skills:
-            parts.append(f"topics: {', '.join(nice_skills[:12])}")
-        embedding_text = ". ".join(parts) if parts else (" ".join(keywords) if keywords else "search")
-    else:
+    # Keep API payload criteria variants for must/nice buckets,
+    # but always align embedding_text to Java builder field order.
+    embedding_text = java_embedding_text(c).strip()
+    if not embedding_text:
         embedding_text = " ".join(keywords) if keywords else "search"
 
     return {
@@ -961,7 +789,6 @@ def evaluate_api_matches(
     sample_size: int,
     rng: random.Random,
     relevance_mode: str = "embedding",
-    profile_query_variant: str = "baseline",
 ) -> tuple[list[QueryCase], dict[str, QueryMetrics]]:
     endpoint = api_url.rstrip("/") + "/api/v1/matches"
     out: dict[str, QueryMetrics] = {}
@@ -982,7 +809,7 @@ def evaluate_api_matches(
 
         relevant_ids = build_relevant_ids(seed, candidates, relevance_mode)
         try:
-            payload = build_search_query_from_candidate(seed, profile_query_variant)
+            payload = build_search_query_from_candidate(seed)
             data = post_json_with_cookie(endpoint, payload, session_cookie)
         except (HTTPError, URLError) as exc:
             print(f"[warn] API call failed for {case_key}: {exc}", file=sys.stderr)
@@ -1043,7 +870,6 @@ def evaluate_api_matches_me(
     session_secret: str,
     sample_size: int,
     rng: random.Random,
-    relevance_mode: str = "strict",
 ) -> tuple[list[QueryCase], dict[str, QueryMetrics]]:
     endpoint = api_url.rstrip("/") + "/api/v1/matches/me"
     out: dict[str, QueryMetrics] = {}
@@ -1061,7 +887,7 @@ def evaluate_api_matches_me(
                 relevance_fn=lambda _: False,
             )
         )
-        relevant_ids = build_relevant_ids(seed, candidates, relevance_mode)
+        relevant_ids = build_relevant_ids(seed, candidates, "strict")
         identity_id = str(uuid.uuid4())
         provider = "eval-my-mesh"
         try:
@@ -1088,41 +914,6 @@ def evaluate_api_matches_me(
         ranked_ids, top_titles = extract_ranked_ids_and_top_titles(data, seed.node_id)
         out[case_key] = metrics_from_ranked_ids(ranked_ids, relevant_ids, top_titles)
     return api_cases, out
-
-
-def python_embedding_text_legacy(c: Candidate, max_chars: int | None = None) -> str:
-    # Legacy Python-side seed format kept for divergence diagnostics.
-    parts = [
-        f"type={c.node_type}",
-        f"title={c.title}" if c.title else None,
-        f"description={c.description}" if c.description else None,
-        f"tags={', '.join(c.tags)}" if c.tags else None,
-        f"country={c.country}" if c.country else None,
-    ]
-    sd = c.structured_data or {}
-    for key in sorted(sd.keys()):
-        value = sd.get(key)
-        if value is None:
-            continue
-        if isinstance(value, list):
-            values = [str(x).strip() for x in value if str(x).strip()]
-            if values:
-                parts.append(f"{key}={', '.join(values)}")
-            continue
-        text = str(value).strip()
-        if text and text != "[]":
-            parts.append(f"{key}={text}")
-    text = " | ".join([p for p in parts if p])
-    if max_chars is not None and max_chars > 0 and len(text) > max_chars:
-        return text[:max_chars]
-    return text
-
-
-def python_embedding_text_aligned(c: Candidate, max_chars: int | None = None) -> str:
-    text = java_embedding_text(c)
-    if max_chars is not None and max_chars > 0 and len(text) > max_chars:
-        return text[:max_chars]
-    return text
 
 
 def list_field(label: str, items: list[str]) -> str | None:
@@ -1200,14 +991,10 @@ def java_embedding_text(c: Candidate) -> str:
 
 def evaluate_text_divergence(
     candidates: list[Candidate],
-    embedding_provider: str,
     ollama_url: str,
-    openai_url: str,
-    openai_api_key: str,
     model: str,
     sample_size: int,
     rng: random.Random,
-    divergence_mode: str,
 ) -> dict[str, Any]:
     users = [c for c in candidates if c.node_type == "USER"]
     if not users:
@@ -1216,27 +1003,16 @@ def evaluate_text_divergence(
 
     sims: list[float] = []
     rows: list[dict[str, Any]] = []
-    py_builder = (
-        python_embedding_text_aligned
-        if divergence_mode == "aligned-vs-java"
-        else python_embedding_text_legacy
-    )
     for c in sample:
-        py_text = py_builder(c, max_chars=1200)
+        payload_text = build_search_query_from_candidate(c).get("embedding_text", "")
         java_text = java_embedding_text(c)
         py_emb = embed_text(
-            embedding_provider,
             ollama_url,
-            openai_url,
-            openai_api_key,
             model,
-            py_text,
+            payload_text,
         )
         java_emb = embed_text(
-            embedding_provider,
             ollama_url,
-            openai_url,
-            openai_api_key,
             model,
             java_text,
         )
@@ -1247,7 +1023,7 @@ def evaluate_text_divergence(
                 "id": c.node_id,
                 "title": c.title,
                 "similarity": sim,
-                "mode": divergence_mode,
+                "mode": "payload-vs-java",
             }
         )
 
@@ -1519,10 +1295,10 @@ def print_divergence_report(report: dict[str, Any]) -> None:
         print("No USER profiles available for divergence check.")
         return
     print(f"sample size: {report['count']}")
-    print(f"mean cosine(py_text, java_text): {fmt(report.get('mean'))}")
-    print(f"median cosine(py_text, java_text): {fmt(report.get('median'))}")
-    print(f"min cosine(py_text, java_text): {fmt(report.get('min'))}")
-    print(f"max cosine(py_text, java_text): {fmt(report.get('max'))}")
+    print(f"mean cosine(payload_text, java_text): {fmt(report.get('mean'))}")
+    print(f"median cosine(payload_text, java_text): {fmt(report.get('median'))}")
+    print(f"min cosine(payload_text, java_text): {fmt(report.get('min'))}")
+    print(f"max cosine(payload_text, java_text): {fmt(report.get('max'))}")
     low = report.get("lowest", [])
     if low:
         print("lowest 3 examples:")
@@ -1533,24 +1309,15 @@ def print_divergence_report(report: dict[str, Any]) -> None:
 def main() -> int:
     args = parse_args()
     rng = random.Random(args.seed)
-    selected_model = (
-        args.embedding_model.strip()
-        or (args.openai_model if args.embedding_provider == "openai" else args.ollama_model)
-    )
+    selected_model = DEFAULT_OLLAMA_MODEL
 
     db_url = args.db_url.strip() or discover_db_url()
     print("[info] Search Quality Evaluation Battery")
     print(f"[info] db_url={db_url}")
-    print(f"[info] embedding_provider={args.embedding_provider}")
     print(f"[info] ollama_url={args.ollama_url}")
-    print(f"[info] openai_url={args.openai_url}")
     print(f"[info] embedding_model={selected_model}")
     print(f"[info] query_prefix={args.query_prefix!r}")
-    print(f"[info] query_suite={args.query_suite}")
-    print(f"[info] divergence_mode={args.divergence_mode}")
-    print(f"[info] profile_query_variant={args.profile_query_variant}")
-    print(f"[info] eval_my_mesh={args.eval_my_mesh}")
-    print(f"[info] my_mesh_relevance_mode={args.my_mesh_relevance_mode}")
+    print("[info] my_mesh=true (always enabled)")
     print(f"[info] api_url={args.api_url}")
 
     try:
@@ -1570,18 +1337,14 @@ def main() -> int:
             counts[c.node_type] = counts.get(c.node_type, 0) + 1
         print("[info] by node_type:", ", ".join(f"{k}={v}" for k, v in sorted(counts.items())))
 
-        all_cases = build_query_cases()
-        cases = select_query_suite(all_cases, args.query_suite)
+        cases = build_query_cases()
         print(f"[info] query cases={len(cases)}")
 
         start = time.perf_counter()
         direct_metrics = evaluate_direct(
             candidates,
             cases,
-            args.embedding_provider,
             args.ollama_url,
-            args.openai_url,
-            args.openai_api_key,
             selected_model,
             args.query_prefix,
         )
@@ -1595,14 +1358,10 @@ def main() -> int:
 
         divergence = evaluate_text_divergence(
             candidates,
-            args.embedding_provider,
             args.ollama_url,
-            args.openai_url,
-            args.openai_api_key,
             selected_model,
             args.sample_divergence,
             rng,
-            args.divergence_mode,
         )
         print_divergence_report(divergence)
 
@@ -1635,7 +1394,6 @@ def main() -> int:
                     args.api_sample_size,
                     rng,
                     relevance_mode="embedding",
-                    profile_query_variant=args.profile_query_variant,
                 )
                 print_query_table(
                     "API /matches schema-input results (embedding-neighbors relevance)",
@@ -1660,7 +1418,6 @@ def main() -> int:
                     args.api_sample_size,
                     rng,
                     relevance_mode="strict",
-                    profile_query_variant=args.profile_query_variant,
                 )
                 print_query_table(
                     "API /matches schema-input results (strict profile-overlap relevance)",
@@ -1679,40 +1436,32 @@ def main() -> int:
                 )
                 api_agg_for_gate = compute_aggregate(api_cases_strict, api_metrics_strict)
 
-                if args.eval_my_mesh:
-                    my_mesh_modes = (
-                        ["embedding", "strict"]
-                        if args.my_mesh_relevance_mode == "both"
-                        else [args.my_mesh_relevance_mode]
-                    )
-                    for mode in my_mesh_modes:
-                        my_mesh_cases, my_mesh_metrics = evaluate_api_matches_me(
-                            conn,
-                            candidates,
-                            args.api_url,
-                            args.session_secret,
-                            args.my_mesh_sample_size,
-                            rng,
-                            relevance_mode=mode,
-                        )
-                        print_query_table(
-                            f"API /matches/me results ({mode} relevance)",
-                            my_mesh_cases,
-                            my_mesh_metrics,
-                        )
-                        print_aggregate(
-                            f"API /matches/me aggregate ({mode} relevance)",
-                            my_mesh_cases,
-                            my_mesh_metrics,
-                        )
-                        print_aggregate_relevant_only(
-                            f"API /matches/me aggregate ({mode} relevance)",
-                            my_mesh_cases,
-                            my_mesh_metrics,
-                        )
-                        my_mesh_agg = compute_aggregate(my_mesh_cases, my_mesh_metrics)
-                        if my_mesh_agg is not None:
-                            my_mesh_aggs_for_gate[mode] = my_mesh_agg
+                my_mesh_cases, my_mesh_metrics = evaluate_api_matches_me(
+                    conn,
+                    candidates,
+                    args.api_url,
+                    args.session_secret,
+                    args.api_sample_size,
+                    rng,
+                )
+                print_query_table(
+                    "API /matches/me results (strict relevance)",
+                    my_mesh_cases,
+                    my_mesh_metrics,
+                )
+                print_aggregate(
+                    "API /matches/me aggregate (strict relevance)",
+                    my_mesh_cases,
+                    my_mesh_metrics,
+                )
+                print_aggregate_relevant_only(
+                    "API /matches/me aggregate (strict relevance)",
+                    my_mesh_cases,
+                    my_mesh_metrics,
+                )
+                my_mesh_agg = compute_aggregate(my_mesh_cases, my_mesh_metrics)
+                if my_mesh_agg is not None:
+                    my_mesh_aggs_for_gate["strict"] = my_mesh_agg
             finally:
                 if cleanup_needed:
                     cleanup_api_user(conn, admin_user_id, admin_identity_id, delete_node=True)

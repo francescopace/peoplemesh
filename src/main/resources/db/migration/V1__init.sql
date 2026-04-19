@@ -69,7 +69,7 @@ CREATE TABLE mesh.mesh_node (
     tags            TEXT[],
     structured_data JSONB,
     country         VARCHAR(10),
-    embedding       vector(1024),
+    embedding       vector(384),
     searchable      BOOLEAN      NOT NULL DEFAULT true,
     closed_at       TIMESTAMPTZ,
     created_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),

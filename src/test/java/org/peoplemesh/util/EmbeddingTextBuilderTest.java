@@ -78,6 +78,47 @@ class EmbeddingTextBuilderTest {
     }
 
     @Test
+    void buildText_userNode_fieldOrderMatchesRuntimeContract_andExcludesPersonalSections() {
+        MeshNode node = userNode("Backend Engineer", List.of("Java", "Spring"));
+        node.id = null;
+        node.country = "IT";
+        node.structuredData = new LinkedHashMap<>();
+        node.structuredData.put("tools_and_tech", List.of("Docker", "Kubernetes"));
+        node.structuredData.put("industries", "FinTech");
+        node.structuredData.put("seniority", "SENIOR");
+        node.structuredData.put("languages_spoken", List.of("English", "Italian"));
+        node.structuredData.put("education", List.of("MSc Computer Science"));
+        node.structuredData.put("topics_frequent", List.of("Distributed systems"));
+        node.structuredData.put("learning_areas", List.of("Rust"));
+        node.structuredData.put("project_types", List.of("Platform modernization"));
+        node.structuredData.put("work_mode", "REMOTE");
+        node.structuredData.put("employment_type", "EMPLOYED");
+        node.structuredData.put("skills_soft", List.of("Communication"));
+        node.structuredData.put("hobbies", List.of("Chess"));
+
+        String text = EmbeddingTextBuilder.buildText(node);
+
+        assertInOrder(
+                text,
+                "Roles: Backend Engineer",
+                "Technical Skills: Java, Spring",
+                "Tools: Docker, Kubernetes",
+                "Industries: FinTech",
+                "Seniority: SENIOR",
+                "Languages: English, Italian",
+                "Education: MSc Computer Science",
+                "Country: IT",
+                "Topics: Distributed systems",
+                "Learning: Rust",
+                "Projects: Platform modernization",
+                "Work Mode: REMOTE",
+                "Employment: EMPLOYED",
+                "Soft Skills: Communication"
+        );
+        assertFalse(text.contains("Hobbies:"), "Runtime builder must not include personal hobby sections for USER nodes");
+    }
+
+    @Test
     void buildText_jobNode_includesTitleAndDescription() {
         MeshNode node = new MeshNode();
         node.nodeType = NodeType.JOB;
@@ -253,5 +294,15 @@ class EmbeddingTextBuilderTest {
         node.tags = new ArrayList<>(tags);
         node.structuredData = new LinkedHashMap<>();
         return node;
+    }
+
+    private static void assertInOrder(String text, String... expectedSections) {
+        int currentIndex = -1;
+        for (String section : expectedSections) {
+            int idx = text.indexOf(section);
+            assertTrue(idx >= 0, "Missing section: " + section);
+            assertTrue(idx > currentIndex, "Section out of order: " + section);
+            currentIndex = idx;
+        }
     }
 }

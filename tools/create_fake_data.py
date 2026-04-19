@@ -27,7 +27,8 @@ from urllib.request import Request, urlopen
 
 RANDOMUSER_URL = "https://randomuser.me/api/"
 UUID_NS = uuid.UUID("0b651c55-f445-4dcf-86e1-806cf2f59b1b")
-TARGET_MESH_VECTOR_DIM = 1024
+TARGET_MESH_VECTOR_DIM = 384
+OLLAMA_EMBEDDING_MODEL = "granite-embedding:30m"
 
 SO_SURVEY_CSV = Path(__file__).parent / "stack-overflow-survey/survey_results_public.csv"
 
@@ -738,12 +739,6 @@ def build_embedding_text(
                 _format_list("Topics", _sd_list(structured_data, "topics_frequent")),
                 _format_list("Learning", _sd_list(structured_data, "learning_areas")),
                 _format_list("Projects", _sd_list(structured_data, "project_types")),
-                _format_list("Hobbies", _sd_list(structured_data, "hobbies")),
-                _format_list("Sports", _sd_list(structured_data, "sports")),
-                _format_list("Causes", _sd_list(structured_data, "causes")),
-                _format_list("Personality", _sd_list(structured_data, "personality_tags")),
-                _format_list("Music", _sd_list(structured_data, "music_genres")),
-                _format_list("Books", _sd_list(structured_data, "book_genres")),
                 _format_field("Work Mode", _sd_string(structured_data, "work_mode")),
                 _format_field("Employment", _sd_string(structured_data, "employment_type")),
                 _format_list("Soft Skills", _sd_list(structured_data, "skills_soft")),
@@ -799,27 +794,16 @@ def format_embedding_vector(values: list[float]) -> str:
     return "[" + ",".join(f"{float(v):.8f}" for v in values) + "]"
 
 
-def normalize_vector_dimensions(values: list[float], target_dim: int) -> list[float]:
-    if len(values) == target_dim:
-        return values
-    if len(values) > target_dim:
-        return values[:target_dim]
-    return values + [0.0] * (target_dim - len(values))
-
-
 def generate_embeddings_with_ollama(
     users: list[dict[str, Any]],
     groups: list[dict[str, Any]],
     jobs: list[dict[str, Any]],
     ollama_base_url: str,
-    ollama_model: str,
 ) -> None:
     endpoint = ollama_base_url.rstrip("/") + "/api/embeddings"
 
-    if ollama_model.startswith("granite-embedding:"):
-        prompt_limits = [1200, 900, 700, 500, 350]
-    else:
-        prompt_limits = [3000, 2000, 1400, 1000, 700]
+    # Keep fallback shortening aligned with Java EmbeddingService.
+    prompt_limits: list[int | None] = [None, 3000, 2000, 1400, 1000, 700, 500, 350]
 
     def should_retry_status(status_code: int) -> bool:
         return status_code in {429, 500, 502, 503, 504}
@@ -842,15 +826,19 @@ def generate_embeddings_with_ollama(
                 country=country,
                 max_chars=limit,
             )
-            payload = {"model": ollama_model, "prompt": prompt}
+            payload = {"model": OLLAMA_EMBEDDING_MODEL, "prompt": prompt}
 
             for attempt in range(3):
                 try:
                     response = post_json(endpoint, payload, timeout_seconds=120)
                     vector = response.get("embedding")
                     if isinstance(vector, list) and vector:
-                        normalized = normalize_vector_dimensions(vector, TARGET_MESH_VECTOR_DIM)
-                        return format_embedding_vector(normalized)
+                        if len(vector) != TARGET_MESH_VECTOR_DIM:
+                            raise ValueError(
+                                f"Embedding dimension mismatch for model '{OLLAMA_EMBEDDING_MODEL}': "
+                                f"expected {TARGET_MESH_VECTOR_DIM}, got {len(vector)}"
+                            )
+                        return format_embedding_vector(vector)
                     break
                 except HTTPError as exc:
                     if should_retry_status(exc.code) and attempt < 2:
@@ -1072,7 +1060,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--jobs", type=int, default=50, help="Number of internal job postings to generate (dev default: 50)")
     parser.add_argument("--groups", type=int, default=100, help="Number of internal groups/events to generate (dev default: 100)")
     parser.add_argument("--ollama-base-url", default="http://localhost:11434", help="Ollama base URL")
-    parser.add_argument("--ollama-model", default="granite-embedding:30m", help="Ollama embedding model")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for deterministic enrichment")
     return parser.parse_args()
 
@@ -1149,7 +1136,6 @@ def main() -> int:
         groups=groups,
         jobs=jobs,
         ollama_base_url=args.ollama_base_url,
-        ollama_model=args.ollama_model,
     )
     embedding_seconds = perf_counter() - phase_start
     print(f"[3/5] Embeddings completed in {fmt_seconds(embedding_seconds)}.")
@@ -1196,7 +1182,7 @@ def main() -> int:
     print(f"- users: {len(users)}")
     print(f"- groups/events: {len(groups)}")
     print(f"- jobs: {len(jobs)}")
-    print(f"- ollama_model: {args.ollama_model}")
+    print(f"- ollama_model: {OLLAMA_EMBEDDING_MODEL}")
     print("- timings:")
     print(f"  - total: {fmt_seconds(total_seconds)}")
     print(f"  - load_datasets: {fmt_seconds(download_seconds)}")

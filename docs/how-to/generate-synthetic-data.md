@@ -67,7 +67,6 @@ The script writes SQL files into `src/main/resources/db/dev/` which Flyway picks
 | `--jobs` | `50` | Number of internal job postings |
 | `--groups` | `100` | Number of internal groups/events |
 | `--ollama-base-url` | `http://localhost:11434` | Ollama endpoint |
-| `--ollama-model` | `granite-embedding:30m` | Embedding model |
 | `--seed` | `42` | Random seed for deterministic output |
 | `--workspace` | `.` | Repo root (auto-detected via `pom.xml`) |
 
