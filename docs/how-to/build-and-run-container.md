@@ -13,8 +13,8 @@ Build a local PeopleMesh image and run it with the minimum required production-s
 - Docker running locally
 - Reachable PostgreSQL instance
 - Reachable Docling service
+- Reachable Ollama service
 - At least one configured OIDC provider
-- OpenAI API key (required in production profile)
 
 ## 1) Build the image
 
@@ -41,7 +41,7 @@ docker run --rm \
   -e DB_URL='jdbc:postgresql://host.docker.internal:5432/peoplemesh' \
   -e DB_USER='peoplemesh' \
   -e DB_PASSWORD='change-me' \
-  -e OPENAI_API_KEY='sk-...' \
+  -e OLLAMA_BASE_URL='http://host.docker.internal:11434' \
   -e CONSENT_TOKEN_SECRET='replace-with-32-plus-bytes' \
   -e SESSION_SECRET='replace-with-32-plus-bytes' \
   -e OAUTH_STATE_SECRET='replace-with-32-plus-bytes' \

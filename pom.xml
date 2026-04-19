@@ -134,10 +134,13 @@
             <groupId>io.quarkiverse.langchain4j</groupId>
             <artifactId>quarkus-langchain4j-ollama</artifactId>
         </dependency>
+        
+        <!-- OpenAI (alternative LLM provider)
         <dependency>
             <groupId>io.quarkiverse.langchain4j</groupId>
             <artifactId>quarkus-langchain4j-openai</artifactId>
         </dependency>
+        -->
 
         <!-- LDAP -->
         <dependency>

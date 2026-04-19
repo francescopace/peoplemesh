@@ -39,13 +39,12 @@ PeopleMesh is built as a Quarkus backend serving both a browser SPA and MCP clie
 │  │  PostgreSQL + pgvector   │               │
 │  └──────────────────────────┘               │
 └─────────────────────────────────────────────┘
-        │                │
-        ▼                ▼
-┌──────────────┐  ┌───────────────┐
-│ OIDC Provs   │  │ LLM Provider  │
-│ Google, MSFT,│  │ Ollama (dev)  │
-│ GitHub       │  │ OpenAI (prod) │
-└──────────────┘  └───────────────┘
+          │                       │
+          ▼                       ▼
+┌──────────────────────┐  ┌───────────────┐
+│ OIDC Provs           │  │ LLM Provider  │
+│ Google, MSFT, GitHub │  │               │
+└──────────────────────┘  └───────────────┘
 ```
 
 ## Core concepts

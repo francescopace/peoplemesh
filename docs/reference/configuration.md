@@ -57,12 +57,14 @@ Import-only provider: `GITHUB`.
 ## AI Providers
 
 In dev mode, Ollama is used locally by default.
-In production mode, OpenAI is used by default.
+In production mode, Granite via Ollama is used by default.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OPENAI_API_KEY` | — | OpenAI API key (required in production) |
-| `LLM_MODEL` | `GPT-5.4-nano` | OpenAI chat model used for query parsing and CV extraction prompts |
+| `OLLAMA_BASE_URL` | `http://ollama:11434` | Ollama base URL used in production profile |
+| `LLM_MODEL` | `granite4:3b` | Granite chat model used for query parsing and CV extraction prompts in production |
+| `EMBEDDING_MODEL` | `granite-embedding:30m` | Granite embedding model used for vector generation in production |
+| `OPENAI_API_KEY` | — | Optional OpenAI API key when explicitly switching provider/model |
 
 Dev model defaults are configured in `application-dev.properties`:
 
