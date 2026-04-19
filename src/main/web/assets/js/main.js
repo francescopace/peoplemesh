@@ -12,6 +12,7 @@ import { renderExplore } from "./views/explore.js";
 import { renderPublicProfile } from "./views/public-profile.js";
 import { renderAdmin } from "./views/admin.js";
 import { renderAppShell, updateNavActive } from "./app-shell.js";
+import { renderRouteFallback } from "./utils/route-fallback.js";
 
 const appRoot = document.getElementById("app");
 const router = new Router(appRoot);
@@ -61,11 +62,7 @@ router.on("/privacy_policy", renderPrivacyPolicy);
 router.on("/terms_of_service", renderTermsOfService);
 
 router.notFound((container) => {
-  container.innerHTML = `
-    <div class="empty-state" style="min-height:100dvh">
-      <p>Page not found</p>
-      <a href="#/" class="btn btn-primary">Go Home</a>
-    </div>`;
+  renderRouteFallback(container, "Page not found");
 });
 
 router.start();

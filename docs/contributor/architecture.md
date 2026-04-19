@@ -27,6 +27,7 @@ For `src/main/web`, follow a lightweight layered flow:
 
 - `views/routes -> services -> api`.
 - `views` compose UI and route-level orchestration only.
+- Reusable UI feature blocks should live in `components` (for example profile sections or catalog panels), so views do not import other views.
 - `services` hold feature/business logic and data orchestration.
 - `api` is the only layer that performs HTTP calls.
 - `utils` stay stateless (format/parsing/date/helpers), not business orchestration.

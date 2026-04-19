@@ -1,6 +1,13 @@
-import { api } from "../api.js";
 import { Auth } from "../auth.js";
 import { el, toast, modal, spinner } from "../ui.js";
+import { getUserFacingErrorMessage } from "../utils/errors.js";
+import {
+  deleteMyAccount,
+  exportMyData,
+  grantMyConsent,
+  listMyConsents,
+  revokeMyConsent,
+} from "../services/privacy-service.js";
 
 export async function renderPrivacy(container) {
   container.dataset.page = "privacy";
@@ -117,7 +124,7 @@ function statusBullet(icon, text) {
 
 async function exportData() {
   try {
-    const data = await api.get("/api/v1/me/export");
+    const data = await exportMyData();
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -126,7 +133,7 @@ async function exportData() {
     a.click();
     URL.revokeObjectURL(url);
     toast("Data exported successfully", "success");
-  } catch (err) { toast(err.message, "error"); }
+  } catch (err) { toast(getUserFacingErrorMessage(err, "Could not export data."), "error"); }
 }
 
 /* === Account deletion === */
@@ -141,10 +148,10 @@ async function deleteAccount() {
         className: "btn-danger",
         onClick: async () => {
           try {
-            await api.delete("/api/v1/me");
+            await deleteMyAccount();
             toast("Account deletion initiated", "info");
             await Auth.logout();
-          } catch (err) { toast(err.message, "error"); }
+          } catch (err) { toast(getUserFacingErrorMessage(err, "Could not delete account."), "error"); }
         },
       }],
     });
@@ -169,7 +176,7 @@ const SCOPE_LABELS = {
 
 async function loadConsents(consentGrid) {
   try {
-    const data = await api.get("/api/v1/me/consents");
+    const data = await listMyConsents();
     const allScopes = data.scopes || [];
     const active = new Set(data.active || []);
 
@@ -218,10 +225,10 @@ async function loadConsents(consentGrid) {
                 className: "btn-danger",
                 onClick: async () => {
                   try {
-                    await api.delete(`/api/v1/me/consents/${scope}`);
+                    await revokeMyConsent(scope);
                     toast(`${meta.label} consent revoked`, "info");
                     await loadConsents(consentGrid);
-                  } catch (err) { toast(err.message, "error"); }
+                  } catch (err) { toast(getUserFacingErrorMessage(err, "Could not revoke consent."), "error"); }
                 },
               }],
             });
@@ -229,11 +236,11 @@ async function loadConsents(consentGrid) {
         }
         toggle.disabled = true;
         try {
-          await api.post(`/api/v1/me/consents/${scope}`);
+          await grantMyConsent(scope);
           toast(`${meta.label} consent granted`, "success");
           await loadConsents(consentGrid);
         } catch (err) {
-          toast(err.message, "error");
+          toast(getUserFacingErrorMessage(err, "Could not grant consent."), "error");
         } finally {
           toggle.disabled = false;
         }

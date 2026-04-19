@@ -1,8 +1,8 @@
 import { Auth } from "./auth.js";
-import { api } from "./api.js";
 import { renderBrand } from "./brand.js";
 import { renderFooter } from "./footer.js";
 import { el } from "./ui.js";
+import { getMyProfile } from "./services/profile-service.js";
 import { deriveInitials } from "./utils/initials.js";
 
 let _dropdownCloseHandler = null;
@@ -28,7 +28,7 @@ export async function renderAppShell(container) {
 
   let avatarHtml;
   try {
-    const profile = await api.get("/api/v1/me").catch(() => null);
+    const profile = await getMyProfile().catch(() => null);
     const photoUrl = profile?.identity?.photo_url;
     if (photoUrl && /^https?:\/\//i.test(photoUrl)) {
       avatarHtml = `<img class="user-avatar user-avatar--img" src="${escAttr(photoUrl)}" alt="${escAttr(initials)}" referrerpolicy="no-referrer">`;

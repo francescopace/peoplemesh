@@ -1,7 +1,8 @@
 import { Auth } from "../auth.js";
-import { api } from "../api.js";
 import { el, emptyState, pageHeader, spinner, toast } from "../ui.js";
-import { renderSkillsCatalog } from "./skills.js";
+import { renderSkillsCatalogPanel } from "../components/skills-catalog-panel.js";
+import { getUserFacingErrorMessage } from "../utils/errors.js";
+import { getSystemStatistics } from "../services/admin-service.js";
 
 export async function renderAdmin(container) {
   container.dataset.page = "admin";
@@ -40,7 +41,7 @@ export async function renderAdmin(container) {
   container.appendChild(catalogsSection);
 
   const overviewPromise = renderAdminOverview(overviewSection);
-  await renderSkillsCatalog(catalogsSection, {
+  await renderSkillsCatalogPanel(catalogsSection, {
     showHeader: false,
     showCreateAction: false,
     clearContainer: false,
@@ -62,11 +63,11 @@ async function renderAdminOverview(container) {
 
   let overview;
   try {
-    overview = await api.get("/api/v1/system/statistics");
+    overview = await getSystemStatistics();
   } catch (err) {
     container.querySelector(".spinner")?.remove();
     container.appendChild(emptyState("Could not load data overview."));
-    toast(err.message, "error");
+    toast(getUserFacingErrorMessage(err, "Could not load data overview."), "error");
     return;
   }
 

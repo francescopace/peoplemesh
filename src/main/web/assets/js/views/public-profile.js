@@ -1,7 +1,7 @@
-import { api } from "../api.js";
 import { el, spinner, emptyState, toast } from "../ui.js";
 import { arr, fieldRow, labeledField, provBadge, tagGroup } from "../components/profile-fields.js";
 import { getUserFacingErrorMessage } from "../utils/errors.js";
+import { getNodeProfile, getNodeSkills } from "../services/nodes-service.js";
 
 export async function renderPublicProfile(container, { id }) {
   container.dataset.page = "profile";
@@ -10,7 +10,7 @@ export async function renderPublicProfile(container, { id }) {
 
   let profile;
   try {
-    profile = await api.get(`/api/v1/nodes/${id}/profile`);
+    profile = await getNodeProfile(id);
   } catch (err) {
     container.querySelector(".spinner")?.remove();
     if (err.status === 404) {
@@ -57,10 +57,11 @@ async function renderPublicProfileView(container, p, nodeId) {
   const idCard = readonlySection("person", "Identity", "blue");
   idCard.classList.add("profile-grid-full");
   const idBody = idCard.querySelector(".profile-card-body");
-  if (identity.photo_url) {
+  const safePhotoUrl = /^https?:\/\//i.test(identity.photo_url || "") ? identity.photo_url : "";
+  if (safePhotoUrl) {
     const avatarRow = el("div", { className: "profile-identity-avatar" });
     const img = el("img", {
-      src: identity.photo_url,
+      src: safePhotoUrl,
       alt: identity.display_name || "Profile photo",
       className: "profile-avatar-img",
       referrerpolicy: "no-referrer",
@@ -208,7 +209,7 @@ async function renderPublicProfileView(container, p, nodeId) {
 async function renderPublicSkillsSection(grid, nodeId) {
   let skills;
   try {
-    skills = await api.get(`/api/v1/nodes/${nodeId}/skills`);
+    skills = await getNodeSkills(nodeId);
   } catch { return; }
 
   if (!skills?.length) return;

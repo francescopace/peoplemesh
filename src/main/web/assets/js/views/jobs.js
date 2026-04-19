@@ -1,5 +1,7 @@
-import { api } from "../api.js";
 import { el, spinner, toast, emptyState } from "../ui.js";
+import { getUserFacingErrorMessage } from "../utils/errors.js";
+import { getJobMatches } from "../services/jobs-service.js";
+import { getNode } from "../services/nodes-service.js";
 
 function jobFromNodeDto(node) {
   if (!node || (node.nodeType || "").toUpperCase() !== "JOB") return null;
@@ -45,7 +47,7 @@ export async function renderJobDetail(container, { id }) {
   container.appendChild(spinner());
 
   try {
-    const node = await api.get(`/api/v1/nodes/${id}`);
+    const node = await getNode(id);
     container.querySelector(".spinner")?.remove();
 
     const job = jobFromNodeDto(node);
@@ -117,7 +119,7 @@ export async function renderJobDetail(container, { id }) {
     container.appendChild(candSection);
 
     try {
-      const raw = await api.get(`/api/v1/matches/${id}`, { type: "PEOPLE" });
+      const raw = await getJobMatches(id);
       const candidates = Array.isArray(raw) ? raw.map(meshMatchToCandidate) : [];
       candSection.querySelector(".spinner")?.remove();
       if (candidates?.length) {
@@ -216,7 +218,7 @@ export async function renderJobDetail(container, { id }) {
     }
   } catch (err) {
     container.querySelector(".spinner")?.remove();
-    toast(err.message, "error");
+    toast(getUserFacingErrorMessage(err, "Could not load job details."), "error");
   }
 }
 

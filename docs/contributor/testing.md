@@ -48,6 +48,19 @@ npm test -- __tests__/services/matches-service.test.js
 npm test -- __tests__/utils/profile-import.test.js
 # run skills service unit tests
 npm test -- __tests__/services/skills-service.test.js
+# run profile/privacy/events/admin service unit tests
+npm test -- __tests__/services/profile-service.test.js
+npm test -- __tests__/services/privacy-service.test.js
+npm test -- __tests__/services/events-service.test.js
+npm test -- __tests__/services/admin-service.test.js
+npm test -- __tests__/services/nodes-service.test.js
+npm test -- __tests__/services/jobs-service.test.js
+# run newly covered view suites
+npm test -- __tests__/views/events.test.js
+npm test -- __tests__/views/privacy.test.js
+npm test -- __tests__/views/jobs.test.js
+npm test -- __tests__/views/admin.test.js
+npm test -- __tests__/views/public-profile.test.js
 ```
 
 - Test runner: Vitest
@@ -56,8 +69,19 @@ npm test -- __tests__/services/skills-service.test.js
 - Added incremental coverage for service orchestration and extracted stateless helpers:
   - `src/main/web/__tests__/services/matches-service.test.js`
   - `src/main/web/__tests__/services/skills-service.test.js`
+  - `src/main/web/__tests__/services/profile-service.test.js`
+  - `src/main/web/__tests__/services/privacy-service.test.js`
+  - `src/main/web/__tests__/services/events-service.test.js`
+  - `src/main/web/__tests__/services/admin-service.test.js`
+  - `src/main/web/__tests__/services/nodes-service.test.js`
+  - `src/main/web/__tests__/services/jobs-service.test.js`
   - `src/main/web/__tests__/utils/profile-import.test.js`
   - `src/main/web/__tests__/views/explore.test.js`
+  - `src/main/web/__tests__/views/events.test.js`
+  - `src/main/web/__tests__/views/privacy.test.js`
+  - `src/main/web/__tests__/views/jobs.test.js`
+  - `src/main/web/__tests__/views/admin.test.js`
+  - `src/main/web/__tests__/views/public-profile.test.js`
 - Shared skill term matching logic (used by both Search and My Mesh highlighting) is covered in `src/main/web/__tests__/utils/term-matching.test.js`
 - Parsed-query to schema/result adaptation for search reruns is covered in `src/main/web/__tests__/utils/search-query-mapper.test.js`
 - Search highlighting regression coverage lives in `src/main/web/__tests__/views/search.test.js`

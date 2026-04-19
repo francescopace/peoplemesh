@@ -1,5 +1,6 @@
-import { api } from "../api.js";
 import { el, spinner, emptyState, toast, pageHeader } from "../ui.js";
+import { getUserFacingErrorMessage } from "../utils/errors.js";
+import { getMyActivity, listMyNotifications } from "../services/events-service.js";
 
 export async function renderEvents(container) {
   container.dataset.page = "events";
@@ -15,8 +16,8 @@ export async function renderEvents(container) {
 
   try {
     const [notifications, privacyActivity] = await Promise.all([
-      api.get("/api/v1/me/notifications", { limit: 50 }).catch(() => []),
-      api.get("/api/v1/me/activity").catch(() => null),
+      listMyNotifications(50).catch(() => []),
+      getMyActivity().catch(() => null),
     ]);
 
     content.innerHTML = "";
@@ -34,7 +35,7 @@ export async function renderEvents(container) {
   } catch (err) {
     content.innerHTML = "";
     content.appendChild(emptyState("Unable to load events."));
-    toast(err.message, "error");
+    toast(getUserFacingErrorMessage(err, "Unable to load events."), "error");
   }
 }
 
