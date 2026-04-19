@@ -167,6 +167,23 @@ def parse_args() -> argparse.Namespace:
             "(default: legacy-vs-java)."
         ),
     )
+    parser.add_argument(
+        "--eval-my-mesh",
+        action="store_true",
+        help="Enable /api/v1/matches/me evaluation block.",
+    )
+    parser.add_argument(
+        "--my-mesh-sample-size",
+        type=int,
+        default=12,
+        help="Number of USER nodes sampled for /matches/me evaluation (default: 12).",
+    )
+    parser.add_argument(
+        "--my-mesh-relevance-mode",
+        choices=["embedding", "strict", "both"],
+        default="both",
+        help="Relevance mode for /matches/me evaluation (default: both).",
+    )
     return parser.parse_args()
 
 
@@ -864,41 +881,102 @@ def evaluate_api_matches(
             )
             continue
 
-        raw_results = data if isinstance(data, list) else []
-        ranked_ids: list[str] = []
-        top_titles: list[str] = []
-        for item in raw_results:
-            if not isinstance(item, dict):
-                continue
-            node_id = str(item.get("id", "")).strip()
-            if node_id == seed.node_id:
-                continue
-            if node_id:
-                ranked_ids.append(node_id)
-            title = str(item.get("title", "")).strip()
-            if title and len(top_titles) < 3:
-                top_titles.append(title)
+        ranked_ids, top_titles = extract_ranked_ids_and_top_titles(data, seed.node_id)
+        out[case_key] = metrics_from_ranked_ids(ranked_ids, relevant_ids, top_titles)
+    return api_cases, out
 
-        ranked_relevance = [1 if node_id in relevant_ids else 0 for node_id in ranked_ids]
 
-        out[case_key] = QueryMetrics(
-            precision_at_5=precision_at_k(ranked_relevance, 5),
-            precision_at_10=precision_at_k(ranked_relevance, 10),
-            precision_at_20=precision_at_k(ranked_relevance, 20),
-            recall_at_20=recall_at_k(ranked_relevance, len(relevant_ids), 20),
-            recall_at_20_capped=recall_at_k_capped(ranked_relevance, len(relevant_ids), 20),
-            mrr=reciprocal_rank(ranked_relevance),
-            ndcg_at_10=ndcg_at_k(ranked_relevance, len(relevant_ids), 10),
-            relevant_total=len(relevant_ids),
-            relevant_found_top20=sum(ranked_relevance[:20]),
-            top3_titles=top_titles,
-            rel_mean_sim=None,
-            rel_median_sim=None,
-            rel_std_sim=None,
-            irr_mean_sim=None,
-            irr_median_sim=None,
-            irr_std_sim=None,
+def extract_ranked_ids_and_top_titles(raw_data: Any, seed_node_id: str) -> tuple[list[str], list[str]]:
+    raw_results = raw_data if isinstance(raw_data, list) else []
+    ranked_ids: list[str] = []
+    top_titles: list[str] = []
+    for item in raw_results:
+        if not isinstance(item, dict):
+            continue
+        node_id = str(item.get("id", "")).strip()
+        if node_id == seed_node_id:
+            continue
+        if node_id:
+            ranked_ids.append(node_id)
+        title = str(item.get("title", "")).strip()
+        if title and len(top_titles) < 3:
+            top_titles.append(title)
+    return ranked_ids, top_titles
+
+
+def metrics_from_ranked_ids(ranked_ids: list[str], relevant_ids: set[str], top_titles: list[str]) -> QueryMetrics:
+    ranked_relevance = [1 if node_id in relevant_ids else 0 for node_id in ranked_ids]
+    return QueryMetrics(
+        precision_at_5=precision_at_k(ranked_relevance, 5),
+        precision_at_10=precision_at_k(ranked_relevance, 10),
+        precision_at_20=precision_at_k(ranked_relevance, 20),
+        recall_at_20=recall_at_k(ranked_relevance, len(relevant_ids), 20),
+        recall_at_20_capped=recall_at_k_capped(ranked_relevance, len(relevant_ids), 20),
+        mrr=reciprocal_rank(ranked_relevance),
+        ndcg_at_10=ndcg_at_k(ranked_relevance, len(relevant_ids), 10),
+        relevant_total=len(relevant_ids),
+        relevant_found_top20=sum(ranked_relevance[:20]),
+        top3_titles=top_titles,
+        rel_mean_sim=None,
+        rel_median_sim=None,
+        rel_std_sim=None,
+        irr_mean_sim=None,
+        irr_median_sim=None,
+        irr_std_sim=None,
+    )
+
+
+def evaluate_api_matches_me(
+    conn,
+    candidates: list[Candidate],
+    api_url: str,
+    session_secret: str,
+    sample_size: int,
+    rng: random.Random,
+    relevance_mode: str = "strict",
+) -> tuple[list[QueryCase], dict[str, QueryMetrics]]:
+    endpoint = api_url.rstrip("/") + "/api/v1/matches/me"
+    out: dict[str, QueryMetrics] = {}
+    user_candidates = [c for c in candidates if c.node_type == "USER"]
+    sampled = user_candidates if len(user_candidates) <= sample_size else rng.sample(user_candidates, sample_size)
+    api_cases: list[QueryCase] = []
+
+    for seed in sampled:
+        case_key = f"my_mesh_{seed.node_id[:8]}"
+        api_cases.append(
+            QueryCase(
+                key=case_key,
+                text=seed.title,
+                target_types=set(),
+                relevance_fn=lambda _: False,
+            )
         )
+        relevant_ids = build_relevant_ids(seed, candidates, relevance_mode)
+        identity_id = str(uuid.uuid4())
+        provider = "eval-my-mesh"
+        try:
+            ensure_api_user_and_consent(
+                conn,
+                seed.node_id,
+                identity_id,
+                provider,
+                is_admin=False,
+                ensure_node=False,
+            )
+            token = encode_pm_session(seed.node_id, provider, session_secret)
+            cookie = f"pm_session={token}"
+            data = get_json_with_cookie(endpoint, cookie)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[warn] /matches/me call failed for {case_key}: {exc}", file=sys.stderr)
+            out[case_key] = QueryMetrics(
+                0, 0, 0, 0, 0, 0, 0, len(relevant_ids), 0, [], None, None, None, None, None, None
+            )
+            continue
+        finally:
+            cleanup_api_user(conn, seed.node_id, identity_id, delete_node=False)
+
+        ranked_ids, top_titles = extract_ranked_ids_and_top_titles(data, seed.node_id)
+        out[case_key] = metrics_from_ranked_ids(ranked_ids, relevant_ids, top_titles)
     return api_cases, out
 
 
@@ -1162,7 +1240,11 @@ def summarize_gate(p10_status: str, ndcg_status: str, mrr_status: str) -> str:
     return combine_status(rank_pair, mrr_status)
 
 
-def print_quality_gate(direct_agg: AggregateMetrics, api_agg: AggregateMetrics | None) -> tuple[str, str | None, str]:
+def print_quality_gate(
+    direct_agg: AggregateMetrics,
+    api_agg: AggregateMetrics | None,
+    my_mesh_aggs: dict[str, AggregateMetrics] | None = None,
+) -> tuple[str, str | None, dict[str, str], str]:
     print("\nQuality Gate (Traffic Light)")
     print("-----------------------")
     d_p10 = traffic_light_status(direct_agg.precision_at_10, green=0.45, yellow=0.35)
@@ -1189,16 +1271,36 @@ def print_quality_gate(direct_agg: AggregateMetrics, api_agg: AggregateMetrics |
         api_overall = summarize_gate(a_p10, a_ndcg, a_mrr)
         print(f"api_overall: {api_overall}")
 
+    my_mesh_overalls: dict[str, str] = {}
+    if my_mesh_aggs:
+        for mode in sorted(my_mesh_aggs.keys()):
+            agg = my_mesh_aggs[mode]
+            m_p10 = traffic_light_status(agg.precision_at_10, green=0.70, yellow=0.55)
+            m_ndcg = traffic_light_status(agg.ndcg_at_10, green=0.65, yellow=0.55)
+            m_mrr = traffic_light_status(agg.mrr, green=0.50, yellow=0.40)
+            print(
+                f"my_mesh[{mode}]: P@10={fmt(agg.precision_at_10)} [{m_p10}], "
+                f"NDCG@10={fmt(agg.ndcg_at_10)} [{m_ndcg}], "
+                f"MRR={fmt(agg.mrr)} [{m_mrr}]"
+            )
+            mode_overall = summarize_gate(m_p10, m_ndcg, m_mrr)
+            my_mesh_overalls[mode] = mode_overall
+            print(f"my_mesh_overall[{mode}]: {mode_overall}")
+
     overall_global = combine_status(direct_overall, api_overall) if api_overall is not None else direct_overall
+    for mode_overall in my_mesh_overalls.values():
+        overall_global = combine_status(overall_global, mode_overall)
     print(f"overall_global: {overall_global}")
-    return direct_overall, api_overall, overall_global
+    return direct_overall, api_overall, my_mesh_overalls, overall_global
 
 
 def print_action_hints(
     direct_agg: AggregateMetrics,
     api_agg: AggregateMetrics | None,
+    my_mesh_aggs: dict[str, AggregateMetrics] | None,
     direct_overall: str,
     api_overall: str | None,
+    my_mesh_overalls: dict[str, str] | None,
     overall_global: str,
 ) -> None:
     if overall_global == "GREEN":
@@ -1239,6 +1341,26 @@ def print_action_hints(
         hints.append(
             "API strict relevance: low Recall@20 with high Recall@20(capped) indicates a very large relevant pool; prefer capped recall and ranking metrics."
         )
+
+    if my_mesh_aggs is not None and my_mesh_overalls is not None:
+        for mode, status in my_mesh_overalls.items():
+            if status == "GREEN":
+                continue
+            agg = my_mesh_aggs.get(mode)
+            if agg is None:
+                continue
+            if agg.precision_at_10 < 0.55:
+                hints.append(
+                    f"My Mesh ({mode}) P@10 is weak: inspect /matches/me ranking and self-profile query extraction."
+                )
+            if agg.ndcg_at_10 < 0.55:
+                hints.append(
+                    f"My Mesh ({mode}) NDCG@10 is weak: tune top-rank ordering behavior for /matches/me results."
+                )
+            if agg.mrr < 0.40:
+                hints.append(
+                    f"My Mesh ({mode}) MRR is weak: ensure the best neighbors appear in the first results."
+                )
 
     print("\nAction Hints")
     print("------------")
@@ -1293,6 +1415,8 @@ def main() -> int:
     print(f"[info] query_prefix={args.query_prefix!r}")
     print(f"[info] query_suite={args.query_suite}")
     print(f"[info] divergence_mode={args.divergence_mode}")
+    print(f"[info] eval_my_mesh={args.eval_my_mesh}")
+    print(f"[info] my_mesh_relevance_mode={args.my_mesh_relevance_mode}")
     print(f"[info] api_url={args.api_url}")
 
     try:
@@ -1339,6 +1463,7 @@ def main() -> int:
         print_divergence_report(divergence)
 
         api_agg_for_gate: AggregateMetrics | None = None
+        my_mesh_aggs_for_gate: dict[str, AggregateMetrics] = {}
         user_samples = [c for c in candidates if c.node_type == "USER"]
         if not user_samples:
             print("[warn] No USER candidates found, skipping /matches API evaluation.")
@@ -1407,13 +1532,60 @@ def main() -> int:
                     api_metrics_strict,
                 )
                 api_agg_for_gate = compute_aggregate(api_cases_strict, api_metrics_strict)
+
+                if args.eval_my_mesh:
+                    my_mesh_modes = (
+                        ["embedding", "strict"]
+                        if args.my_mesh_relevance_mode == "both"
+                        else [args.my_mesh_relevance_mode]
+                    )
+                    for mode in my_mesh_modes:
+                        my_mesh_cases, my_mesh_metrics = evaluate_api_matches_me(
+                            conn,
+                            candidates,
+                            args.api_url,
+                            args.session_secret,
+                            args.my_mesh_sample_size,
+                            rng,
+                            relevance_mode=mode,
+                        )
+                        print_query_table(
+                            f"API /matches/me results ({mode} relevance)",
+                            my_mesh_cases,
+                            my_mesh_metrics,
+                        )
+                        print_aggregate(
+                            f"API /matches/me aggregate ({mode} relevance)",
+                            my_mesh_cases,
+                            my_mesh_metrics,
+                        )
+                        print_aggregate_relevant_only(
+                            f"API /matches/me aggregate ({mode} relevance)",
+                            my_mesh_cases,
+                            my_mesh_metrics,
+                        )
+                        my_mesh_agg = compute_aggregate(my_mesh_cases, my_mesh_metrics)
+                        if my_mesh_agg is not None:
+                            my_mesh_aggs_for_gate[mode] = my_mesh_agg
             finally:
                 if cleanup_needed:
                     cleanup_api_user(conn, admin_user_id, admin_identity_id, delete_node=True)
 
         if direct_agg is not None:
-            direct_overall, api_overall, overall_global = print_quality_gate(direct_agg, api_agg_for_gate)
-            print_action_hints(direct_agg, api_agg_for_gate, direct_overall, api_overall, overall_global)
+            direct_overall, api_overall, my_mesh_overalls, overall_global = print_quality_gate(
+                direct_agg,
+                api_agg_for_gate,
+                my_mesh_aggs_for_gate if my_mesh_aggs_for_gate else None,
+            )
+            print_action_hints(
+                direct_agg,
+                api_agg_for_gate,
+                my_mesh_aggs_for_gate if my_mesh_aggs_for_gate else None,
+                direct_overall,
+                api_overall,
+                my_mesh_overalls if my_mesh_overalls else None,
+                overall_global,
+            )
 
         print("\n[done] Evaluation completed.")
         print("[next] If divergence cosine is low, regenerate embeddings in Java text format.")
