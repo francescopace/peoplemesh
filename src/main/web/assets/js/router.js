@@ -87,6 +87,14 @@ export class Router {
 
       try {
         await route.handler(this._container, params);
+      } catch {
+        if (navId === this._navGeneration) {
+          this._container.innerHTML = `
+            <div class="empty-state" style="min-height:100dvh">
+              <p>Something went wrong while loading this page.</p>
+              <a href="#/" class="btn btn-primary">Go Home</a>
+            </div>`;
+        }
       } finally {
         if (navId === this._navGeneration) {
           this._container.removeAttribute("aria-busy");

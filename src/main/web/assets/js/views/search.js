@@ -1,8 +1,17 @@
-import { api } from "../api.js";
 import { el, spinner, emptyState, toast } from "../ui.js";
 import { NODE_TYPE_ICONS, NODE_TYPE_COLORS } from "../node-types.js";
 import { contactFooter } from "../contact-actions.js";
 import { termsMatch } from "../utils/term-matching.js";
+import { getUserFacingErrorMessage } from "../utils/errors.js";
+import {
+  fetchPromptMatches,
+  fetchStructuredMatches,
+} from "../services/matches-service.js";
+import {
+  GEO_POSITIVE,
+  locationChipStyle,
+  matchedTagStyle,
+} from "../utils/match-visuals.js";
 import {
   adaptMatchesToSearchResponse,
   inferAutoTypeFromParsedQuery,
@@ -19,8 +28,6 @@ const RESULT_TYPE_TABS = [
   { id: "INTEREST_GROUP", label: "Groups", icon: "interests" },
 ];
 const SEARCH_PAGE_SIZE = 10;
-const GEO_POSITIVE = new Set(["same_country", "same_continent", "remote_friendly"]);
-
 export async function renderSearch(container) {
   container.dataset.page = "search";
 
@@ -52,7 +59,7 @@ export async function renderSearch(container) {
       className: `explore-type-tab${t.id === activeTypeFilter ? " active" : ""}`,
       dataset: { type: t.id },
     },
-      el("span", { className: "material-symbols-outlined", style: "font-size:16px" }, t.icon),
+      el("span", { className: "material-symbols-outlined icon-16" }, t.icon),
       el("span", {}, t.label)
     );
     typeTabs.appendChild(tab);
@@ -115,20 +122,21 @@ export async function renderSearch(container) {
 
       if (mode === "matches") {
         const typeParam = toMatchesTypeFilter(activeTypeFilter);
-        const query = new URLSearchParams();
-        if (typeParam) query.set("type", typeParam);
-        if (countrySelect.value) query.set("country", countrySelect.value);
-        query.set("limit", String(SEARCH_PAGE_SIZE));
-        query.set("offset", String(currentOffset));
-        const path = `/api/v1/matches?${query.toString()}`;
-        const matches = await api.post(path, lastParsedQuery || {});
+        const matches = await fetchStructuredMatches({
+          schema: lastParsedQuery || {},
+          type: typeParam,
+          country: countrySelect.value,
+          limit: SEARCH_PAGE_SIZE,
+          offset: currentOffset,
+        });
         const adapted = adaptMatchesToSearchResponse(matches, lastParsedQuery);
         pageResults = adapted.results || [];
       } else {
-        const query = new URLSearchParams();
-        query.set("limit", String(SEARCH_PAGE_SIZE));
-        query.set("offset", String(currentOffset));
-        const data = await api.post(`/api/v1/matches/prompt?${query.toString()}`, { query: lastQueryText });
+        const data = await fetchPromptMatches({
+          queryText: lastQueryText,
+          limit: SEARCH_PAGE_SIZE,
+          offset: currentOffset,
+        });
         pageResults = data.results || [];
         if (!lastParsedQuery && data.parsedQuery) {
           lastParsedQuery = data.parsedQuery;
@@ -168,7 +176,7 @@ export async function renderSearch(container) {
       } else {
         resultsArea.appendChild(emptyState("Something went wrong. Please try again."));
       }
-      toast(err.message, "error");
+      toast(getUserFacingErrorMessage(err), "error");
     }
   }
 
@@ -328,9 +336,7 @@ function renderProfileCard(result) {
   if (locationParts.length) {
     const geoReason = result.breakdown?.geographyReason;
     const positiveGeo = geoReason && GEO_POSITIVE.has(geoReason);
-    const locStyle = positiveGeo
-      ? `background:${colors.bg}; color:${colors.color}; border:1px solid ${colors.border}; padding:0.1rem 0.45rem; border-radius:4px; font-size:0.72rem`
-      : "background:rgba(148,163,184,0.08); color:var(--color-gray-400); border:1px solid rgba(148,163,184,0.2); padding:0.1rem 0.45rem; border-radius:4px; font-size:0.72rem";
+    const locStyle = locationChipStyle(colors, geoReason);
     subtitle.appendChild(el("span", { className: "dc-sep" }, "\u00B7"));
     subtitle.appendChild(el("span", { style: locStyle }, locationParts.join(", ")));
   }
@@ -356,7 +362,7 @@ function renderProfileCard(result) {
       ...(result.breakdown?.matchedNiceToHaveSkills || []),
     ];
     const skillLevels = result.skill_levels || {};
-    const matchStyle = `background:${colors.bg}; color:${colors.color}; border:1px solid ${colors.border}; box-shadow:0 0 0 1px ${colors.border}`;
+    const matchStyle = matchedTagStyle(colors);
     const tagsArea = el("div", { className: "dc-tags-area" });
     const row = el("div", { className: "dc-tags" });
     allSkills.slice(0, 10).forEach((s) => {
@@ -420,10 +426,7 @@ function renderNodeCard(result) {
   }, nType.replace("_", " ")));
   if (result.country) {
     const geoReason = result.breakdown?.geographyReason;
-    const positiveGeo = geoReason && GEO_POSITIVE.has(geoReason);
-    const locStyle = positiveGeo
-      ? `background:${colors.bg}; color:${colors.color}; border:1px solid ${colors.border}; padding:0.1rem 0.45rem; border-radius:4px; font-size:0.72rem`
-      : "background:rgba(148,163,184,0.08); color:var(--color-gray-400); border:1px solid rgba(148,163,184,0.2); padding:0.1rem 0.45rem; border-radius:4px; font-size:0.72rem";
+    const locStyle = locationChipStyle(colors, geoReason);
     subtitle.appendChild(el("span", { className: "dc-sep" }, "\u00B7"));
     subtitle.appendChild(el("span", { style: locStyle }, result.country));
   }
@@ -443,7 +446,7 @@ function renderNodeCard(result) {
 
   if (result.tags?.length) {
     const matchedTerms = result.breakdown?.matchedMustHaveSkills || [];
-    const matchStyle = `background:${colors.bg}; color:${colors.color}; border:1px solid ${colors.border}; box-shadow:0 0 0 1px ${colors.border}`;
+    const matchStyle = matchedTagStyle(colors);
     const tagsArea = el("div", { className: "dc-tags-area" });
     const row = el("div", { className: "dc-tags" });
     result.tags.slice(0, 8).forEach((t) => {

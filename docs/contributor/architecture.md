@@ -21,6 +21,23 @@ This repository follows a pragmatic layered architecture aimed at simplicity.
 - MCP tools do not depend directly on repositories.
 - Repositories do not depend on upper layers.
 
+## Frontend Layering (Web App)
+
+For `src/main/web`, follow a lightweight layered flow:
+
+- `views/routes -> services -> api`.
+- `views` compose UI and route-level orchestration only.
+- `services` hold feature/business logic and data orchestration.
+- `api` is the only layer that performs HTTP calls.
+- `utils` stay stateless (format/parsing/date/helpers), not business orchestration.
+
+Dependency direction rules:
+
+- Views/components must not import API clients directly.
+- Services may import `api` and `utils`.
+- Utilities must not import views, services, or API modules.
+- API modules must not import views/components/services.
+
 ## DTO and Mapper Rules
 
 - Avoid cosmetic DTOs (1:1 copies without behavior or boundary value).

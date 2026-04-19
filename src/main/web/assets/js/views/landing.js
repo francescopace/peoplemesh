@@ -53,11 +53,7 @@ export function renderLanding(container) {
                 </button>
               </form>
             </div>
-            <div class="landing-examples">
-              ${EXAMPLE_QUERIES.map(
-                (q) => `<button class="landing-example-chip" data-query="${q}">${q}</button>`
-              ).join("")}
-            </div>
+            <div class="landing-examples" id="landing-examples"></div>
           </div>
         </div>
         <button class="section-nav-arrow" id="scroll-to-why" aria-label="Learn more">
@@ -98,12 +94,28 @@ export function renderLanding(container) {
 
     </div>
 
-    <div class="section-dots" id="section-dots">
-      ${SECTION_IDS.map(
-        (id) => `<button class="section-dot" data-target="${id}" aria-label="Go to ${id}"></button>`
-      ).join("")}
-    </div>
+    <div class="section-dots" id="section-dots"></div>
   `;
+
+  const examplesWrap = container.querySelector("#landing-examples");
+  EXAMPLE_QUERIES.forEach((query) => {
+    const chip = document.createElement("button");
+    chip.className = "landing-example-chip";
+    chip.type = "button";
+    chip.dataset.query = query;
+    chip.textContent = query;
+    examplesWrap.appendChild(chip);
+  });
+
+  const sectionDotsWrap = container.querySelector("#section-dots");
+  SECTION_IDS.forEach((id) => {
+    const dot = document.createElement("button");
+    dot.className = "section-dot";
+    dot.type = "button";
+    dot.dataset.target = id;
+    dot.setAttribute("aria-label", `Go to ${id}`);
+    sectionDotsWrap.appendChild(dot);
+  });
 
   /* === Cookie banner === */
   if (!localStorage.getItem("pm_cookie_ack")) {

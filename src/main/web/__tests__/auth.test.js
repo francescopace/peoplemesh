@@ -10,6 +10,8 @@ describe("AuthManager", () => {
 
     apiMock = {
       get: vi.fn(),
+      post: vi.fn(),
+      setUnauthorizedHandler: vi.fn(),
     };
     vi.doMock("../assets/js/api.js", () => ({ api: apiMock }));
     vi.doMock("../config.js", () => ({
@@ -145,21 +147,23 @@ describe("AuthManager", () => {
 
   it("logout clears user and redirects to root", async () => {
     Auth.setUser({ id: "123" });
-    global.fetch = vi.fn().mockResolvedValue({ ok: true });
+    apiMock.post.mockResolvedValue({});
 
     await Auth.logout();
 
+    expect(apiMock.post).toHaveBeenCalledWith("/api/v1/auth/logout");
     expect(Auth.isAuthenticated()).toBe(false);
     expect(Auth.getUser()).toBeNull();
     expect(window.location.hash).toBe("#/");
   });
 
-  it("logout handles fetch error gracefully", async () => {
+  it("logout handles API error gracefully", async () => {
     Auth.setUser({ id: "123" });
-    global.fetch = vi.fn().mockRejectedValue(new Error("Network"));
+    apiMock.post.mockRejectedValue(new Error("Network"));
 
     await Auth.logout();
 
+    expect(apiMock.post).toHaveBeenCalledWith("/api/v1/auth/logout");
     expect(Auth.isAuthenticated()).toBe(false);
   });
 });

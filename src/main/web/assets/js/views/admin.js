@@ -23,7 +23,7 @@ export async function renderAdmin(container) {
       }
     },
   },
-    el("span", { className: "material-symbols-outlined", style: "font-size:18px" }, "add"),
+    el("span", { className: "material-symbols-outlined icon-18" }, "add"),
     el("span", {}, "Create")
   );
 

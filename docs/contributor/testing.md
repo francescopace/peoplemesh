@@ -40,11 +40,24 @@ npm test -- __tests__/views/search.test.js
 npm test -- __tests__/utils/term-matching.test.js
 # run search mapper utility tests
 npm test -- __tests__/utils/search-query-mapper.test.js
+# run my-mesh/explore view tests
+npm test -- __tests__/views/explore.test.js
+# run matches service unit tests
+npm test -- __tests__/services/matches-service.test.js
+# run profile import utility tests
+npm test -- __tests__/utils/profile-import.test.js
+# run skills service unit tests
+npm test -- __tests__/services/skills-service.test.js
 ```
 
 - Test runner: Vitest
 - Environment: jsdom
 - Coverage focus: utilities, router, API client, auth, UI components, views
+- Added incremental coverage for service orchestration and extracted stateless helpers:
+  - `src/main/web/__tests__/services/matches-service.test.js`
+  - `src/main/web/__tests__/services/skills-service.test.js`
+  - `src/main/web/__tests__/utils/profile-import.test.js`
+  - `src/main/web/__tests__/views/explore.test.js`
 - Shared skill term matching logic (used by both Search and My Mesh highlighting) is covered in `src/main/web/__tests__/utils/term-matching.test.js`
 - Parsed-query to schema/result adaptation for search reruns is covered in `src/main/web/__tests__/utils/search-query-mapper.test.js`
 - Search highlighting regression coverage lives in `src/main/web/__tests__/views/search.test.js`

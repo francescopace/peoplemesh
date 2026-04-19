@@ -44,15 +44,14 @@ export async function renderPrivacy(container) {
   ));
   exportCard.appendChild(exportHeader);
   const exportBody = el("div", { className: "priv-card-body" });
-  exportBody.appendChild(el("p", { className: "text-sm text-secondary", style: "margin:0 0 var(--space-4) 0" },
+  exportBody.appendChild(el("p", { className: "text-sm text-secondary priv-card-copy" },
     "Download all your personal data as a JSON file (GDPR Art. 20)."
   ));
   exportBody.appendChild(el("button", {
-    className: "btn btn-secondary",
-    style: "width:100%;margin-top:auto",
+    className: "btn btn-secondary priv-card-action-btn",
     onClick: exportData,
   },
-    el("span", { className: "material-symbols-outlined", style: "font-size:18px" }, "download"),
+    el("span", { className: "material-symbols-outlined icon-18" }, "download"),
     el("span", {}, "Download My Data")
   ));
   exportCard.appendChild(exportBody);
@@ -61,20 +60,19 @@ export async function renderPrivacy(container) {
   const deleteCard = el("div", { className: "priv-card priv-card--danger" });
   const deleteHeader = el("div", { className: "priv-card-header" });
   deleteHeader.appendChild(el("h2", { className: "priv-card-title priv-card-title--danger" },
-    el("span", { className: "material-symbols-outlined", style: "font-size:20px" }, "warning"),
+    el("span", { className: "material-symbols-outlined icon-20" }, "warning"),
     "Delete Account"
   ));
   deleteCard.appendChild(deleteHeader);
   const deleteBody = el("div", { className: "priv-card-body" });
-  deleteBody.appendChild(el("p", { className: "text-sm text-secondary", style: "margin:0 0 var(--space-4) 0" },
+  deleteBody.appendChild(el("p", { className: "text-sm text-secondary priv-card-copy" },
     "Permanently delete your account and all associated data. This action cannot be undone."
   ));
   deleteBody.appendChild(el("button", {
-    className: "btn btn-danger",
-    style: "width:100%;margin-top:auto",
+    className: "btn btn-danger priv-card-action-btn",
     onClick: deleteAccount,
   },
-    el("span", { className: "material-symbols-outlined", style: "font-size:18px" }, "delete_forever"),
+    el("span", { className: "material-symbols-outlined icon-18" }, "delete_forever"),
     el("span", {}, "Delete My Account")
   ));
   deleteCard.appendChild(deleteBody);
@@ -135,7 +133,7 @@ async function exportData() {
 
 async function deleteAccount() {
   modal("Delete Account",
-    el("p", { style: "color: var(--color-error)" },
+    el("p", { className: "text-error" },
       "This action is irreversible. All your data will be permanently deleted immediately. Are you absolutely sure?"
     ), {
       actions: [{
@@ -184,8 +182,7 @@ async function loadConsents(consentGrid) {
       const card = el("div", { className: "priv-consent-card" });
 
       const iconEl = el("span", {
-        className: "material-symbols-outlined priv-consent-icon",
-        style: isActive ? "color:var(--color-primary)" : "color:var(--text-tertiary)",
+        className: `material-symbols-outlined priv-consent-icon ${isActive ? "priv-consent-icon--active" : "priv-consent-icon--inactive"}`,
       }, meta.icon);
       card.appendChild(iconEl);
 
@@ -197,7 +194,7 @@ async function loadConsents(consentGrid) {
         const warningIcon = isActive ? "info" : "warning";
         const warningText = isActive ? `If revoked: ${meta.warning}` : meta.warning;
         center.appendChild(el("div", { className: warningClass },
-          el("span", { className: "material-symbols-outlined", style: "font-size:14px;vertical-align:-2px;margin-right:4px" }, warningIcon),
+          el("span", { className: "material-symbols-outlined icon-14 inline-icon" }, warningIcon),
           warningText
         ));
       }
@@ -212,7 +209,7 @@ async function loadConsents(consentGrid) {
           modal(`Revoke ${meta.label}`,
             el("div", {},
               el("p", {}, meta.warning),
-              el("p", { className: "text-secondary", style: "margin-top:var(--space-3)" },
+              el("p", { className: "text-secondary mt-3" },
                 "You can re-enable this consent at any time."
               )
             ), {

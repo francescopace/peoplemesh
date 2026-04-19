@@ -102,7 +102,7 @@ export async function renderJobDetail(container, { id }) {
         rel: "noopener",
         className: "btn btn-primary",
       },
-        el("span", { className: "material-symbols-outlined", style: "font-size:18px" }, "open_in_new"),
+        el("span", { className: "material-symbols-outlined icon-18" }, "open_in_new"),
         "Apply on Workday"
       ));
       infoBody.appendChild(applyBlock);

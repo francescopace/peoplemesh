@@ -1,16 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 let api;
-let authLogoutSpy;
 
 describe("ApiClient", () => {
   beforeEach(async () => {
     vi.resetModules();
-
-    authLogoutSpy = vi.fn();
-    vi.doMock("../assets/js/auth.js", () => ({
-      Auth: { logout: authLogoutSpy },
-    }));
     vi.doMock("../config.js", () => ({
       Config: { apiBase: "https://api.test" },
     }));
@@ -132,18 +126,32 @@ describe("ApiClient", () => {
     expect(result).toBeNull();
   });
 
-  it("throws on 401 and calls Auth.logout for non-me paths", async () => {
+  it("throws on 401 and calls unauthorized handler when configured", async () => {
+    const onUnauthorized = vi.fn();
+    api.setUnauthorizedHandler(onUnauthorized);
     global.fetch.mockResolvedValue({ ok: false, status: 401 });
 
     await expect(api.get("/api/v1/search")).rejects.toThrow("Unauthorized");
-    expect(authLogoutSpy).toHaveBeenCalled();
+    expect(onUnauthorized).toHaveBeenCalledWith({
+      method: "GET",
+      path: "/api/v1/search",
+      status: 401,
+    });
   });
 
-  it("does not call Auth.logout on 401 for /api/v1/me", async () => {
+  it("does not call unauthorized handler when not configured", async () => {
     global.fetch.mockResolvedValue({ ok: false, status: 401 });
 
     await expect(api.get("/api/v1/me")).rejects.toThrow("Unauthorized");
-    expect(authLogoutSpy).not.toHaveBeenCalled();
+  });
+
+  it("ignores errors thrown by unauthorized handler", async () => {
+    api.setUnauthorizedHandler(() => {
+      throw new Error("handler failure");
+    });
+    global.fetch.mockResolvedValue({ ok: false, status: 401 });
+
+    await expect(api.get("/api/v1/test")).rejects.toThrow("Unauthorized");
   });
 
   it("throws with detail message on non-ok response", async () => {

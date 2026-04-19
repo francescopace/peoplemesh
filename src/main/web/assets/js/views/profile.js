@@ -2,6 +2,14 @@ import { api } from "../api.js";
 import { el, spinner, toast, toastForPromise, emptyState } from "../ui.js";
 import { Auth } from "../auth.js";
 import { COUNTRIES as COUNTRY_OPTIONS } from "../utils/countries.js";
+import { buildFieldMap, buildPartialProfile } from "../utils/profile-import.js";
+import {
+  arr,
+  fieldRow,
+  labeledField,
+  provBadge,
+  tagGroup,
+} from "../components/profile-fields.js";
 
 const PROFILE_WEIGHTS = {
   identity: 10,
@@ -120,7 +128,7 @@ export async function renderProfile(container) {
     dataset: { cvImportBtn: "true" },
     onClick: () => openCvPicker()
   },
-    el("span", { className: "material-symbols-outlined", style: "font-size:18px" }, "upload"),
+    el("span", { className: "material-symbols-outlined icon-18" }, "upload"),
     el("span", {}, "Import from CV")
   ));
   headerEl.appendChild(headerActions);
@@ -322,7 +330,7 @@ function showImportPreviewModal(imported, current, source, container) {
     onClick: () => discardAndClose(),
   }, "Cancel");
   const applyBtn = el("button", { className: "btn btn-primary" },
-    el("span", { className: "material-symbols-outlined", style: "font-size:18px" }, "check"),
+    el("span", { className: "material-symbols-outlined icon-18" }, "check"),
     el("span", {}, "Import & Save"),
   );
 
@@ -366,154 +374,6 @@ function showImportPreviewModal(imported, current, source, container) {
   function discardAndClose() {
     overlay.remove();
   }
-}
-
-const IMPORT_FIELD_DEFS = [
-  // [section, label, uiKey, dataSection, field, provKey]
-  ["Identity", "Birth Date",      "identity.birth_date",      "identity", "birth_date",      "identity.birth_date"],
-  ["Professional", "Roles",           "professional.roles",           "professional", "roles",           "professional.roles"],
-  ["Professional", "Seniority",       "professional.seniority",       "professional", "seniority",       "professional.seniority"],
-  ["Professional", "Technical Skills", "professional.skills_technical", "professional", "skills_technical", "professional.skills_technical"],
-  ["Professional", "Soft Skills",      "professional.skills_soft",      "professional", "skills_soft",      "professional.skills_soft"],
-  ["Professional", "Tools & Tech",     "professional.tools_and_tech",   "professional", "tools_and_tech",   "professional.tools_and_tech"],
-  ["Professional", "Languages Spoken", "professional.languages_spoken", "professional", "languages_spoken", "professional.languages_spoken"],
-  ["Professional", "Industries",       "professional.industries",       "professional", "industries",       "professional.industries"],
-  ["Professional", "Work Mode",        "professional.work_mode_preference", "professional", "work_mode_preference", "professional.work_mode_preference"],
-  ["Professional", "Employment Type",  "professional.employment_type",  "professional", "employment_type",  "professional.employment_type"],
-  ["Contacts", "Slack",                "contacts.slack_handle",         "contacts", "slack_handle",       "contacts.slack_handle"],
-  ["Contacts", "Telegram",             "contacts.telegram_handle",      "contacts", "telegram_handle",    "contacts.telegram_handle"],
-  ["Contacts", "Mobile",               "contacts.mobile_phone",         "contacts", "mobile_phone",       "contacts.mobile_phone"],
-  ["Contacts", "LinkedIn",             "contacts.linkedin_url",         "contacts", "linkedin_url",       "contacts.linkedin_url"],
-  ["Interests", "Topics",             "interests.topics_frequent",     "interests_professional", "topics_frequent",     "interests_professional.topics_frequent"],
-  ["Interests", "Learning Areas",     "interests.learning_areas",      "interests_professional", "learning_areas",      "interests_professional.learning_areas"],
-  ["Interests", "Project Types",      "interests.project_types",       "interests_professional", "project_types",       "interests_professional.project_types"],
-  ["Personal", "Hobbies",             "personal.hobbies",              "personal", "hobbies",             "personal.hobbies"],
-  ["Personal", "Sports",              "personal.sports",               "personal", "sports",              "personal.sports"],
-  ["Personal", "Education",           "personal.education",            "personal", "education",           "personal.education"],
-  ["Personal", "Causes",              "personal.causes",               "personal", "causes",              "personal.causes"],
-  ["Personal", "Personality Tags",    "personal.personality_tags",     "personal", "personality_tags",    "personal.personality_tags"],
-  ["Personal", "Music Genres",        "personal.music_genres",         "personal", "music_genres",        "personal.music_genres"],
-  ["Personal", "Book Genres",         "personal.book_genres",          "personal", "book_genres",         "personal.book_genres"],
-  ["Location", "Country",  "geography.country",  "geography", "country",  "geography.country"],
-  ["Location", "City",     "geography.city",     "geography", "city",     "geography.city"],
-  ["Location", "Timezone", "geography.timezone", "geography", "timezone", "geography.timezone"],
-];
-
-const IDENTITY_PROTECTED_KEYS = new Set([
-  "identity.display_name", "identity.first_name", "identity.last_name",
-  "identity.email", "identity.company", "identity.photo_url",
-]);
-
-const MERGEABLE_IMPORT_KEYS = new Set([
-  "professional.skills_technical",
-  "professional.skills_soft",
-  "professional.tools_and_tech",
-  "professional.languages_spoken",
-  "professional.industries",
-  "interests.topics_frequent",
-  "interests.learning_areas",
-  "interests.project_types",
-  "personal.hobbies",
-  "personal.sports",
-  "personal.education",
-  "personal.causes",
-  "personal.personality_tags",
-  "personal.music_genres",
-  "personal.book_genres",
-]);
-
-function buildFieldMap(imported, current, source) {
-  const prov = current?.field_provenance || {};
-  const isNonGoogleImport = source && source !== "google";
-  const hasGoogleIdentity = isNonGoogleImport && (
-    prov["identity.display_name"] === "google" ||
-    prov["identity.email"] === "google" ||
-    prov["identity.company"] === "google"
-  );
-
-  return IMPORT_FIELD_DEFS
-    .filter(([, , uiKey]) => !(hasGoogleIdentity && IDENTITY_PROTECTED_KEYS.has(uiKey)))
-    .map(([section, label, uiKey, dataSection, field, provKey]) => {
-      const importedRaw = imported?.[dataSection]?.[field];
-      const currentRaw = current?.[dataSection]?.[field];
-      const importedDisplay = displayVal(importedRaw);
-      const currentDisplay = displayVal(currentRaw);
-      const hasConflict = currentDisplay !== "\u2014" &&
-        importedDisplay !== "\u2014" &&
-        currentDisplay !== importedDisplay;
-      const canMerge = hasConflict &&
-        MERGEABLE_IMPORT_KEYS.has(uiKey) &&
-        hasArrayValues(importedRaw) &&
-        hasArrayValues(currentRaw);
-
-      return {
-        section,
-        label,
-        key: uiKey,
-        importedDisplay,
-        currentDisplay,
-        currentProv: prov[provKey] || null,
-        hasConflict,
-        canMerge,
-        mergedDisplay: canMerge ? displayVal(mergeDistinctValues(currentRaw, importedRaw)) : null,
-      };
-    });
-}
-
-function displayVal(v) {
-  if (v == null) return "\u2014";
-  if (Array.isArray(v)) return v.length ? v.join(", ") : "\u2014";
-  let s = String(v).trim();
-  if (!s) return "\u2014";
-  if (s.startsWith("http") && s.length > 60) {
-    try { s = new URL(s).hostname + "/\u2026"; } catch { s = s.slice(0, 55) + "\u2026"; }
-  }
-  return s;
-}
-
-function hasArrayValues(value) {
-  return Array.isArray(value) && value.some((item) => normalizeMergeValue(item) != null);
-}
-
-function mergeDistinctValues(currentValues, importedValues) {
-  const merged = [];
-  const seen = new Set();
-  for (const list of [currentValues, importedValues]) {
-    if (!Array.isArray(list)) continue;
-    for (const item of list) {
-      const normalized = normalizeMergeValue(item);
-      if (!normalized) continue;
-      const key = normalized.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      merged.push(normalized);
-    }
-  }
-  return merged;
-}
-
-function normalizeMergeValue(value) {
-  if (value == null) return null;
-  const normalized = String(value).trim();
-  return normalized || null;
-}
-
-function buildPartialProfile(imported, current, selectedKeys, mergeModes = new Map()) {
-  const result = {};
-  for (const [, , uiKey, dataSection, field] of IMPORT_FIELD_DEFS) {
-    if (!selectedKeys.has(uiKey)) continue;
-    const src = imported[dataSection];
-    if (!src) continue;
-    let val = src[field];
-    if (mergeModes.get(uiKey) === "merge" && MERGEABLE_IMPORT_KEYS.has(uiKey)) {
-      val = mergeDistinctValues(current?.[dataSection]?.[field], val);
-    }
-    if (val == null) continue;
-    if (Array.isArray(val) && val.length === 0) continue;
-    if (!result[dataSection]) result[dataSection] = {};
-    result[dataSection][field] = Array.isArray(val) ? [...val] : val;
-  }
-  return result;
 }
 
 /* === Profile view (2-column layout matching mockup) === */
@@ -639,10 +499,10 @@ function renderProfileView(container, p) {
 
   /* Profile Completion */
   const profileScore = computeProfileScore(p);
-  const completionCard = el("div", { className: "profile-card profile-grid-sidebar", style: "grid-row:1" });
+  const completionCard = el("div", { className: "profile-card profile-grid-sidebar profile-grid-row-1" });
   const completionHeader = el("div", { className: "profile-card-header" });
-  completionHeader.appendChild(el("h3", { className: "profile-card-title", style: "font-size:1rem" },
-    el("span", { className: "material-symbols-outlined profile-icon profile-icon--blue", style: "font-size:20px" }, "donut_large"),
+  completionHeader.appendChild(el("h3", { className: "profile-card-title profile-card-title-sm" },
+    el("span", { className: "material-symbols-outlined profile-icon profile-icon--blue icon-20" }, "donut_large"),
     "Profile Completion"
   ));
   completionCard.appendChild(completionHeader);
@@ -661,19 +521,22 @@ function renderProfileView(container, p) {
     if (!p.personal?.hobbies?.length && !p.personal?.sports?.length) missing.push("interests");
     if (!p.geography?.country) missing.push("location");
     if (missing.length) {
-      const hint = el("span", { className: "text-sm text-secondary", style: "display:block" });
+      const hint = el("span", { className: "text-sm text-secondary d-block" });
       hint.textContent = `Add ${missing.slice(0, 3).join(", ")} to improve matching`;
       completionInfo.appendChild(hint);
     }
   } else {
-    completionInfo.appendChild(el("span", { className: "text-sm", style: "color: #10b981" }, "Profile complete"));
+    completionInfo.appendChild(el("span", { className: "text-sm text-success" }, "Profile complete"));
   }
   completionBody.appendChild(completionInfo);
   completionCard.appendChild(completionBody);
   grid.appendChild(completionCard);
 
   /* Privacy & Visibility */
-  const privCard = el("a", { href: "#/privacy", className: "profile-privacy-card profile-grid-sidebar", style: "grid-row:2;text-decoration:none;color:inherit;cursor:pointer" });
+  const privCard = el("a", {
+    href: "#/privacy",
+    className: "profile-privacy-card profile-grid-sidebar profile-grid-row-2 link-reset cursor-pointer",
+  });
   const privIcon = el("div", { className: "profile-privacy-icon-wrap" });
   privIcon.appendChild(el("span", { className: "material-symbols-outlined" }, "shield_with_heart"));
   privCard.appendChild(privIcon);
@@ -817,7 +680,7 @@ async function renderSkillsSection(container, canEdit, getRoot) {
 
   container.querySelector(".spinner")?.remove();
 
-  const controlRow = el("div", { className: "flex gap-3", style: "align-items:center;margin-bottom:var(--space-4)" });
+  const controlRow = el("div", { className: "flex gap-3 profile-skills-control-row" });
   container.appendChild(controlRow);
 
   const skillsArea = el("div", {});
@@ -838,7 +701,7 @@ async function renderSkillsSection(container, canEdit, getRoot) {
   }
 
   if (canEdit) {
-    const editBtn = el("button", { className: "profile-edit-link", style: "margin-left:auto" }, "Edit Skills");
+    const editBtn = el("button", { className: "profile-edit-link ml-auto" }, "Edit Skills");
     controlRow.appendChild(editBtn);
     editBtn.addEventListener("click", () => {
       editing = !editing;
@@ -1017,7 +880,7 @@ function renderSkillsEdit(container, assessments, levelScale, getRoot) {
 
   const actions = el("div", { className: "profile-inline-actions", style: "margin-top:var(--space-4)" });
   const saveBtn = el("button", { className: "btn btn-primary btn-sm" },
-    el("span", { className: "material-symbols-outlined", style: "font-size:16px" }, "save"),
+    el("span", { className: "material-symbols-outlined icon-16" }, "save"),
     "Save Skills"
   );
   saveBtn.addEventListener("click", async () => {
@@ -1083,7 +946,7 @@ function editableSection(icon, title, color, canEdit, profileData, getRoot, rend
     if (editing) {
       const actions = el("div", { className: "profile-inline-actions" });
       const saveBtn = el("button", { className: "btn btn-primary btn-sm", type: "button" },
-        el("span", { className: "material-symbols-outlined", style: "font-size:16px" }, "save"),
+        el("span", { className: "material-symbols-outlined icon-16" }, "save"),
         "Save"
       );
       const cancelBtn = el("button", { className: "btn btn-secondary btn-sm", type: "button" }, "Cancel");
@@ -1209,36 +1072,7 @@ function editableTagGroup(label, name, items, color, editing, provSrc) {
   return wrap;
 }
 
-/* === Helpers: display builders (exported for reuse in public-profile.js) === */
-
-export function fieldRow(fields) {
-  const cols = fields.length;
-  const row = el("div", { className: `profile-field-row profile-field-row--${cols}` });
-  fields.forEach((f) => row.appendChild(f));
-  return row;
-}
-
-export function labeledField(label, value, provSrc) {
-  const wrap = el("div", { className: "profile-field" });
-  const labelEl = el("div", { className: "profile-field-label" }, label);
-  if (provSrc) labelEl.appendChild(provBadge(provSrc));
-  wrap.appendChild(labelEl);
-  wrap.appendChild(el("div", { className: "profile-field-value" }, value || "\u2014"));
-  return wrap;
-}
-
-export function tagGroup(label, items, color, provSrc) {
-  const wrap = el("div", { className: "profile-tag-group" });
-  const labelEl = el("div", { className: "profile-field-label" }, label);
-  if (provSrc) labelEl.appendChild(provBadge(provSrc));
-  wrap.appendChild(labelEl);
-  const tags = el("div", { className: "profile-tags" });
-  (Array.isArray(items) ? items : []).forEach((item) => {
-    tags.appendChild(el("span", { className: `profile-tag profile-tag--${color}` }, item));
-  });
-  wrap.appendChild(tags);
-  return wrap;
-}
+/* === Helpers: display builders === */
 
 function formatProvSource(src) {
   if (!src) return "Unknown";
@@ -1246,10 +1080,6 @@ function formatProvSource(src) {
   if (src.includes("github")) return "GitHub";
   if (src.includes("manual")) return "Manual";
   return src;
-}
-
-export function provBadge(src) {
-  return el("span", { className: "profile-prov-badge" }, formatProvSource(src));
 }
 
 function slackField(handle, provSrc) {
@@ -1318,10 +1148,10 @@ function renderContactLinkField(label, text, href, provSrc) {
   return wrap;
 }
 
-export function arr(v) { return Array.isArray(v) ? v.join(", ") : (v || ""); }
-export { buildFieldMap, buildPartialProfile };
 function val(root, field) {
   const input = root.querySelector(`[data-field="${field}"]`);
   return (input?.value || "").trim();
 }
 function csvList(s) { return s ? s.split(",").map((x) => x.trim()).filter(Boolean) : []; }
+
+export { buildFieldMap, buildPartialProfile };

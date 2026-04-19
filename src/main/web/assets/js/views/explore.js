@@ -1,9 +1,15 @@
-import { api } from "../api.js";
 import { el, spinner, toast, emptyState } from "../ui.js";
 import { NODE_TYPE_ICONS, NODE_TYPE_COLORS } from "../node-types.js";
 import { contactFooter } from "../contact-actions.js";
 import { COUNTRIES } from "../utils/countries.js";
 import { termsMatch } from "../utils/term-matching.js";
+import { getUserFacingErrorMessage } from "../utils/errors.js";
+import { fetchMyMeshMatches } from "../services/matches-service.js";
+import {
+  isPositiveGeoReason,
+  locationChipStyle,
+  matchedTagStyle,
+} from "../utils/match-visuals.js";
 
 const NODE_TYPES = [
   { id: "PEOPLE",        label: "People",      icon: "person" },
@@ -37,7 +43,7 @@ export async function renderExplore(container) {
       className: `explore-type-tab${t.id === activeType ? " active" : ""}`,
       dataset: { type: t.id },
     },
-      el("span", { className: "material-symbols-outlined", style: "font-size:16px" }, t.icon),
+      el("span", { className: "material-symbols-outlined icon-16" }, t.icon),
       el("span", {}, t.label)
     );
     typeTabs.appendChild(btn);
@@ -122,7 +128,7 @@ export async function renderExplore(container) {
 
     try {
       const t0 = performance.now();
-      const matches = await api.get("/api/v1/matches/me", query);
+      const matches = await fetchMyMeshMatches(query);
       const elapsedMs = performance.now() - t0;
       const pageResults = matches || [];
       if (!append) {
@@ -155,7 +161,7 @@ export async function renderExplore(container) {
       }
     } catch (err) {
       resultsArea.innerHTML = "";
-      toast(err.message, "error");
+      toast(getUserFacingErrorMessage(err), "error");
       if (err.status === 204 || err.status === 404) {
         resultsArea.appendChild(emptyState(
           el("span", {},
@@ -232,10 +238,7 @@ export async function renderExplore(container) {
     const locationParts = [m.person?.city, m.country].filter(Boolean);
     if (locationParts.length) {
       const geoMatch = m.breakdown?.geographyReason;
-      const countryMatches = geoMatch === "same_country" || geoMatch === "same_continent" || geoMatch === "remote_friendly";
-      const locStyle = countryMatches
-        ? `background:${colors.bg}; color:${colors.color}; border:1px solid ${colors.border}; padding:0.1rem 0.45rem; border-radius:4px; font-size:0.72rem`
-        : "background:rgba(148,163,184,0.08); color:var(--color-gray-400); border:1px solid rgba(148,163,184,0.2); padding:0.1rem 0.45rem; border-radius:4px; font-size:0.72rem";
+      const locStyle = locationChipStyle(colors, geoMatch);
       subtitle.appendChild(el("span", { className: "dc-sep" }, "\u00B7"));
       subtitle.appendChild(el("span", { style: locStyle }, locationParts.join(", ")));
     }
@@ -259,11 +262,10 @@ export async function renderExplore(container) {
     const commonItems = m.breakdown?.commonItems || [];
     const commonGoals = m.breakdown?.commonGoals || [];
     const geoReason = m.breakdown?.geographyReason;
-    const GEO_POSITIVE = new Set(["same_country", "same_continent", "remote_friendly"]);
-    const positiveGeo = geoReason && GEO_POSITIVE.has(geoReason);
+    const positiveGeo = isPositiveGeoReason(geoReason);
 
     if (m.tags?.length || commonGoals.length || positiveGeo) {
-      const matchStyle = `background:${colors.bg}; color:${colors.color}; border:1px solid ${colors.border}; box-shadow:0 0 0 1px ${colors.border}`;
+      const matchStyle = matchedTagStyle(colors);
       const tagsArea = el("div", { className: "dc-tags-area" });
       const row = el("div", { className: "dc-tags" });
       (m.tags || []).slice(0, 8).forEach((t) => {

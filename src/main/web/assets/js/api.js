@@ -1,7 +1,14 @@
-import { Auth } from "./auth.js";
 import { Config } from "../../config.js";
 
 class ApiClient {
+  constructor() {
+    this._onUnauthorized = null;
+  }
+
+  setUnauthorizedHandler(handler) {
+    this._onUnauthorized = typeof handler === "function" ? handler : null;
+  }
+
   async request(method, path, { body, query } = {}) {
     let url = `${Config.apiBase}${path}`;
     if (query) {
@@ -31,8 +38,12 @@ class ApiClient {
     const res = await fetch(url, opts);
 
     if (res.status === 401) {
-      if (path !== "/api/v1/me") {
-        Auth.logout();
+      if (this._onUnauthorized) {
+        try {
+          this._onUnauthorized({ method, path, status: 401 });
+        } catch {
+          // Ignore callback errors: caller still receives unauthorized error.
+        }
       }
       throw new Error("Unauthorized");
     }

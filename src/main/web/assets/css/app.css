@@ -1123,6 +1123,66 @@
   margin-top: var(--space-8);
 }
 
+.icon-16 { font-size: 16px; }
+.icon-18 { font-size: 18px; }
+.icon-20 { font-size: 20px; }
+.icon-14 { font-size: 14px; }
+.cursor-pointer { cursor: pointer; }
+.text-danger { color: var(--color-red-600); }
+.text-tertiary { color: var(--text-tertiary); }
+.text-success { color: #10b981; }
+.text-error { color: var(--color-error); }
+.m-0 { margin: 0; }
+.mt-3 { margin-top: var(--space-3); }
+.ml-auto { margin-left: auto; }
+.d-block { display: block; }
+.inline-icon {
+  vertical-align: -2px;
+  margin-right: 4px;
+}
+.link-reset {
+  text-decoration: none;
+  color: inherit;
+}
+
+.profile-card-title-sm {
+  font-size: 1rem;
+}
+
+.skills-catalog-desc {
+  margin: 0 0 var(--space-3) 0;
+}
+
+.skills-catalog-stats {
+  font-size: 0.85rem;
+}
+
+.skills-filter-row {
+  margin-bottom: var(--space-4);
+  align-items: center;
+}
+
+.skills-filter-select {
+  max-width: 300px;
+}
+
+.load-more-btn {
+  margin-top: var(--space-3);
+}
+
+.profile-grid-row-1 {
+  grid-row: 1;
+}
+
+.profile-grid-row-2 {
+  grid-row: 2;
+}
+
+.profile-skills-control-row {
+  align-items: center;
+  margin-bottom: var(--space-4);
+}
+
 [data-page="jobs"] .table-wrapper {
   border: 1px solid var(--glass-card-border);
   border-radius: var(--radius-3xl);
@@ -2775,6 +2835,23 @@ select.profile-inline-input[multiple] {
   font-size: 28px;
   flex-shrink: 0;
   margin-top: 2px;
+}
+
+.priv-consent-icon--active {
+  color: var(--color-primary);
+}
+
+.priv-consent-icon--inactive {
+  color: var(--text-tertiary);
+}
+
+.priv-card-copy {
+  margin: 0 0 var(--space-4) 0;
+}
+
+.priv-card-action-btn {
+  width: 100%;
+  margin-top: auto;
 }
 
 .priv-consent-center {

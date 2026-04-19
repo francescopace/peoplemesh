@@ -1,6 +1,7 @@
 import { api } from "../api.js";
 import { el, spinner, emptyState, toast } from "../ui.js";
-import { fieldRow, labeledField, tagGroup, provBadge, arr } from "./profile.js";
+import { arr, fieldRow, labeledField, provBadge, tagGroup } from "../components/profile-fields.js";
+import { getUserFacingErrorMessage } from "../utils/errors.js";
 
 export async function renderPublicProfile(container, { id }) {
   container.dataset.page = "profile";
@@ -16,7 +17,7 @@ export async function renderPublicProfile(container, { id }) {
       container.appendChild(emptyState("Profile not found or not public."));
     } else {
       container.appendChild(emptyState("Could not load profile."));
-      toast(err.message, "error");
+      toast(getUserFacingErrorMessage(err, "Could not load profile."), "error");
     }
     return;
   }
@@ -86,7 +87,7 @@ async function renderPublicProfileView(container, p, nodeId) {
         navigator.clipboard.writeText(identity.email).catch(() => {});
         toast("Email copied: " + identity.email);
       },
-    }, el("span", { className: "material-symbols-outlined", style: "font-size:16px;color:var(--text-tertiary)" }, "content_copy"));
+    }, el("span", { className: "material-symbols-outlined icon-16 text-tertiary" }, "content_copy"));
     emailValueWrap.appendChild(copyBtn);
   }
   emailField.appendChild(emailValueWrap);

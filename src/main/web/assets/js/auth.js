@@ -8,6 +8,7 @@ class AuthManager {
   _initialized = false;
   _providers = [];
   _configured = [];
+  _isLoggingOut = false;
 
   constructor() {
     const stored = sessionStorage.getItem(USER_KEY);
@@ -78,17 +79,27 @@ class AuthManager {
   }
 
   async logout() {
+    if (this._isLoggingOut) return;
+    this._isLoggingOut = true;
     try {
-      await fetch(`${Config.apiBase}/api/v1/auth/logout`, {
-        method: "POST",
-        headers: { "X-Requested-With": "XMLHttpRequest" },
-      });
-    } catch {
-      // Ignore errors on logout
+      try {
+        await api.post("/api/v1/auth/logout");
+      } catch {
+        // Ignore errors on logout
+      }
+      this.setUser(null);
+      window.location.hash = "#/";
+    } finally {
+      this._isLoggingOut = false;
     }
-    this.setUser(null);
-    window.location.hash = "#/";
   }
 }
 
 export const Auth = new AuthManager();
+
+api.setUnauthorizedHandler(({ path }) => {
+  if (!path || path === "/api/v1/me" || path.startsWith("/api/v1/auth/")) {
+    return;
+  }
+  void Auth.logout();
+});

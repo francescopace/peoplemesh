@@ -131,6 +131,19 @@ describe("Router", () => {
       expect(container.hasAttribute("aria-busy")).toBe(false);
     });
 
+    it("renders safe fallback when route handler throws", async () => {
+      router.on("/boom", async () => {
+        throw new Error("explode");
+      });
+      window.location.hash = "#/boom";
+
+      await router._resolve();
+
+      expect(container.textContent).toContain("Something went wrong while loading this page.");
+      expect(container.querySelector("a")?.getAttribute("href")).toBe("#/");
+      expect(container.hasAttribute("aria-busy")).toBe(false);
+    });
+
     it("decodes URI-encoded params", async () => {
       const handler = vi.fn();
       router.on("/tag/:name", handler);

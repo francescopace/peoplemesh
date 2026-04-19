@@ -1,5 +1,14 @@
 import { describe, it, expect, vi } from "vitest";
-import { el, badge, spinner, emptyState, pageHeader, table } from "../assets/js/ui.js";
+import {
+  el,
+  badge,
+  spinner,
+  emptyState,
+  pageHeader,
+  table,
+  toast,
+  toastForPromise,
+} from "../assets/js/ui.js";
 
 describe("el()", () => {
   it("creates an element with the given tag", () => {
@@ -197,5 +206,40 @@ describe("table()", () => {
   it("handles null values in cells", () => {
     const t = table(["name"], [{ name: null }]);
     expect(t.querySelector("td").textContent).toBe("");
+  });
+});
+
+describe("toast()", () => {
+  it("renders message as text content", () => {
+    toast("<b>Unsafe</b>", "info", 0);
+    const latestToast = document.querySelector(".toast-container .toast:last-child");
+    expect(latestToast.textContent).toBe("<b>Unsafe</b>");
+    expect(latestToast.innerHTML).toBe("&lt;b&gt;Unsafe&lt;/b&gt;");
+  });
+});
+
+describe("toastForPromise()", () => {
+  it("shows success toast for resolved promise", async () => {
+    await toastForPromise(Promise.resolve("ok"), {
+      loadingMessage: "Loading",
+      successMessage: "Saved",
+      minVisibleMs: 0,
+    });
+    const toasts = [...document.querySelectorAll(".toast-container .toast")].map((node) => node.textContent);
+    expect(toasts).toContain("Saved");
+  });
+
+  it("shows error toast using error message factory", async () => {
+    const err = new Error("boom");
+    await expect(
+      toastForPromise(Promise.reject(err), {
+        loadingMessage: "Loading",
+        errorMessage: (error) => `Failed: ${error.message}`,
+        minVisibleMs: 0,
+      })
+    ).rejects.toThrow("boom");
+
+    const toasts = [...document.querySelectorAll(".toast-container .toast")].map((node) => node.textContent);
+    expect(toasts).toContain("Failed: boom");
   });
 });
