@@ -55,6 +55,25 @@ const MERGEABLE_IMPORT_KEYS = new Set([
   "personal.book_genres",
 ]);
 
+const LIST_FIELD_LIMITS = new Map([
+  ["professional.roles", { maxItems: 20, maxItemLength: 200 }],
+  ["professional.industries", { maxItems: 20, maxItemLength: 200 }],
+  ["professional.skills_technical", { maxItems: 50, maxItemLength: 100 }],
+  ["professional.skills_soft", { maxItems: 30, maxItemLength: 100 }],
+  ["professional.tools_and_tech", { maxItems: 50, maxItemLength: 100 }],
+  ["professional.languages_spoken", { maxItems: 30, maxItemLength: 50 }],
+  ["interests.topics_frequent", { maxItems: 50, maxItemLength: 200 }],
+  ["interests.learning_areas", { maxItems: 50, maxItemLength: 200 }],
+  ["interests.project_types", { maxItems: 20, maxItemLength: 200 }],
+  ["personal.hobbies", { maxItems: 30, maxItemLength: 100 }],
+  ["personal.sports", { maxItems: 20, maxItemLength: 100 }],
+  ["personal.education", { maxItems: 20, maxItemLength: 200 }],
+  ["personal.causes", { maxItems: 20, maxItemLength: 200 }],
+  ["personal.personality_tags", { maxItems: 20, maxItemLength: 100 }],
+  ["personal.music_genres", { maxItems: 20, maxItemLength: 100 }],
+  ["personal.book_genres", { maxItems: 20, maxItemLength: 100 }],
+]);
+
 function displayVal(value) {
   if (value == null) return "\u2014";
   if (Array.isArray(value)) return value.length ? value.join(", ") : "\u2014";
@@ -80,7 +99,8 @@ function hasArrayValues(value) {
   return Array.isArray(value) && value.some((item) => normalizeMergeValue(item) != null);
 }
 
-function mergeDistinctValues(currentValues, importedValues) {
+function mergeDistinctValues(currentValues, importedValues, uiKey) {
+  const limits = LIST_FIELD_LIMITS.get(uiKey);
   const merged = [];
   const seen = new Set();
   for (const list of [currentValues, importedValues]) {
@@ -88,10 +108,16 @@ function mergeDistinctValues(currentValues, importedValues) {
     for (const item of list) {
       const normalized = normalizeMergeValue(item);
       if (!normalized) continue;
-      const dedupeKey = normalized.toLowerCase();
+      const limited = limits?.maxItemLength
+        ? normalized.slice(0, limits.maxItemLength)
+        : normalized;
+      const dedupeKey = limited.toLowerCase();
       if (seen.has(dedupeKey)) continue;
       seen.add(dedupeKey);
-      merged.push(normalized);
+      merged.push(limited);
+      if (limits?.maxItems && merged.length >= limits.maxItems) {
+        return merged;
+      }
     }
   }
   return merged;
@@ -132,7 +158,7 @@ export function buildFieldMap(imported, current, source) {
         currentProv: prov[provKey] || null,
         hasConflict,
         canMerge,
-        mergedDisplay: canMerge ? displayVal(mergeDistinctValues(currentRaw, importedRaw)) : null,
+        mergedDisplay: canMerge ? displayVal(mergeDistinctValues(currentRaw, importedRaw, uiKey)) : null,
       };
     });
 }
@@ -145,7 +171,9 @@ export function buildPartialProfile(imported, current, selectedKeys, mergeModes 
     if (!src) continue;
     let value = src[field];
     if (mergeModes.get(uiKey) === "merge" && MERGEABLE_IMPORT_KEYS.has(uiKey)) {
-      value = mergeDistinctValues(current?.[dataSection]?.[field], value);
+      value = mergeDistinctValues(current?.[dataSection]?.[field], value, uiKey);
+    } else if (Array.isArray(value)) {
+      value = mergeDistinctValues([], value, uiKey);
     }
     if (value == null) continue;
     if (Array.isArray(value) && value.length === 0) continue;

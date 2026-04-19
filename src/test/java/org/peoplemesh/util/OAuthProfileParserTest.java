@@ -6,6 +6,7 @@ import org.peoplemesh.domain.dto.OidcSubject;
 import org.peoplemesh.domain.dto.ProfileSchema;
 import org.peoplemesh.domain.enums.Seniority;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -283,6 +284,60 @@ class OAuthProfileParserTest {
 
         assertNotNull(schema.interestsProfessional().topicsFrequent());
         assertTrue(schema.interestsProfessional().topicsFrequent().get(0).contains("Kotlin"));
+    }
+
+    @Test
+    void buildEnrichedGitHubSchema_limitsTopicsToSchemaMax() {
+        OidcSubject subject = new OidcSubject(
+                "sub123", "Dev", null, null,
+                null, "Kotlin specialist", null, null, null, null);
+        List<String> manyTopics = new ArrayList<>();
+        for (int i = 0; i < 80; i++) {
+            manyTopics.add("topic-" + i);
+        }
+
+        GitHubEnrichedResult enriched = new GitHubEnrichedResult(subject, null, manyTopics);
+
+        ProfileSchema schema = OAuthProfileParser.buildEnrichedGitHubSchema(enriched);
+
+        assertNotNull(schema.interestsProfessional().topicsFrequent());
+        assertEquals(50, schema.interestsProfessional().topicsFrequent().size());
+        assertEquals("topic-0", schema.interestsProfessional().topicsFrequent().get(0));
+        assertEquals("topic-49", schema.interestsProfessional().topicsFrequent().get(49));
+    }
+
+    @Test
+    void buildImportSchema_truncatesIdentityAndHeadlineDerivedFieldsToContractLimits() {
+        String veryLong = "x".repeat(500);
+        String longEmail = "a".repeat(340) + "@example.com";
+        OidcSubject subject = new OidcSubject(
+                "sub123",
+                veryLong,
+                "f".repeat(200),
+                "l".repeat(200),
+                longEmail,
+                "h".repeat(600),
+                "i".repeat(500),
+                "en-US",
+                "https://example.com/" + "p".repeat(3000),
+                "c".repeat(500)
+        );
+
+        ProfileSchema schema = OAuthProfileParser.buildImportSchema("github", subject);
+
+        assertNotNull(schema.professional().roles());
+        assertEquals(200, schema.professional().roles().get(0).length());
+        assertNotNull(schema.professional().industries());
+        assertEquals(200, schema.professional().industries().get(0).length());
+        assertNotNull(schema.interestsProfessional().topicsFrequent());
+        assertEquals(200, schema.interestsProfessional().topicsFrequent().get(0).length());
+        assertNotNull(schema.identity());
+        assertEquals(200, schema.identity().displayName().length());
+        assertEquals(120, schema.identity().firstName().length());
+        assertEquals(120, schema.identity().lastName().length());
+        assertEquals(320, schema.identity().email().length());
+        assertEquals(2048, schema.identity().photoUrl().length());
+        assertEquals(200, schema.identity().company().length());
     }
 
     @Test

@@ -52,4 +52,23 @@ describe("profile-import utils", () => {
 
     expect(result.professional.skills_technical).toEqual(["java", "TypeScript", "Kubernetes"]);
   });
+
+  it("buildPartialProfile merge clamps topics_frequent to max 50", () => {
+    const currentTopics = Array.from({ length: 30 }, (_, i) => `current-${i}`);
+    const importedTopics = Array.from({ length: 30 }, (_, i) => `imported-${i}`);
+    const imported = {
+      interests_professional: { topics_frequent: importedTopics },
+    };
+    const current = {
+      interests_professional: { topics_frequent: currentTopics },
+    };
+    const selected = new Set(["interests.topics_frequent"]);
+    const mergeModes = new Map([["interests.topics_frequent", "merge"]]);
+
+    const result = buildPartialProfile(imported, current, selected, mergeModes);
+
+    expect(result.interests_professional.topics_frequent).toHaveLength(50);
+    expect(result.interests_professional.topics_frequent[0]).toBe("current-0");
+    expect(result.interests_professional.topics_frequent[49]).toBe("imported-19");
+  });
 });

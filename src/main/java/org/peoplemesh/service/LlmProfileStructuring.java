@@ -12,11 +12,11 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
 import org.peoplemesh.domain.dto.ProfileSchema;
+import org.peoplemesh.util.ProfileSchemaNormalization;
 import org.peoplemesh.util.StringUtils;
 
 import java.time.Instant;
 import java.util.Iterator;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -114,7 +114,7 @@ public class LlmProfileStructuring implements ProfileStructuringLlm {
             - Populate identity fields when explicitly present in CV: display_name, first_name, last_name, email, photo_url, company.
             - Populate personal section when explicitly present (hobbies, sports, education, causes, personality_tags, music_genres, book_genres).
             - birth_date must be YYYY-MM-DD when explicitly present, otherwise null.
-            - Keep output compact to avoid truncation: max 8 items for any list field.
+            - Respect ProfileSchema limits for list sizes and string lengths.
             - personal.* fields MUST be arrays of strings or null (never objects).
             - Keep arrays concise, deduplicated, and free of near-duplicates.
             """;
@@ -128,7 +128,7 @@ public class LlmProfileStructuring implements ProfileStructuringLlm {
             - Keep existing extracted values when possible.
             - If uncertain or missing, use null.
             - Array fields must be arrays of strings (or null), never objects.
-            - Keep output compact: max 8 items per array.
+            - Respect ProfileSchema limits for list sizes and string lengths.
             """;
 
     @Inject
@@ -225,12 +225,12 @@ public class LlmProfileStructuring implements ProfileStructuringLlm {
 
     private void normalizeSchemaNode(ObjectNode root) {
         ObjectNode professional = objectNodeOrCreate(root, "professional");
-        normalizeStringArrayField(professional, "roles");
-        normalizeStringArrayField(professional, "industries");
-        normalizeStringArrayField(professional, "skills_technical");
-        normalizeStringArrayField(professional, "skills_soft");
-        normalizeStringArrayField(professional, "tools_and_tech");
-        normalizeStringArrayField(professional, "languages_spoken");
+        normalizeStringArrayField(professional, "roles", ProfileSchema.MAX_ROLES, ProfileSchema.MAX_ROLE_LENGTH);
+        normalizeStringArrayField(professional, "industries", ProfileSchema.MAX_INDUSTRIES, ProfileSchema.MAX_INDUSTRY_LENGTH);
+        normalizeStringArrayField(professional, "skills_technical", ProfileSchema.MAX_SKILLS_TECHNICAL, ProfileSchema.MAX_SKILL_TECHNICAL_LENGTH);
+        normalizeStringArrayField(professional, "skills_soft", ProfileSchema.MAX_SKILLS_SOFT, ProfileSchema.MAX_SKILL_SOFT_LENGTH);
+        normalizeStringArrayField(professional, "tools_and_tech", ProfileSchema.MAX_TOOLS_AND_TECH, ProfileSchema.MAX_TOOL_AND_TECH_LENGTH);
+        normalizeStringArrayField(professional, "languages_spoken", ProfileSchema.MAX_LANGUAGES_SPOKEN, ProfileSchema.MAX_LANGUAGE_SPOKEN_LENGTH);
         normalizeEnumField(professional, "seniority", List.of("JUNIOR", "MID", "SENIOR", "LEAD", "EXECUTIVE"));
         normalizeEnumField(professional, "work_mode_preference", List.of("REMOTE", "HYBRID", "OFFICE", "FLEXIBLE"));
         normalizeEnumField(professional, "employment_type", List.of("EMPLOYED", "FREELANCE", "FOUNDER", "LOOKING", "OPEN_TO_OFFERS"));
@@ -241,38 +241,38 @@ public class LlmProfileStructuring implements ProfileStructuringLlm {
         copyLegacyContactField(professional, contacts, "mobile_phone");
         copyLegacyContactField(professional, contacts, "linkedin_url");
         professional.remove(List.of("slack_handle", "telegram_handle", "mobile_phone", "linkedin_url"));
-        normalizeStringField(contacts, "slack_handle");
-        normalizeStringField(contacts, "telegram_handle");
-        normalizeStringField(contacts, "mobile_phone");
-        normalizeStringField(contacts, "linkedin_url");
+        normalizeStringField(contacts, "slack_handle", ProfileSchema.MAX_SLACK_HANDLE_LENGTH);
+        normalizeStringField(contacts, "telegram_handle", ProfileSchema.MAX_TELEGRAM_HANDLE_LENGTH);
+        normalizeStringField(contacts, "mobile_phone", ProfileSchema.MAX_MOBILE_PHONE_LENGTH);
+        normalizeStringField(contacts, "linkedin_url", ProfileSchema.MAX_LINKEDIN_URL_LENGTH);
 
         ObjectNode interests = objectNodeOrCreate(root, "interests_professional");
-        normalizeStringArrayField(interests, "topics_frequent");
-        normalizeStringArrayField(interests, "learning_areas");
-        normalizeStringArrayField(interests, "project_types");
+        normalizeStringArrayField(interests, "topics_frequent", ProfileSchema.MAX_TOPICS_FREQUENT, ProfileSchema.MAX_TOPIC_FREQUENT_LENGTH);
+        normalizeStringArrayField(interests, "learning_areas", ProfileSchema.MAX_LEARNING_AREAS, ProfileSchema.MAX_LEARNING_AREA_LENGTH);
+        normalizeStringArrayField(interests, "project_types", ProfileSchema.MAX_PROJECT_TYPES, ProfileSchema.MAX_PROJECT_TYPE_LENGTH);
 
         ObjectNode personal = objectNodeOrCreate(root, "personal");
-        normalizeStringArrayField(personal, "hobbies");
-        normalizeStringArrayField(personal, "sports");
-        normalizeStringArrayField(personal, "education");
-        normalizeStringArrayField(personal, "causes");
-        normalizeStringArrayField(personal, "personality_tags");
-        normalizeStringArrayField(personal, "music_genres");
-        normalizeStringArrayField(personal, "book_genres");
+        normalizeStringArrayField(personal, "hobbies", ProfileSchema.MAX_HOBBIES, ProfileSchema.MAX_HOBBY_LENGTH);
+        normalizeStringArrayField(personal, "sports", ProfileSchema.MAX_SPORTS, ProfileSchema.MAX_SPORT_LENGTH);
+        normalizeStringArrayField(personal, "education", ProfileSchema.MAX_EDUCATION, ProfileSchema.MAX_EDUCATION_LENGTH);
+        normalizeStringArrayField(personal, "causes", ProfileSchema.MAX_CAUSES, ProfileSchema.MAX_CAUSE_LENGTH);
+        normalizeStringArrayField(personal, "personality_tags", ProfileSchema.MAX_PERSONALITY_TAGS, ProfileSchema.MAX_PERSONALITY_TAG_LENGTH);
+        normalizeStringArrayField(personal, "music_genres", ProfileSchema.MAX_MUSIC_GENRES, ProfileSchema.MAX_MUSIC_GENRE_LENGTH);
+        normalizeStringArrayField(personal, "book_genres", ProfileSchema.MAX_BOOK_GENRES, ProfileSchema.MAX_BOOK_GENRE_LENGTH);
 
         ObjectNode geography = objectNodeOrCreate(root, "geography");
-        normalizeStringField(geography, "country");
-        normalizeStringField(geography, "city");
-        normalizeStringField(geography, "timezone");
+        normalizeStringField(geography, "country", ProfileSchema.MAX_COUNTRY_LENGTH);
+        normalizeStringField(geography, "city", ProfileSchema.MAX_CITY_LENGTH);
+        normalizeStringField(geography, "timezone", ProfileSchema.MAX_TIMEZONE_LENGTH);
 
         ObjectNode identity = objectNodeOrCreate(root, "identity");
-        normalizeStringField(identity, "display_name");
-        normalizeStringField(identity, "first_name");
-        normalizeStringField(identity, "last_name");
-        normalizeStringField(identity, "email");
-        normalizeStringField(identity, "photo_url");
-        normalizeStringField(identity, "company");
-        normalizeStringField(identity, "birth_date");
+        normalizeStringField(identity, "display_name", ProfileSchema.MAX_IDENTITY_DISPLAY_NAME_LENGTH);
+        normalizeStringField(identity, "first_name", ProfileSchema.MAX_IDENTITY_FIRST_NAME_LENGTH);
+        normalizeStringField(identity, "last_name", ProfileSchema.MAX_IDENTITY_LAST_NAME_LENGTH);
+        normalizeStringField(identity, "email", ProfileSchema.MAX_IDENTITY_EMAIL_LENGTH);
+        normalizeStringField(identity, "photo_url", ProfileSchema.MAX_IDENTITY_PHOTO_URL_LENGTH);
+        normalizeStringField(identity, "company", ProfileSchema.MAX_IDENTITY_COMPANY_LENGTH);
+        normalizeStringField(identity, "birth_date", ProfileSchema.MAX_IDENTITY_BIRTH_DATE_LENGTH);
     }
 
     private static void copyLegacyContactField(ObjectNode professional, ObjectNode contacts, String key) {
@@ -291,18 +291,18 @@ public class LlmProfileStructuring implements ProfileStructuringLlm {
         return created;
     }
 
-    private static void normalizeStringField(ObjectNode parent, String field) {
+    private static void normalizeStringField(ObjectNode parent, String field, int maxLength) {
         JsonNode node = parent.get(field);
         if (node == null || node.isNull()) return;
         if (node.isTextual()) {
-            String v = node.asText().trim();
-            if (v.isBlank()) parent.putNull(field);
+            String v = ProfileSchemaNormalization.normalizeString(node.asText(), maxLength);
+            if (v == null) parent.putNull(field);
             else parent.put(field, v);
             return;
         }
         if (node.isArray() && node.size() > 0 && node.get(0).isTextual()) {
-            String v = node.get(0).asText().trim();
-            if (v.isBlank()) parent.putNull(field);
+            String v = ProfileSchemaNormalization.normalizeString(node.get(0).asText(), maxLength);
+            if (v == null) parent.putNull(field);
             else parent.put(field, v);
             return;
         }
@@ -325,47 +325,33 @@ public class LlmProfileStructuring implements ProfileStructuringLlm {
         parent.put(field, normalized);
     }
 
-    private static void normalizeStringArrayField(ObjectNode parent, String field) {
+    private static void normalizeStringArrayField(ObjectNode parent, String field, int maxItems, int maxItemLength) {
         JsonNode node = parent.get(field);
         if (node == null || node.isNull()) return;
-        ArrayNode out = parent.arrayNode();
+        List<String> rawValues = new java.util.ArrayList<>();
         if (node.isArray()) {
             for (JsonNode item : node) {
                 String value = asNormalizedString(item);
-                if (value != null) out.add(value);
+                if (value != null) rawValues.add(value);
             }
         } else if (node.isObject()) {
             Iterator<JsonNode> values = node.elements();
             while (values.hasNext()) {
                 String value = asNormalizedString(values.next());
-                if (value != null) out.add(value);
+                if (value != null) rawValues.add(value);
             }
         } else {
             String value = asNormalizedString(node);
-            if (value != null) out.add(value);
+            if (value != null) rawValues.add(value);
         }
-        if (out.isEmpty()) {
+        List<String> normalized = ProfileSchemaNormalization.normalizeList(rawValues, maxItems, maxItemLength);
+        if (normalized == null || normalized.isEmpty()) {
             parent.putNull(field);
         } else {
-            parent.set(field, dedupeArray(out));
+            ArrayNode out = parent.arrayNode();
+            normalized.forEach(out::add);
+            parent.set(field, out);
         }
-    }
-
-    private static ArrayNode dedupeArray(ArrayNode input) {
-        LinkedHashSet<String> seen = new LinkedHashSet<>();
-        ArrayNode out = input.arrayNode();
-        for (JsonNode item : input) {
-            if (!item.isTextual()) continue;
-            String v = item.asText().trim();
-            if (v.isBlank()) continue;
-            if (seen.add(v.toLowerCase(Locale.ROOT))) {
-                out.add(v);
-            }
-            if (out.size() >= 8) {
-                break;
-            }
-        }
-        return out;
     }
 
     private static String asNormalizedString(JsonNode node) {
@@ -415,7 +401,7 @@ public class LlmProfileStructuring implements ProfileStructuringLlm {
         if (tools == null || tools.isEmpty()) {
             return tools;
         }
-        var deduped = new LinkedHashSet<String>();
+        var filtered = new java.util.ArrayList<String>();
         for (String tool : tools) {
             if (tool == null || tool.isBlank()) {
                 continue;
@@ -423,12 +409,13 @@ public class LlmProfileStructuring implements ProfileStructuringLlm {
             if (isNonToolEntity(tool)) {
                 continue;
             }
-            deduped.add(tool.trim());
+            filtered.add(tool.trim());
         }
-        if (deduped.isEmpty()) {
-            return null;
-        }
-        return java.util.List.copyOf(deduped);
+        return ProfileSchemaNormalization.normalizeList(
+                filtered,
+                ProfileSchema.MAX_TOOLS_AND_TECH,
+                ProfileSchema.MAX_TOOL_AND_TECH_LENGTH
+        );
     }
 
     private boolean isNonToolEntity(String value) {

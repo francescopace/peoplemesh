@@ -25,13 +25,33 @@ public final class OAuthProfileParser {
 
     public static ProfileSchema buildImportSchema(String provider, OidcSubject subject) {
         String headline = subject.headline();
-        List<String> roles = optionalList(normalizeRoleFromHeadline(headline));
+        List<String> roles = ProfileSchemaNormalization.normalizeList(
+                singletonOrEmpty(normalizeRoleFromHeadline(headline)),
+                ProfileSchema.MAX_ROLES,
+                ProfileSchema.MAX_ROLE_LENGTH
+        );
         Seniority seniority = inferSeniority(headline);
         String country = countryFromLocale(subject.locale());
-        String language = languageFromLocale(subject.locale());
-        List<String> industries = optionalList(subject.industry());
-        List<String> topics = optionalList(headline);
-        List<String> skills = optionalList(extractKnownSkills(headline));
+        List<String> languages = ProfileSchemaNormalization.normalizeList(
+                singletonOrEmpty(languageFromLocale(subject.locale())),
+                ProfileSchema.MAX_LANGUAGES_SPOKEN,
+                ProfileSchema.MAX_LANGUAGE_SPOKEN_LENGTH
+        );
+        List<String> industries = ProfileSchemaNormalization.normalizeList(
+                singletonOrEmpty(subject.industry()),
+                ProfileSchema.MAX_INDUSTRIES,
+                ProfileSchema.MAX_INDUSTRY_LENGTH
+        );
+        List<String> topics = ProfileSchemaNormalization.normalizeList(
+                singletonOrEmpty(headline),
+                ProfileSchema.MAX_TOPICS_FREQUENT,
+                ProfileSchema.MAX_TOPIC_FREQUENT_LENGTH
+        );
+        List<String> skills = ProfileSchemaNormalization.normalizeList(
+                extractKnownSkills(headline),
+                ProfileSchema.MAX_SKILLS_TECHNICAL,
+                ProfileSchema.MAX_SKILL_TECHNICAL_LENGTH
+        );
         ProfileSchema.IdentityInfo identity = toIdentity(subject);
 
         return new ProfileSchema(
@@ -40,13 +60,13 @@ public final class OAuthProfileParser {
                 null,
                 new ProfileSchema.ProfessionalInfo(
                         roles, seniority, industries, skills,
-                        null, null, optionalList(language), null, null
+                        null, null, languages, null, null
                 ),
                 null,
                 new ProfileSchema.InterestsInfo(topics, null, null),
                 null,
                 new ProfileSchema.GeographyInfo(country, null, null),
-                providerIdentityProvenance(provider, roles != null, language != null, skills != null, topics != null, identity),
+                providerIdentityProvenance(provider, roles != null, languages != null, skills != null, topics != null, identity),
                 identity
         );
     }
@@ -54,33 +74,55 @@ public final class OAuthProfileParser {
     public static ProfileSchema buildEnrichedGitHubSchema(GitHubEnrichedResult enriched) {
         OidcSubject subject = enriched.subject();
         String headline = subject.headline();
-        List<String> roles = optionalList(normalizeRoleFromHeadline(headline));
+        List<String> roles = singletonOrEmpty(normalizeRoleFromHeadline(headline));
         Seniority seniority = inferSeniority(headline);
         String country = countryFromLocale(subject.locale());
-        String language = languageFromLocale(subject.locale());
+        List<String> rolesNormalized = ProfileSchemaNormalization.normalizeList(
+                roles,
+                ProfileSchema.MAX_ROLES,
+                ProfileSchema.MAX_ROLE_LENGTH
+        );
+        List<String> languages = ProfileSchemaNormalization.normalizeList(
+                singletonOrEmpty(languageFromLocale(subject.locale())),
+                ProfileSchema.MAX_LANGUAGES_SPOKEN,
+                ProfileSchema.MAX_LANGUAGE_SPOKEN_LENGTH
+        );
 
         Set<String> skillSet = new LinkedHashSet<>();
         skillSet.addAll(extractKnownSkills(headline));
         if (enriched.languages() != null) skillSet.addAll(enriched.languages());
-        List<String> skills = skillSet.isEmpty() ? null : new ArrayList<>(skillSet);
+        List<String> skills = ProfileSchemaNormalization.normalizeList(
+                new ArrayList<>(skillSet),
+                ProfileSchema.MAX_SKILLS_TECHNICAL,
+                ProfileSchema.MAX_SKILL_TECHNICAL_LENGTH
+        );
         ProfileSchema.IdentityInfo identity = toIdentity(subject);
 
         List<String> topics = enriched.topics() != null && !enriched.topics().isEmpty()
-                ? enriched.topics() : optionalList(headline);
+                ? ProfileSchemaNormalization.normalizeList(
+                        enriched.topics(),
+                        ProfileSchema.MAX_TOPICS_FREQUENT,
+                        ProfileSchema.MAX_TOPIC_FREQUENT_LENGTH
+                )
+                : ProfileSchemaNormalization.normalizeList(
+                        singletonOrEmpty(headline),
+                        ProfileSchema.MAX_TOPICS_FREQUENT,
+                        ProfileSchema.MAX_TOPIC_FREQUENT_LENGTH
+                );
 
         return new ProfileSchema(
                 "1.0",
                 Instant.now().atOffset(ZoneOffset.UTC).toInstant(),
                 null,
                 new ProfileSchema.ProfessionalInfo(
-                        roles, seniority, null, skills,
-                        null, null, optionalList(language), null, null
+                        rolesNormalized, seniority, null, skills,
+                        null, null, languages, null, null
                 ),
                 null,
                 new ProfileSchema.InterestsInfo(topics, null, null),
                 null,
                 new ProfileSchema.GeographyInfo(country, null, null),
-                providerIdentityProvenance("github", roles != null, language != null, skills != null, topics != null, identity),
+                providerIdentityProvenance("github", rolesNormalized != null, languages != null, skills != null, topics != null, identity),
                 identity
         );
     }
@@ -205,12 +247,30 @@ public final class OAuthProfileParser {
 
     private static ProfileSchema.IdentityInfo toIdentity(OidcSubject subject) {
         if (subject == null) return null;
-        String displayName = fullNameOrNull(subject);
-        String firstName = trimToNull(subject.givenName());
-        String lastName = trimToNull(subject.familyName());
-        String email = trimToNull(subject.email());
-        String photoUrl = trimToNull(subject.picture());
-        String company = trimToNull(subject.hostedDomain());
+        String displayName = ProfileSchemaNormalization.normalizeString(
+                fullNameOrNull(subject),
+                ProfileSchema.MAX_IDENTITY_DISPLAY_NAME_LENGTH
+        );
+        String firstName = ProfileSchemaNormalization.normalizeString(
+                subject.givenName(),
+                ProfileSchema.MAX_IDENTITY_FIRST_NAME_LENGTH
+        );
+        String lastName = ProfileSchemaNormalization.normalizeString(
+                subject.familyName(),
+                ProfileSchema.MAX_IDENTITY_LAST_NAME_LENGTH
+        );
+        String email = ProfileSchemaNormalization.normalizeString(
+                subject.email(),
+                ProfileSchema.MAX_IDENTITY_EMAIL_LENGTH
+        );
+        String photoUrl = ProfileSchemaNormalization.normalizeString(
+                subject.picture(),
+                ProfileSchema.MAX_IDENTITY_PHOTO_URL_LENGTH
+        );
+        String company = ProfileSchemaNormalization.normalizeString(
+                subject.hostedDomain(),
+                ProfileSchema.MAX_IDENTITY_COMPANY_LENGTH
+        );
         if (displayName == null && firstName == null && lastName == null
                 && email == null && photoUrl == null && company == null) {
             return null;
@@ -226,25 +286,14 @@ public final class OAuthProfileParser {
         );
     }
 
-    private static List<String> optionalList(String value) {
-        String v = value == null ? null : value.trim();
-        return (v == null || v.isBlank()) ? null : List.of(v);
-    }
-
-    private static List<String> optionalList(List<String> values) {
-        return (values == null || values.isEmpty()) ? null : values;
+    private static List<String> singletonOrEmpty(String value) {
+        return value == null ? List.of() : List.of(value);
     }
 
     private static String splitBefore(String value, String marker) {
         if (marker == null || marker.isBlank()) return value;
         int idx = value.toLowerCase().indexOf(marker.toLowerCase());
         return idx <= 0 ? value : value.substring(0, idx).trim();
-    }
-
-    private static String trimToNull(String value) {
-        if (value == null) return null;
-        String out = value.trim();
-        return out.isBlank() ? null : out;
     }
 
     private static void addIfContains(String haystack, Set<String> out, String needle, String normalized) {
