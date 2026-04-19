@@ -43,6 +43,8 @@ except Exception as exc:  # noqa: BLE001
 
 DEFAULT_OLLAMA_MODEL = "granite-embedding:30m"
 DEFAULT_OLLAMA_URL = "http://localhost:11434"
+DEFAULT_OPENAI_URL = "https://api.openai.com"
+DEFAULT_OPENAI_MODEL = "text-embedding-3-small"
 DEFAULT_API_URL = "http://localhost:8080"
 DEFAULT_SESSION_SECRET = "default-dev-session-secret-change-in-prod-32b!!"
 CONSENT_SCOPE = "professional_matching"
@@ -110,6 +112,12 @@ def parse_args() -> argparse.Namespace:
         help="PostgreSQL URL. If omitted, auto-discovery from Docker is attempted.",
     )
     parser.add_argument(
+        "--embedding-provider",
+        choices=["ollama", "openai"],
+        default=os.getenv("EVAL_EMBEDDING_PROVIDER", "ollama"),
+        help="Embedding provider for direct/divergence evaluation (default: ollama).",
+    )
+    parser.add_argument(
         "--ollama-url",
         default=DEFAULT_OLLAMA_URL,
         help=f"Ollama base URL (default: {DEFAULT_OLLAMA_URL})",
@@ -118,6 +126,26 @@ def parse_args() -> argparse.Namespace:
         "--ollama-model",
         default=DEFAULT_OLLAMA_MODEL,
         help=f"Ollama embedding model (default: {DEFAULT_OLLAMA_MODEL})",
+    )
+    parser.add_argument(
+        "--openai-url",
+        default=os.getenv("OPENAI_BASE_URL", DEFAULT_OPENAI_URL),
+        help=f"OpenAI base URL (default: {DEFAULT_OPENAI_URL})",
+    )
+    parser.add_argument(
+        "--openai-model",
+        default=os.getenv("OPENAI_EMBEDDING_MODEL", DEFAULT_OPENAI_MODEL),
+        help=f"OpenAI embedding model (default: {DEFAULT_OPENAI_MODEL})",
+    )
+    parser.add_argument(
+        "--openai-api-key",
+        default=os.getenv("OPENAI_API_KEY", ""),
+        help="OpenAI API key (defaults to OPENAI_API_KEY env var).",
+    )
+    parser.add_argument(
+        "--embedding-model",
+        default="",
+        help="Optional explicit embedding model override for selected provider.",
     )
     parser.add_argument(
         "--api-url",
@@ -359,13 +387,47 @@ def fetch_candidates(conn) -> list[Candidate]:
     return out
 
 
-def embed_text(ollama_url: str, model: str, text: str) -> list[float]:
+def embed_text_ollama(ollama_url: str, model: str, text: str) -> list[float]:
     payload = {"model": model, "prompt": text}
     resp = post_json(ollama_url.rstrip("/") + "/api/embeddings", payload)
     emb = resp.get("embedding")
     if not isinstance(emb, list) or not emb:
         return []
     return [float(x) for x in emb]
+
+
+def embed_text_openai(openai_url: str, api_key: str, model: str, text: str) -> list[float]:
+    if not api_key:
+        raise ValueError("OPENAI_API_KEY is required when --embedding-provider=openai")
+    payload = {"model": model, "input": text}
+    body = json.dumps(payload).encode("utf-8")
+    req = Request(openai_url.rstrip("/") + "/v1/embeddings", data=body, method="POST")
+    req.add_header("Content-Type", "application/json")
+    req.add_header("Accept", "application/json")
+    req.add_header("Authorization", f"Bearer {api_key}")
+    with urlopen(req, timeout=120) as resp:
+        parsed = json.loads(resp.read().decode("utf-8"))
+    data = parsed.get("data")
+    if not isinstance(data, list) or not data:
+        return []
+    first = data[0] if isinstance(data[0], dict) else {}
+    emb = first.get("embedding")
+    if not isinstance(emb, list) or not emb:
+        return []
+    return [float(x) for x in emb]
+
+
+def embed_text(
+    provider: str,
+    ollama_url: str,
+    openai_url: str,
+    openai_api_key: str,
+    model: str,
+    text: str,
+) -> list[float]:
+    if provider == "openai":
+        return embed_text_openai(openai_url, openai_api_key, model, text)
+    return embed_text_ollama(ollama_url, model, text)
 
 
 def apply_query_prefix(text: str, query_prefix: str) -> str:
@@ -679,7 +741,10 @@ def stddev(values: list[float]) -> float | None:
 def evaluate_direct(
     candidates: list[Candidate],
     cases: list[QueryCase],
+    embedding_provider: str,
     ollama_url: str,
+    openai_url: str,
+    openai_api_key: str,
     model: str,
     query_prefix: str,
 ) -> dict[str, QueryMetrics]:
@@ -708,7 +773,14 @@ def evaluate_direct(
             continue
 
         query_text = apply_query_prefix(case.text, query_prefix)
-        q_emb = embed_text(ollama_url, model, query_text)
+        q_emb = embed_text(
+            embedding_provider,
+            ollama_url,
+            openai_url,
+            openai_api_key,
+            model,
+            query_text,
+        )
         scored: list[tuple[Candidate, float]] = []
         for c in filtered:
             sim = cosine(q_emb, c.embedding)
@@ -1128,7 +1200,10 @@ def java_embedding_text(c: Candidate) -> str:
 
 def evaluate_text_divergence(
     candidates: list[Candidate],
+    embedding_provider: str,
     ollama_url: str,
+    openai_url: str,
+    openai_api_key: str,
     model: str,
     sample_size: int,
     rng: random.Random,
@@ -1149,8 +1224,22 @@ def evaluate_text_divergence(
     for c in sample:
         py_text = py_builder(c, max_chars=1200)
         java_text = java_embedding_text(c)
-        py_emb = embed_text(ollama_url, model, py_text)
-        java_emb = embed_text(ollama_url, model, java_text)
+        py_emb = embed_text(
+            embedding_provider,
+            ollama_url,
+            openai_url,
+            openai_api_key,
+            model,
+            py_text,
+        )
+        java_emb = embed_text(
+            embedding_provider,
+            ollama_url,
+            openai_url,
+            openai_api_key,
+            model,
+            java_text,
+        )
         sim = cosine(py_emb, java_emb)
         sims.append(sim)
         rows.append(
@@ -1444,12 +1533,18 @@ def print_divergence_report(report: dict[str, Any]) -> None:
 def main() -> int:
     args = parse_args()
     rng = random.Random(args.seed)
+    selected_model = (
+        args.embedding_model.strip()
+        or (args.openai_model if args.embedding_provider == "openai" else args.ollama_model)
+    )
 
     db_url = args.db_url.strip() or discover_db_url()
     print("[info] Search Quality Evaluation Battery")
     print(f"[info] db_url={db_url}")
+    print(f"[info] embedding_provider={args.embedding_provider}")
     print(f"[info] ollama_url={args.ollama_url}")
-    print(f"[info] ollama_model={args.ollama_model}")
+    print(f"[info] openai_url={args.openai_url}")
+    print(f"[info] embedding_model={selected_model}")
     print(f"[info] query_prefix={args.query_prefix!r}")
     print(f"[info] query_suite={args.query_suite}")
     print(f"[info] divergence_mode={args.divergence_mode}")
@@ -1481,7 +1576,14 @@ def main() -> int:
 
         start = time.perf_counter()
         direct_metrics = evaluate_direct(
-            candidates, cases, args.ollama_url, args.ollama_model, args.query_prefix
+            candidates,
+            cases,
+            args.embedding_provider,
+            args.ollama_url,
+            args.openai_url,
+            args.openai_api_key,
+            selected_model,
+            args.query_prefix,
         )
         print(f"[info] direct eval elapsed={time.perf_counter() - start:.2f}s")
 
@@ -1493,8 +1595,11 @@ def main() -> int:
 
         divergence = evaluate_text_divergence(
             candidates,
+            args.embedding_provider,
             args.ollama_url,
-            args.ollama_model,
+            args.openai_url,
+            args.openai_api_key,
+            selected_model,
             args.sample_divergence,
             rng,
             args.divergence_mode,
