@@ -1,0 +1,43 @@
+# Codecov Configuration
+# https://docs.codecov.com/docs/codecov-yaml
+
+codecov:
+  notify:
+    wait_for_ci: false
+
+coverage:
+  precision: 2
+  round: down
+  range: "60...100"
+  status:
+    project:
+      default:
+        target: 80%
+        threshold: 2%
+    patch:
+      default:
+        target: 70%
+        threshold: 5%
+
+# Keep generated or third-party paths out of coverage signals
+ignore:
+  - "src/test/**"
+  - "src/main/web/node_modules/**"
+  - "src/main/web/coverage/**"
+  - "target/**"
+
+flags:
+  backend:
+    paths:
+      - "src/main/java"
+      - "src/main/resources"
+  frontend:
+    paths:
+      - "src/main/web/src"
+
+# Comment on PRs
+comment:
+  layout: "reach,diff,flags,files"
+  behavior: default
+  require_changes: true
+

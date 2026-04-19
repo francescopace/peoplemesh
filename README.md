@@ -88,6 +88,7 @@ Open-source governance, sustainability, and legal documents:
 - [ROPA.md](ROPA.md)
 - [CLA.md](CLA.md)
 - [CONTRIBUTING.md](CONTRIBUTING.md)
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 - [SECURITY.md](SECURITY.md)
 - [SUPPORT.md](SUPPORT.md)
 

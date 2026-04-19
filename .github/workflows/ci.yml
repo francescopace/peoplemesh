@@ -5,6 +5,7 @@ on:
     branches: [develop]
   push:
     branches: [main]
+    tags: ["v*"]
   schedule:
     - cron: "0 2 * * *"
   workflow_dispatch:
@@ -246,15 +247,24 @@ jobs:
             exit 1
           fi
           image_repo="${DOCKERHUB_USERNAME}/peoplemesh"
-          image_sha="${image_repo}:sha-${GITHUB_SHA::12}"
-          image_main="${image_repo}:main"
+          if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
+            image_primary="${image_repo}:main"
+            image_secondary=""
+          elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            version_tag="${GITHUB_REF_NAME}"
+            image_primary="${image_repo}:${version_tag}"
+            image_secondary="${image_repo}:latest"
+          else
+            echo "Unsupported ref for Docker publish: ${GITHUB_REF}"
+            exit 1
+          fi
           echo "repo=${image_repo}" >> "$GITHUB_OUTPUT"
-          echo "sha=${image_sha}" >> "$GITHUB_OUTPUT"
-          echo "main=${image_main}" >> "$GITHUB_OUTPUT"
+          echo "primary=${image_primary}" >> "$GITHUB_OUTPUT"
+          echo "secondary=${image_secondary}" >> "$GITHUB_OUTPUT"
 
       - name: Build JVM image
         env:
-          IMAGE_NAME: ${{ steps.image.outputs.sha }}
+          IMAGE_NAME: ${{ steps.image.outputs.primary }}
         run: make image
 
       - name: Log in to Docker Hub
@@ -263,10 +273,13 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Tag image for main
-        run: docker tag "${{ steps.image.outputs.sha }}" "${{ steps.image.outputs.main }}"
+      - name: Tag secondary image (if needed)
+        if: steps.image.outputs.secondary != ''
+        run: docker tag "${{ steps.image.outputs.primary }}" "${{ steps.image.outputs.secondary }}"
 
       - name: Push image tags
         run: |
-          docker push "${{ steps.image.outputs.sha }}"
-          docker push "${{ steps.image.outputs.main }}"
+          docker push "${{ steps.image.outputs.primary }}"
+          if [ -n "${{ steps.image.outputs.secondary }}" ]; then
+            docker push "${{ steps.image.outputs.secondary }}"
+          fi
