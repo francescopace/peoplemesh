@@ -158,6 +158,15 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_QUERY_SUITE,
         help="Query suite to evaluate (default: all queries, it-only: IT/domain-focused, it-strict: core IT role/skill queries).",
     )
+    parser.add_argument(
+        "--divergence-mode",
+        choices=["legacy-vs-java", "aligned-vs-java"],
+        default="legacy-vs-java",
+        help=(
+            "How to compare embedding text variants in divergence report "
+            "(default: legacy-vs-java)."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -360,6 +369,21 @@ def cosine(a: list[float], b: list[float]) -> float:
 
 def lower_set(items: list[str]) -> set[str]:
     return {x.strip().lower() for x in items if x and str(x).strip()}
+
+
+def dedupe_terms(items: list[str]) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        val = str(item).strip()
+        if not val:
+            continue
+        key = val.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(val)
+    return out
 
 
 def sd_list(c: Candidate, key: str) -> list[str]:
@@ -767,93 +791,40 @@ def cleanup_api_user(conn, user_id: str, identity_id: str, delete_node: bool = F
     conn.commit()
 
 
-def build_profile_schema_from_candidate(c: Candidate) -> dict[str, Any]:
+def build_search_query_from_candidate(c: Candidate) -> dict[str, Any]:
     sd = c.structured_data or {}
+    profile_skills = dedupe_terms(c.tags + sd_list(c, "tools_and_tech") + sd_list(c, "skills_soft"))
+    roles = dedupe_terms(split_roles(c.description))
+    languages = dedupe_terms(sd_list(c, "languages_spoken"))
+    industries = dedupe_terms(sd_list(c, "industries"))
+    nice_skills = dedupe_terms(profile_skills + sd_list(c, "topics_frequent") + sd_list(c, "learning_areas"))[:20]
+    keywords = dedupe_terms(profile_skills + roles + nice_skills)
 
-    role = str(sd.get("role", "")).strip()
-    if not role:
-        role = c.description.split(" at ", 1)[0].strip() if c.description else "Developer"
-    roles = [role] if role else ["Developer"]
-
-    professional = {
-        "roles": roles,
-        "seniority": str(sd.get("seniority", "")).strip() or None,
-        "industries": [str(x).strip() for x in sd.get("industries", []) if str(x).strip()]
-        if isinstance(sd.get("industries"), list)
-        else [],
-        "skills_technical": c.tags,
-        "skills_soft": [str(x).strip() for x in sd.get("skills_soft", []) if str(x).strip()]
-        if isinstance(sd.get("skills_soft"), list)
-        else [],
-        "tools_and_tech": [str(x).strip() for x in sd.get("tools_and_tech", []) if str(x).strip()]
-        if isinstance(sd.get("tools_and_tech"), list)
-        else [],
-        "languages_spoken": [str(x).strip() for x in sd.get("languages_spoken", []) if str(x).strip()]
-        if isinstance(sd.get("languages_spoken"), list)
-        else [],
-        "work_mode_preference": str(sd.get("work_mode", "")).strip() or None,
-        "employment_type": str(sd.get("employment_type", "")).strip() or None,
-    }
-
-    interests_professional = {
-        "topics_frequent": [str(x).strip() for x in sd.get("topics_frequent", []) if str(x).strip()]
-        if isinstance(sd.get("topics_frequent"), list)
-        else [],
-        "learning_areas": [str(x).strip() for x in sd.get("learning_areas", []) if str(x).strip()]
-        if isinstance(sd.get("learning_areas"), list)
-        else [],
-        "project_types": [str(x).strip() for x in sd.get("project_types", []) if str(x).strip()]
-        if isinstance(sd.get("project_types"), list)
-        else [],
-    }
-
-    personal = {
-        "hobbies": [str(x).strip() for x in sd.get("hobbies", []) if str(x).strip()]
-        if isinstance(sd.get("hobbies"), list)
-        else [],
-        "sports": [str(x).strip() for x in sd.get("sports", []) if str(x).strip()]
-        if isinstance(sd.get("sports"), list)
-        else [],
-        "education": [str(x).strip() for x in sd.get("education", []) if str(x).strip()]
-        if isinstance(sd.get("education"), list)
-        else [],
-        "causes": [str(x).strip() for x in sd.get("causes", []) if str(x).strip()]
-        if isinstance(sd.get("causes"), list)
-        else [],
-        "personality_tags": [str(x).strip() for x in sd.get("personality_tags", []) if str(x).strip()]
-        if isinstance(sd.get("personality_tags"), list)
-        else [],
-        "music_genres": [str(x).strip() for x in sd.get("music_genres", []) if str(x).strip()]
-        if isinstance(sd.get("music_genres"), list)
-        else [],
-        "book_genres": [str(x).strip() for x in sd.get("book_genres", []) if str(x).strip()]
-        if isinstance(sd.get("book_genres"), list)
-        else [],
-    }
-
-    geography = {
-        "country": c.country,
-        "city": str(sd.get("city", "")).strip() or None,
-        "timezone": str(sd.get("timezone", "")).strip() or None,
-    }
-
-    identity = {
-        "display_name": c.title,
-        "first_name": str(sd.get("first_name", "")).strip() or None,
-        "last_name": str(sd.get("last_name", "")).strip() or None,
-        "email": str(sd.get("email", "")).strip() or None,
-        "photo_url": str(sd.get("avatar_url", "")).strip() or None,
-        "company": str(sd.get("company", "")).strip() or None,
-        "birth_date": str(sd.get("birth_date", "")).strip() or None,
-    }
+    seniority_raw = str(sd.get("seniority", "")).strip().lower()
+    seniority = seniority_raw if seniority_raw in {"junior", "mid", "senior", "lead"} else "unknown"
 
     return {
-        "profile_version": "2.0",
-        "professional": professional,
-        "interests_professional": interests_professional,
-        "personal": personal,
-        "geography": geography,
-        "identity": identity,
+        "must_have": {
+            "skills": [],
+            "roles": roles,
+            "languages": languages,
+            "location": [],
+            "industries": industries,
+        },
+        "nice_to_have": {
+            "skills": nice_skills,
+            "industries": [],
+            "experience": [],
+        },
+        "seniority": seniority,
+        "negative_filters": {
+            "seniority": None,
+            "skills": [],
+            "location": [],
+        },
+        "keywords": keywords,
+        "embedding_text": " ".join(keywords) if keywords else "search",
+        "result_scope": "all",
     }
 
 
@@ -884,7 +855,7 @@ def evaluate_api_matches(
 
         relevant_ids = build_relevant_ids(seed, candidates, relevance_mode)
         try:
-            payload = build_profile_schema_from_candidate(seed)
+            payload = build_search_query_from_candidate(seed)
             data = post_json_with_cookie(endpoint, payload, session_cookie)
         except (HTTPError, URLError) as exc:
             print(f"[warn] API call failed for {case_key}: {exc}", file=sys.stderr)
@@ -931,8 +902,35 @@ def evaluate_api_matches(
     return api_cases, out
 
 
-def python_embedding_text(c: Candidate, max_chars: int | None = None) -> str:
-    # Seed generation now follows EmbeddingTextBuilder-compatible formatting.
+def python_embedding_text_legacy(c: Candidate, max_chars: int | None = None) -> str:
+    # Legacy Python-side seed format kept for divergence diagnostics.
+    parts = [
+        f"type={c.node_type}",
+        f"title={c.title}" if c.title else None,
+        f"description={c.description}" if c.description else None,
+        f"tags={', '.join(c.tags)}" if c.tags else None,
+        f"country={c.country}" if c.country else None,
+    ]
+    sd = c.structured_data or {}
+    for key in sorted(sd.keys()):
+        value = sd.get(key)
+        if value is None:
+            continue
+        if isinstance(value, list):
+            values = [str(x).strip() for x in value if str(x).strip()]
+            if values:
+                parts.append(f"{key}={', '.join(values)}")
+            continue
+        text = str(value).strip()
+        if text and text != "[]":
+            parts.append(f"{key}={text}")
+    text = " | ".join([p for p in parts if p])
+    if max_chars is not None and max_chars > 0 and len(text) > max_chars:
+        return text[:max_chars]
+    return text
+
+
+def python_embedding_text_aligned(c: Candidate, max_chars: int | None = None) -> str:
     text = java_embedding_text(c)
     if max_chars is not None and max_chars > 0 and len(text) > max_chars:
         return text[:max_chars]
@@ -1013,7 +1011,12 @@ def java_embedding_text(c: Candidate) -> str:
 
 
 def evaluate_text_divergence(
-    candidates: list[Candidate], ollama_url: str, model: str, sample_size: int, rng: random.Random
+    candidates: list[Candidate],
+    ollama_url: str,
+    model: str,
+    sample_size: int,
+    rng: random.Random,
+    divergence_mode: str,
 ) -> dict[str, Any]:
     users = [c for c in candidates if c.node_type == "USER"]
     if not users:
@@ -1022,14 +1025,26 @@ def evaluate_text_divergence(
 
     sims: list[float] = []
     rows: list[dict[str, Any]] = []
+    py_builder = (
+        python_embedding_text_aligned
+        if divergence_mode == "aligned-vs-java"
+        else python_embedding_text_legacy
+    )
     for c in sample:
-        py_text = python_embedding_text(c, max_chars=1200)
+        py_text = py_builder(c, max_chars=1200)
         java_text = java_embedding_text(c)
         py_emb = embed_text(ollama_url, model, py_text)
         java_emb = embed_text(ollama_url, model, java_text)
         sim = cosine(py_emb, java_emb)
         sims.append(sim)
-        rows.append({"id": c.node_id, "title": c.title, "similarity": sim})
+        rows.append(
+            {
+                "id": c.node_id,
+                "title": c.title,
+                "similarity": sim,
+                "mode": divergence_mode,
+            }
+        )
 
     rows.sort(key=lambda x: x["similarity"])
     return {
@@ -1089,6 +1104,19 @@ def print_aggregate(title: str, cases: list[QueryCase], metrics_by_case: dict[st
     print(f"mean Recall@20(capped): {fmt(agg.recall_at_20_capped)}")
     print(f"mean MRR:    {fmt(agg.mrr)}")
     print(f"mean NDCG@10:{fmt(agg.ndcg_at_10)}")
+
+
+def relevant_only_cases(cases: list[QueryCase], metrics_by_case: dict[str, QueryMetrics]) -> list[QueryCase]:
+    return [case for case in cases if metrics_by_case[case.key].relevant_total > 0]
+
+
+def print_aggregate_relevant_only(
+    title: str, cases: list[QueryCase], metrics_by_case: dict[str, QueryMetrics]
+) -> None:
+    rel_cases = relevant_only_cases(cases, metrics_by_case)
+    if not rel_cases:
+        return
+    print_aggregate(f"{title} (queries with relevant items only)", rel_cases, metrics_by_case)
 
 
 def compute_aggregate(
@@ -1192,11 +1220,11 @@ def print_action_hints(
             )
         if direct_agg.ndcg_at_10 < 0.55:
             hints.append(
-                "Direct NDCG@10 is weak: inspect top-10 ordering and adjust must-have/nice-to-have weighting in SearchService."
+                "Direct NDCG@10 is weak: inspect top-10 ordering and candidate embedding text quality; this block bypasses SearchService scoring."
             )
         if direct_agg.mrr < 0.60:
             hints.append(
-                "Direct MRR is weak: check first-hit behavior (hard gates, exact-match fallback, parser extraction quality)."
+                "Direct MRR is weak: investigate first-hit embedding relevance (query wording, profile text builder, and embedding refresh)."
             )
 
     if api_agg is not None and api_overall is not None and api_overall != "GREEN":
@@ -1264,6 +1292,7 @@ def main() -> int:
     print(f"[info] ollama_model={args.ollama_model}")
     print(f"[info] query_prefix={args.query_prefix!r}")
     print(f"[info] query_suite={args.query_suite}")
+    print(f"[info] divergence_mode={args.divergence_mode}")
     print(f"[info] api_url={args.api_url}")
 
     try:
@@ -1295,11 +1324,17 @@ def main() -> int:
 
         print_query_table("Direct embedding retrieval results", cases, direct_metrics)
         print_aggregate("Direct embedding aggregate", cases, direct_metrics)
+        print_aggregate_relevant_only("Direct embedding aggregate", cases, direct_metrics)
         print_similarity_separation(cases, direct_metrics)
         direct_agg = compute_aggregate(cases, direct_metrics)
 
         divergence = evaluate_text_divergence(
-            candidates, args.ollama_url, args.ollama_model, args.sample_divergence, rng
+            candidates,
+            args.ollama_url,
+            args.ollama_model,
+            args.sample_divergence,
+            rng,
+            args.divergence_mode,
         )
         print_divergence_report(divergence)
 
@@ -1342,6 +1377,11 @@ def main() -> int:
                     api_cases_embedding,
                     api_metrics_embedding,
                 )
+                print_aggregate_relevant_only(
+                    "API /matches aggregate (embedding-neighbors relevance)",
+                    api_cases_embedding,
+                    api_metrics_embedding,
+                )
 
                 api_cases_strict, api_metrics_strict = evaluate_api_matches(
                     candidates,
@@ -1361,6 +1401,11 @@ def main() -> int:
                     api_cases_strict,
                     api_metrics_strict,
                 )
+                print_aggregate_relevant_only(
+                    "API /matches aggregate (strict profile-overlap relevance)",
+                    api_cases_strict,
+                    api_metrics_strict,
+                )
                 api_agg_for_gate = compute_aggregate(api_cases_strict, api_metrics_strict)
             finally:
                 if cleanup_needed:
@@ -1372,7 +1417,8 @@ def main() -> int:
 
         print("\n[done] Evaluation completed.")
         print("[next] If divergence cosine is low, regenerate embeddings in Java text format.")
-        print("[next] If P@10/MRR are weak, tune SearchService weights and parser extraction.")
+        print("[next] If direct P@10/MRR are weak, tune query/profile embedding text and regenerate vectors.")
+        print("[next] If API ranking is weak, tune SearchService weighting and parser extraction.")
         return 0
     finally:
         conn.close()
