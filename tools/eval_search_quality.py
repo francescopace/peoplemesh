@@ -184,6 +184,12 @@ def parse_args() -> argparse.Namespace:
         default="both",
         help="Relevance mode for /matches/me evaluation (default: both).",
     )
+    parser.add_argument(
+        "--profile-query-variant",
+        choices=["baseline", "skills_musthave", "embedding_text_role_first"],
+        default="baseline",
+        help="Variant used to build SearchQuery payload from a seed profile (default: baseline).",
+    )
     return parser.parse_args()
 
 
@@ -808,21 +814,52 @@ def cleanup_api_user(conn, user_id: str, identity_id: str, delete_node: bool = F
     conn.commit()
 
 
-def build_search_query_from_candidate(c: Candidate) -> dict[str, Any]:
+def build_search_query_from_candidate(c: Candidate, variant: str = "baseline") -> dict[str, Any]:
     sd = c.structured_data or {}
     profile_skills = dedupe_terms(c.tags + sd_list(c, "tools_and_tech") + sd_list(c, "skills_soft"))
     roles = dedupe_terms(split_roles(c.description))
     languages = dedupe_terms(sd_list(c, "languages_spoken"))
     industries = dedupe_terms(sd_list(c, "industries"))
-    nice_skills = dedupe_terms(profile_skills + sd_list(c, "topics_frequent") + sd_list(c, "learning_areas"))[:20]
+    if variant == "skills_musthave":
+        must_have_skills = profile_skills[:12]
+        nice_seed = profile_skills[12:] + sd_list(c, "topics_frequent") + sd_list(c, "learning_areas")
+        nice_skills = dedupe_terms(nice_seed)[:20]
+    else:
+        must_have_skills = []
+        nice_skills = dedupe_terms(profile_skills + sd_list(c, "topics_frequent") + sd_list(c, "learning_areas"))[:20]
     keywords = dedupe_terms(profile_skills + roles + nice_skills)
 
     seniority_raw = str(sd.get("seniority", "")).strip().lower()
     seniority = seniority_raw if seniority_raw in {"junior", "mid", "senior", "lead"} else "unknown"
 
+    if variant == "skills_musthave":
+        parts = []
+        if roles:
+            parts.append(f"roles: {', '.join(roles)}")
+        if profile_skills:
+            parts.append(f"skills: {', '.join(profile_skills[:20])}")
+        if industries:
+            parts.append(f"industries: {', '.join(industries[:10])}")
+        embedding_text = ". ".join(parts) if parts else (" ".join(keywords) if keywords else "search")
+    elif variant == "embedding_text_role_first":
+        parts = []
+        if roles:
+            parts.append(f"roles: {', '.join(roles[:8])}")
+        if profile_skills:
+            parts.append(f"skills: {', '.join(profile_skills[:20])}")
+        if languages:
+            parts.append(f"languages: {', '.join(languages[:6])}")
+        if industries:
+            parts.append(f"industries: {', '.join(industries[:8])}")
+        if nice_skills:
+            parts.append(f"topics: {', '.join(nice_skills[:12])}")
+        embedding_text = ". ".join(parts) if parts else (" ".join(keywords) if keywords else "search")
+    else:
+        embedding_text = " ".join(keywords) if keywords else "search"
+
     return {
         "must_have": {
-            "skills": [],
+            "skills": must_have_skills,
             "roles": roles,
             "languages": languages,
             "location": [],
@@ -840,7 +877,7 @@ def build_search_query_from_candidate(c: Candidate) -> dict[str, Any]:
             "location": [],
         },
         "keywords": keywords,
-        "embedding_text": " ".join(keywords) if keywords else "search",
+        "embedding_text": embedding_text,
         "result_scope": "all",
     }
 
@@ -852,6 +889,7 @@ def evaluate_api_matches(
     sample_size: int,
     rng: random.Random,
     relevance_mode: str = "embedding",
+    profile_query_variant: str = "baseline",
 ) -> tuple[list[QueryCase], dict[str, QueryMetrics]]:
     endpoint = api_url.rstrip("/") + "/api/v1/matches"
     out: dict[str, QueryMetrics] = {}
@@ -872,7 +910,7 @@ def evaluate_api_matches(
 
         relevant_ids = build_relevant_ids(seed, candidates, relevance_mode)
         try:
-            payload = build_search_query_from_candidate(seed)
+            payload = build_search_query_from_candidate(seed, profile_query_variant)
             data = post_json_with_cookie(endpoint, payload, session_cookie)
         except (HTTPError, URLError) as exc:
             print(f"[warn] API call failed for {case_key}: {exc}", file=sys.stderr)
@@ -1415,6 +1453,7 @@ def main() -> int:
     print(f"[info] query_prefix={args.query_prefix!r}")
     print(f"[info] query_suite={args.query_suite}")
     print(f"[info] divergence_mode={args.divergence_mode}")
+    print(f"[info] profile_query_variant={args.profile_query_variant}")
     print(f"[info] eval_my_mesh={args.eval_my_mesh}")
     print(f"[info] my_mesh_relevance_mode={args.my_mesh_relevance_mode}")
     print(f"[info] api_url={args.api_url}")
@@ -1491,6 +1530,7 @@ def main() -> int:
                     args.api_sample_size,
                     rng,
                     relevance_mode="embedding",
+                    profile_query_variant=args.profile_query_variant,
                 )
                 print_query_table(
                     "API /matches schema-input results (embedding-neighbors relevance)",
@@ -1515,6 +1555,7 @@ def main() -> int:
                     args.api_sample_size,
                     rng,
                     relevance_mode="strict",
+                    profile_query_variant=args.profile_query_variant,
                 )
                 print_query_table(
                     "API /matches schema-input results (strict profile-overlap relevance)",

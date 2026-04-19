@@ -43,7 +43,7 @@ public class ProfileSearchQueryBuilder {
                 niceSkills));
 
         String seniority = normalizeSeniority(sdString(node.structuredData, "seniority"));
-        String embeddingText = buildEmbeddingText(node, roles, profileSkills, industries, niceSkills);
+        String embeddingText = buildEmbeddingText(roles, profileSkills, languages, industries, niceSkills);
 
         SearchQuery.MustHaveFilters mustHave = new SearchQuery.MustHaveFilters(
                 Collections.emptyList(),
@@ -89,34 +89,31 @@ public class ProfileSearchQueryBuilder {
     }
 
     private String buildEmbeddingText(
-            MeshNode node,
             List<String> roles,
             List<String> profileSkills,
+            List<String> languages,
             List<String> industries,
             List<String> niceSkills) {
         List<String> parts = new ArrayList<>();
-        if (node.title != null && !node.title.isBlank()) {
-            parts.add(node.title.trim());
-        }
-        if (node.description != null && !node.description.isBlank()) {
-            parts.add(node.description.trim());
-        }
         if (!roles.isEmpty()) {
-            parts.add(String.join(" ", roles));
+            parts.add("roles: " + String.join(", ", capList(roles, 8)));
         }
         if (!profileSkills.isEmpty()) {
-            parts.add(String.join(" ", profileSkills));
+            parts.add("skills: " + String.join(", ", capList(profileSkills, 20)));
+        }
+        if (!languages.isEmpty()) {
+            parts.add("languages: " + String.join(", ", capList(languages, 6)));
         }
         if (!industries.isEmpty()) {
-            parts.add(String.join(" ", industries));
+            parts.add("industries: " + String.join(", ", capList(industries, 8)));
         }
         if (!niceSkills.isEmpty()) {
-            parts.add(String.join(" ", niceSkills));
+            parts.add("topics: " + String.join(", ", capList(niceSkills, 12)));
         }
         if (parts.isEmpty()) {
             return "search";
         }
-        return String.join(" ", parts);
+        return String.join(". ", parts);
     }
 
     private List<String> readIndustries(MeshNode node) {
