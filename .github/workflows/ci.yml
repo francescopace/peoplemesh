@@ -155,8 +155,8 @@ jobs:
         run: |
           mvn --batch-mode --no-transfer-progress \
             org.apache.maven.plugins:maven-dependency-plugin:3.8.1:get \
-            -Dartifact=org.jacoco:org.jacoco.cli:0.8.12:jar:nodeps
-          java -jar "$HOME/.m2/repository/org/jacoco/org.jacoco.cli/0.8.12/org.jacoco.cli-0.8.12-nodeps.jar" merge \
+            -Dartifact=org.jacoco:org.jacoco.cli:0.8.14:jar:nodeps
+          java -jar "$HOME/.m2/repository/org/jacoco/org.jacoco.cli/0.8.14/org.jacoco.cli-0.8.14-nodeps.jar" merge \
             target/jacoco-parts/unit/jacoco.exec \
             target/jacoco-parts/integration/jacoco.exec \
             --destfile target/jacoco.exec
@@ -164,7 +164,7 @@ jobs:
       - name: Generate coverage report and enforce threshold
         run: |
           mvn --batch-mode --no-transfer-progress -DskipTests=true compile
-          mvn --batch-mode --no-transfer-progress -DskipTests=true jacoco:report@report jacoco:check@check
+          mvn --batch-mode --no-transfer-progress -DskipTests=true -Djacoco.line.minimum=0.80 jacoco:report@report jacoco:check@check
 
       - name: Upload JaCoCo report
         if: always()

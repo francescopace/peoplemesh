@@ -7,13 +7,17 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.peoplemesh.config.AppConfig;
+import org.peoplemesh.domain.model.MeshNode;
+import org.peoplemesh.repository.NodeRepository;
 import org.peoplemesh.util.StringUtils;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.Optional;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class NotificationServiceTest {
@@ -23,6 +27,9 @@ class NotificationServiceTest {
 
     @Mock
     AppConfig.NotificationConfig notificationConfig;
+
+    @Mock
+    NodeRepository nodeRepository;
 
     @InjectMocks
     NotificationService notificationService;
@@ -78,5 +85,87 @@ class NotificationServiceTest {
         String subject = invokeBuildSubject("PIPELINE_UPDATE");
 
         assertEquals("[PM] pipeline update", subject);
+    }
+
+    @Test
+    void notifyAuditEvent_skipsWhenActionMissing() {
+        notificationService.notifyAuditEvent(UUID.randomUUID(), "   ", "search", "{}");
+        verifyNoInteractions(appConfig, nodeRepository);
+    }
+
+    @Test
+    void notifyAuditEvent_skipsWhenNotificationsDisabled() {
+        when(appConfig.notification()).thenReturn(notificationConfig);
+        when(notificationConfig.enabled()).thenReturn(false);
+
+        notificationService.notifyAuditEvent(UUID.randomUUID(), "SEARCH", "search", "{}");
+
+        verify(nodeRepository, never()).findById(any());
+    }
+
+    @Test
+    void notifyAuditEvent_skipsWhenNodeMissing() {
+        UUID userId = UUID.randomUUID();
+        when(appConfig.notification()).thenReturn(notificationConfig);
+        when(notificationConfig.enabled()).thenReturn(true);
+        when(nodeRepository.findById(userId)).thenReturn(Optional.empty());
+
+        notificationService.notifyAuditEvent(userId, "SEARCH", "search", "{}");
+
+        verify(nodeRepository).findById(userId);
+        verify(notificationConfig, never()).dryRun();
+    }
+
+    @Test
+    void notifyAuditEvent_skipsWhenEmailMissing() {
+        UUID userId = UUID.randomUUID();
+        MeshNode node = new MeshNode();
+        node.id = userId;
+        node.externalId = "  ";
+
+        when(appConfig.notification()).thenReturn(notificationConfig);
+        when(notificationConfig.enabled()).thenReturn(true);
+        when(nodeRepository.findById(userId)).thenReturn(Optional.of(node));
+
+        notificationService.notifyAuditEvent(userId, "SEARCH", "search", "{}");
+
+        verify(notificationConfig, never()).dryRun();
+    }
+
+    @Test
+    void notifyAuditEvent_dryRunFlowReadsSubjectPrefix() {
+        UUID userId = UUID.randomUUID();
+        MeshNode node = new MeshNode();
+        node.id = userId;
+        node.externalId = "john@example.com";
+
+        when(appConfig.notification()).thenReturn(notificationConfig);
+        when(notificationConfig.enabled()).thenReturn(true);
+        when(notificationConfig.dryRun()).thenReturn(true);
+        when(notificationConfig.subjectPrefix()).thenReturn("[PM]");
+        when(nodeRepository.findById(userId)).thenReturn(Optional.of(node));
+
+        notificationService.notifyAuditEvent(userId, "PROFILE_UPDATED", "profile", "{\"x\":1}");
+
+        verify(notificationConfig).subjectPrefix();
+    }
+
+    @Test
+    void notifyAuditEvent_nonDryRunStillBuildsSubject() {
+        UUID userId = UUID.randomUUID();
+        MeshNode node = new MeshNode();
+        node.id = userId;
+        node.externalId = "john@example.com";
+
+        when(appConfig.notification()).thenReturn(notificationConfig);
+        when(notificationConfig.enabled()).thenReturn(true);
+        when(notificationConfig.dryRun()).thenReturn(false);
+        when(notificationConfig.subjectPrefix()).thenReturn("[PeopleMesh]");
+        when(nodeRepository.findById(userId)).thenReturn(Optional.of(node));
+
+        notificationService.notifyAuditEvent(userId, "EVENT_CREATED", "events", "{}");
+
+        verify(notificationConfig).dryRun();
+        verify(notificationConfig).subjectPrefix();
     }
 }

@@ -30,7 +30,6 @@ flags:
   backend:
     paths:
       - "src/main/java"
-      - "src/main/resources"
   frontend:
     paths:
       - "src/main/web/assets"
