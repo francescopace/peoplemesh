@@ -22,9 +22,10 @@ coverage:
 # Keep generated or third-party paths out of coverage signals
 ignore:
   - "src/test/**"
+  - "src/main/java/org/peoplemesh/domain/dto/**"
+  - "src/main/web/__tests__/**"
   - "src/main/web/node_modules/**"
   - "src/main/web/coverage/**"
-  - "target/**"
 
 flags:
   backend:
