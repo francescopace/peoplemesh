@@ -26,7 +26,6 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Callable
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
 try:
@@ -269,25 +268,6 @@ def parse_embedding(value: Any) -> list[float]:
 
 def connect_db(db_url: str):
     return psycopg2.connect(db_url)
-
-
-def redact_db_url(db_url: str) -> str:
-    try:
-        parsed = urlsplit(db_url)
-        if parsed.password is None:
-            return db_url
-        host = parsed.hostname or ""
-        if ":" in host and not host.startswith("["):
-            host = f"[{host}]"
-        credentials = parsed.username or ""
-        if credentials:
-            credentials += ":***@"
-        netloc = credentials + host
-        if parsed.port is not None:
-            netloc += f":{parsed.port}"
-        return urlunsplit((parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment))
-    except Exception:
-        return "<redacted-db-url>"
 
 
 def fetch_candidates(conn) -> list[Candidate]:
@@ -1333,7 +1313,8 @@ def main() -> int:
 
     db_url = args.db_url.strip() or discover_db_url()
     print("[info] Search Quality Evaluation Battery")
-    print(f"[info] db_url={redact_db_url(db_url)}")
+    # Never log DSNs (even redacted) to avoid leaking credentials through logs.
+    print("[info] db_url=<redacted>")
     print(f"[info] ollama_url={args.ollama_url}")
     print(f"[info] embedding_model={selected_model}")
     print(f"[info] query_prefix={args.query_prefix!r}")

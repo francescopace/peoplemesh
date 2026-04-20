@@ -5,6 +5,7 @@
   "scripts": {
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:coverage:90": "PM_FE_COVERAGE_STATEMENTS_MIN=90 PM_FE_COVERAGE_BRANCHES_MIN=90 PM_FE_COVERAGE_FUNCTIONS_MIN=90 PM_FE_COVERAGE_LINES_MIN=90 vitest run --coverage",
     "test:watch": "vitest"
   },
   "devDependencies": {

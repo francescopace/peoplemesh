@@ -13,16 +13,15 @@
     <properties>
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
         <quarkus.platform.version>3.34.5</quarkus.platform.version>
         <quarkus-mcp-server.version>1.11.1</quarkus-mcp-server.version>
         <pgvector.version>0.1.6</pgvector.version>
-        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <compiler-plugin.version>3.15.0</compiler-plugin.version>
         <surefire-plugin.version>3.5.5</surefire-plugin.version>
         <skipUnitTests>false</skipUnitTests>
-        <netty.version>4.1.132.Final</netty.version>
     </properties>
 
     <dependencyManagement>
@@ -69,16 +68,6 @@
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-rest-jackson</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-codec-http</artifactId>
-            <version>${netty.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-codec-http2</artifactId>
-            <version>${netty.version}</version>
         </dependency>
 
         <!-- Persistence -->
@@ -228,18 +217,6 @@
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
                 <version>0.8.14</version>
-                <configuration>
-                    <excludes>
-                        <!-- Infrastructure-bound: LDAP SDK, real LDAP server required -->
-                        <exclude>org/peoplemesh/service/LdapImportService.class</exclude>
-                        <!-- JAX-RS resources: thin delegates to services, covered by FullFlowIT -->
-                        <exclude>org/peoplemesh/api/resource/MeResource.class</exclude>
-                        <exclude>org/peoplemesh/api/resource/OAuthLoginResource.class</exclude>
-                        <exclude>org/peoplemesh/api/resource/MatchesResource.class</exclude>
-                        <exclude>org/peoplemesh/api/resource/NodesResource.class</exclude>
-                        <exclude>org/peoplemesh/api/resource/SkillsResource.class</exclude>
-                    </excludes>
-                </configuration>
                 <executions>
                     <execution>
                         <id>prepare-agent</id>
@@ -266,6 +243,11 @@
                         <goals>
                             <goal>report</goal>
                         </goals>
+                        <configuration>
+                            <excludes>
+                                <exclude>org/peoplemesh/domain/dto/**</exclude>
+                            </excludes>
+                        </configuration>
                     </execution>
                     <execution>
                         <id>check</id>
@@ -275,6 +257,9 @@
                         </goals>
                         <configuration>
                             <skip>${skipUnitTests}</skip>
+                            <excludes>
+                                <exclude>org/peoplemesh/domain/dto/**</exclude>
+                            </excludes>
                             <rules>
                                 <rule>
                                     <element>BUNDLE</element>

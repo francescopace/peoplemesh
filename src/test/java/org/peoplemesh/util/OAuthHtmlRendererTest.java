@@ -11,8 +11,9 @@ class OAuthHtmlRendererTest {
         String json = "{\"name\":\"Alice\"}";
         OAuthHtmlRenderer.RenderedHtml result = OAuthHtmlRenderer.importSuccess(json, "github", "https://example.com");
 
-        assertTrue(result.html().contains("{\"name\":\"Alice\"}"));
-        assertTrue(result.html().contains("github"));
+        assertFalse(result.html().contains("{\"name\":\"Alice\"}"));
+        assertFalse(result.html().contains("github"));
+        assertTrue(result.html().contains("JSON.parse(atob("));
         assertTrue(result.html().contains("import-result"));
         assertTrue(result.html().contains("window.opener.postMessage"));
     }
@@ -30,8 +31,8 @@ class OAuthHtmlRendererTest {
         String json = "{\"x\":\"</script>\"}";
         OAuthHtmlRenderer.RenderedHtml result = OAuthHtmlRenderer.importSuccess(json, "src", "https://example.com");
 
-        assertFalse(result.html().contains("</script>\""));
-        assertTrue(result.html().contains("<\\/script>"));
+        assertFalse(result.html().contains("{\"x\":\"</script>\"}"));
+        assertTrue(result.html().contains("JSON.parse(atob("));
     }
 
     @Test
@@ -63,7 +64,9 @@ class OAuthHtmlRendererTest {
         OAuthHtmlRenderer.RenderedHtml result = OAuthHtmlRenderer.importError(
                 "line1\nline2\r\"quoted\"</script>", "https://example.com");
 
-        assertFalse(result.html().contains("</script>\""));
+        assertTrue(result.html().contains("line1"));
+        assertTrue(result.html().contains("&quot;quoted&quot;"));
+        assertFalse(result.html().contains("\"quoted\"</script>"));
     }
 
     @Test

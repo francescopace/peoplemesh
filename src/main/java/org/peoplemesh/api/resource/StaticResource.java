@@ -59,8 +59,9 @@ public class StaticResource {
             return Response.status(Response.Status.FORBIDDEN).build();
         }
 
-        java.nio.file.Path realBase = BASE_DIR.toRealPath(LinkOption.NOFOLLOW_LINKS);
-        java.nio.file.Path realFile = filePath.toRealPath(LinkOption.NOFOLLOW_LINKS);
+        // Follow symlinks when resolving canonical paths so symlinked parent directories cannot escape BASE_DIR.
+        java.nio.file.Path realBase = BASE_DIR.toRealPath();
+        java.nio.file.Path realFile = filePath.toRealPath();
         if (!realFile.startsWith(realBase)) {
             return Response.status(Response.Status.FORBIDDEN).build();
         }

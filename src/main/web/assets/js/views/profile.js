@@ -125,7 +125,8 @@ export async function renderProfile(container) {
         className: "btn btn-secondary",
         onClick: () => {
           const url = `/api/v1/auth/login/${pid}?intent=profile_import`;
-          window.open(url, "pm_import", "width=600,height=700,popup=yes");
+          const popup = window.open(url, "pm_import", "width=600,height=700,popup=yes");
+          if (popup) container._profileImportWindow = popup;
         }
       },
         el("i", { className: "fa-brands fa-github", style: "font-size:18px" }),
@@ -171,6 +172,8 @@ export async function renderProfile(container) {
 
   function onImportMessage(event) {
     if (event.origin !== window.location.origin) return;
+    const expectedSource = container._profileImportWindow;
+    if (expectedSource && event.source && event.source !== expectedSource) return;
     const data = event.data;
     if (!data || data.type !== "import-result") {
       if (data && data.type === "import-error") {
@@ -178,6 +181,7 @@ export async function renderProfile(container) {
       }
       return;
     }
+    container._profileImportWindow = null;
     const currentProfile = profile || null;
     showImportPreviewModal(data.imported, currentProfile, data.source, container);
   }
