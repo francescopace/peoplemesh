@@ -1,0 +1,46 @@
+name: DCO Check
+
+on:
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+jobs:
+  dco:
+    name: Verify Signed-off-by trailers
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Validate DCO sign-off on PR commits
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          commits="$(git rev-list "${BASE_SHA}..${HEAD_SHA}")"
+          if [ -z "${commits}" ]; then
+            echo "No commits to validate."
+            exit 0
+          fi
+
+          missing=0
+          for commit in ${commits}; do
+            if ! git log -1 --pretty=%B "${commit}" | grep -Eq '^Signed-off-by: .+ <.+>$'; then
+              echo "::error::Commit ${commit} is missing a valid Signed-off-by trailer."
+              missing=1
+            fi
+          done
+
+          if [ "${missing}" -ne 0 ]; then
+            echo ""
+            echo "At least one commit is missing DCO sign-off."
+            echo "Use: git commit --amend -s (or git rebase --signoff) and push again."
+            exit 1
+          fi
