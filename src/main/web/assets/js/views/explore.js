@@ -1,0 +1,325 @@
+import { el, spinner, toast, emptyState } from "../ui.js";
+import { NODE_TYPE_ICONS, NODE_TYPE_COLORS } from "../node-types.js";
+import { contactFooter } from "../contact-actions.js";
+import { COUNTRIES } from "../utils/countries.js";
+import { termsMatch } from "../utils/term-matching.js";
+import { getUserFacingErrorMessage } from "../utils/errors.js";
+import { fetchMyMeshMatches } from "../services/matches-service.js";
+import {
+  buildExplorePageQuery,
+  EXPLORE_PAGE_SIZE,
+  getExploreCompletionToastMessage,
+  mergeExplorePageState,
+} from "../services/explore-flow-service.js";
+import {
+  isPositiveGeoReason,
+  locationChipStyle,
+  matchedTagStyle,
+} from "../utils/match-visuals.js";
+import {
+  CARD_BADGE_LIMITS,
+  buildScoreWithTooltip,
+  findSkillLevel,
+  sortTermsByMatchPriority,
+} from "../utils/match-card-utils.js";
+
+const NODE_TYPES = [
+  { id: "PEOPLE",        label: "People",      icon: "person" },
+  { id: "JOB",           label: "Jobs",        icon: "work" },
+  { id: "COMMUNITY",     label: "Communities", icon: "groups" },
+  { id: "EVENT",         label: "Events",      icon: "event" },
+  { id: "PROJECT",       label: "Projects",    icon: "rocket_launch" },
+  { id: "INTEREST_GROUP", label: "Groups",     icon: "interests" },
+];
+export async function renderExplore(container) {
+  container.dataset.page = "explore";
+  container.innerHTML = "";
+
+  const header = el("header", { className: "explore-header" });
+  header.appendChild(el("h1", { className: "page-title" }, "My Mesh"));
+  header.appendChild(el("p", { className: "page-subtitle text-secondary" }, "Explore people, jobs, and communities in your mesh."));
+  container.appendChild(header);
+
+  /* === Filter bar === */
+  const filterBar = el("div", { className: "explore-filter-bar" });
+
+  /* Node type tabs */
+  const hashParams = new URLSearchParams(window.location.hash.split("?")[1] || "");
+  const requestedType = hashParams.get("type");
+  let activeType = NODE_TYPES.some((t) => t.id === requestedType) ? requestedType : "PEOPLE";
+  const typeTabs = el("div", { className: "explore-type-tabs" });
+  NODE_TYPES.forEach((t) => {
+    const btn = el("button", {
+      className: `explore-type-tab${t.id === activeType ? " active" : ""}`,
+      dataset: { type: t.id },
+    },
+      el("span", { className: "material-symbols-outlined icon-16" }, t.icon),
+      el("span", {}, t.label)
+    );
+    typeTabs.appendChild(btn);
+  });
+  /* Country select (same row as type tabs) */
+  const countrySelect = el("select", { className: "form-select explore-country-select" });
+  countrySelect.appendChild(el("option", { value: "" }, "All Countries"));
+  COUNTRIES.forEach(([code, name]) =>
+    countrySelect.appendChild(el("option", { value: code }, `${name} (${code})`))
+  );
+  countrySelect.addEventListener("change", () => loadResults());
+  typeTabs.appendChild(countrySelect);
+
+  filterBar.appendChild(typeTabs);
+
+  container.appendChild(filterBar);
+
+  /* Tab click handlers */
+  typeTabs.addEventListener("click", (e) => {
+    const tab = e.target.closest(".explore-type-tab");
+    if (!tab) return;
+    activeType = tab.dataset.type;
+    typeTabs.querySelectorAll(".explore-type-tab").forEach((t) => t.classList.toggle("active", t.dataset.type === activeType));
+    loadResults();
+  });
+
+  const resultsArea = el("div", { className: "explore-results" });
+  container.appendChild(resultsArea);
+  let grid;
+  let loadMoreWrap;
+  let loadMoreButton;
+  let currentOffset = 0;
+  let hasMore = false;
+
+  async function loadResults() {
+    currentOffset = 0;
+    hasMore = false;
+    grid = null;
+    loadMoreWrap = null;
+    loadMoreButton = null;
+    resultsArea.innerHTML = "";
+    resultsArea.appendChild(spinner());
+
+    await loadPagedResults(false);
+  }
+
+  function ensureResultsUi() {
+    if (!grid) {
+      grid = el("div", { className: "explore-grid" });
+      resultsArea.appendChild(grid);
+    }
+    if (!loadMoreWrap) {
+      loadMoreButton = el("button", {
+        className: "btn btn-secondary",
+        type: "button",
+        onClick: () => loadPagedResults(true),
+      }, "Load more");
+      loadMoreWrap = el("div", { className: "explore-load-more" }, loadMoreButton);
+      resultsArea.appendChild(loadMoreWrap);
+    }
+  }
+
+  function updateLoadMoreButton() {
+    if (!loadMoreWrap || !loadMoreButton) return;
+    loadMoreWrap.style.display = hasMore ? "flex" : "none";
+    loadMoreButton.disabled = false;
+    loadMoreButton.textContent = "Load more";
+  }
+
+  async function loadPagedResults(append) {
+    if (append && !hasMore) return;
+    if (append && loadMoreButton) {
+      loadMoreButton.disabled = true;
+      loadMoreButton.textContent = "Loading...";
+    }
+
+    const query = buildExplorePageQuery({
+      activeType,
+      country: countrySelect.value,
+      offset: currentOffset,
+    });
+
+    try {
+      const t0 = performance.now();
+      const matches = await fetchMyMeshMatches(query);
+      const elapsedMs = performance.now() - t0;
+      const pageResults = matches || [];
+      if (!append) {
+        resultsArea.innerHTML = "";
+      }
+      const mergedState = mergeExplorePageState({
+        currentOffset,
+        pageResults,
+      });
+      hasMore = mergedState.hasMore;
+      currentOffset = mergedState.currentOffset;
+
+      if (!append && !pageResults.length) {
+        resultsArea.appendChild(emptyState(
+          el("span", {},
+            "Your Mesh is empty. Update your ",
+            el("a", { href: "#/profile" }, "profile"),
+            " by adding skills or importing your CV."
+          )
+        ));
+        return;
+      }
+
+      ensureResultsUi();
+      if (!append) {
+        grid.innerHTML = "";
+      }
+      pageResults.forEach((m) => grid.appendChild(buildUnifiedCard(m)));
+      updateLoadMoreButton();
+      toast(getExploreCompletionToastMessage({ append, elapsedMs }), "info", 2200);
+    } catch (err) {
+      resultsArea.innerHTML = "";
+      toast(getUserFacingErrorMessage(err), "error");
+      if (err.status === 204 || err.status === 404) {
+        resultsArea.appendChild(emptyState(
+          el("span", {},
+            "To find better matches, update your ",
+            el("a", { href: "#/profile" }, "profile"),
+            " by adding skills or importing your CV."
+          )
+        ));
+      }
+    } finally {
+      updateLoadMoreButton();
+    }
+  }
+
+  /* === Build cards === */
+
+  function buildUnifiedCard(m) {
+    const card = el("div", { className: "discover-card" });
+    const nodeType = (m.nodeType || "UNKNOWN").toUpperCase();
+    const isPerson = nodeType === "PEOPLE";
+    const colors = NODE_TYPE_COLORS[nodeType] || NODE_TYPE_COLORS.JOB;
+    card.style.borderLeft = `3px solid ${colors.border}`;
+    const iconName = NODE_TYPE_ICONS[nodeType] || "layers";
+
+    const hdr = el("div", { className: "dc-header" });
+    const avatarWrap = el("div", { className: "dc-avatar-wrap" });
+
+    if (isPerson) {
+      const fallbackEl = () => el("div", {
+        className: "dc-avatar dc-avatar--icon",
+        style: `background:${colors.bg}; color:${colors.color}; border:1px solid ${colors.border}`,
+      }, el("span", { className: "material-symbols-outlined" }, "person"));
+
+      if (m.avatarUrl) {
+        const img = el("img", {
+          className: "dc-avatar dc-avatar--photo",
+          src: m.avatarUrl,
+          alt: m.title || "",
+          referrerPolicy: "no-referrer",
+        });
+        img.onerror = () => img.replaceWith(fallbackEl());
+        avatarWrap.appendChild(img);
+      } else {
+        avatarWrap.appendChild(fallbackEl());
+      }
+    } else {
+      avatarWrap.appendChild(el("div", {
+        className: "dc-avatar dc-avatar--icon",
+        style: `background:${colors.bg}; color:${colors.color}; border:1px solid ${colors.border}`,
+      }, el("span", { className: "material-symbols-outlined" }, iconName)));
+    }
+
+    const info = el("div", { className: "dc-info" });
+    const cardTitle = m.title || "Untitled";
+    if (isPerson && m.id) {
+      const nameLink = el("a", {
+        href: `#/people/${m.id}`,
+        className: "dc-name-link",
+        style: "text-decoration:none;color:inherit",
+      }, cardTitle);
+      info.appendChild(el("h3", { className: "dc-name" }, nameLink));
+    } else if (nodeType === "JOB" && m.id) {
+      const jobLink = el("a", {
+        href: `#/jobs/${m.id}`,
+        className: "dc-name-link",
+        style: "text-decoration:none;color:inherit",
+      }, cardTitle);
+      info.appendChild(el("h3", { className: "dc-name" }, jobLink));
+    } else {
+      info.appendChild(el("h3", { className: "dc-name" }, cardTitle));
+    }
+    const subtitle = el("div", { className: "dc-subtitle" });
+    subtitle.appendChild(el("span", { className: "dc-type-badge", style: `background:${colors.bg}; color:${colors.color}; border:1px solid ${colors.border}` }, nodeType.replace("_", " ")));
+    const locationParts = [m.person?.city, m.country].filter(Boolean);
+    if (locationParts.length) {
+      const geoMatch = m.breakdown?.geographyReason;
+      const locStyle = locationChipStyle(colors, geoMatch);
+      subtitle.appendChild(el("span", { className: "dc-sep" }, "\u00B7"));
+      subtitle.appendChild(el("span", { style: locStyle }, locationParts.join(", ")));
+    }
+    info.appendChild(subtitle);
+    avatarWrap.appendChild(info);
+    hdr.appendChild(avatarWrap);
+
+    hdr.appendChild(buildScoreWithTooltip(m.score, colors, m.breakdown));
+    card.appendChild(hdr);
+
+    if (isPerson && m.person) {
+      const rolesText = m.person.roles?.length ? m.person.roles.join(", ") : m.person.skillsTechnical?.slice(0, 3).join(", ") || "";
+      if (rolesText) card.appendChild(el("p", { className: "dc-meta" }, rolesText));
+    }
+    if (!isPerson && m.description) {
+      const desc = m.description.length > 120 ? m.description.substring(0, 120) + "\u2026" : m.description;
+      card.appendChild(el("p", { className: "dc-desc" }, desc));
+    }
+
+    const commonItems = m.breakdown?.commonItems || [];
+    const commonGoals = m.breakdown?.commonGoals || [];
+    const geoReason = m.breakdown?.geographyReason;
+    const positiveGeo = isPositiveGeoReason(geoReason);
+
+    if (m.tags?.length || commonItems.length || commonGoals.length || positiveGeo) {
+      const matchStyle = matchedTagStyle(colors);
+      const skillLevels = m.person?.skillLevels || {};
+      const tagsArea = el("div", { className: "dc-tags-area" });
+      const row = el("div", { className: "dc-tags" });
+      const allTags = m.tags || [];
+      const visibleTags = sortTermsByMatchPriority(allTags, commonItems).slice(0, CARD_BADGE_LIMITS.myMesh.tags);
+      visibleTags.forEach((t) => {
+        const isCommon = commonItems.some((item) => termsMatch(item, t));
+        const tag = el("span", { className: "dc-tag", style: isCommon ? matchStyle : undefined }, t);
+        const lvl = findSkillLevel(skillLevels, t);
+        if (lvl > 0) {
+          tag.appendChild(el("span", { className: "skill-level-badge" }, `Lv${lvl}`));
+        }
+        row.appendChild(tag);
+      });
+      const missingMatchedItems = commonItems.filter(
+        (item) => !visibleTags.some((tag) => termsMatch(item, tag)),
+      );
+      missingMatchedItems.forEach((item) => {
+        row.appendChild(el("span", { className: "dc-tag", style: matchStyle }, item));
+      });
+      commonGoals.slice(0, 3).forEach((g) => row.appendChild(el("span", { className: "dc-tag", style: matchStyle }, g.replace(/_/g, " ").toLowerCase())));
+      if (positiveGeo) {
+        row.appendChild(el("span", { className: "dc-tag", style: matchStyle }, geoReason.replace(/_/g, " ")));
+      }
+      if ((m.tags || []).length > visibleTags.length) {
+        row.appendChild(el("span", { className: "dc-tag dc-tag--more" }, `+${(m.tags || []).length - visibleTags.length} more tags`));
+      }
+      tagsArea.appendChild(row);
+      card.appendChild(tagsArea);
+    }
+
+    if (isPerson) {
+      const actions = contactFooter(
+        m.person?.slackHandle,
+        m.person?.email,
+        m.person?.telegramHandle,
+        m.person?.mobilePhone,
+        m.person?.linkedinUrl
+      );
+      if (actions) card.appendChild(actions);
+    }
+
+    return card;
+  }
+
+  loadResults();
+}
+
