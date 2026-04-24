@@ -1,0 +1,35 @@
+package org.peoplemesh.domain.dto;
+
+import java.util.List;
+
+public record SearchMatchBreakdown(
+        double embeddingScore,
+        double mustHaveSkillCoverage,
+        double niceToHaveBonus,
+        double languageScore,
+        double industryScore,
+        double geographyScore,
+        double finalScore,
+        List<String> matchedMustHaveSkills,
+        List<String> matchedNiceToHaveSkills,
+        List<String> missingMustHaveSkills,
+        List<String> reasonCodes,
+        String geographyReason,
+        boolean mustHaveRequested,
+        boolean niceToHaveRequested,
+        boolean languageRequested,
+        boolean industryRequested,
+        boolean geographyRequested,
+        double mustHavePenaltyFactor,
+        double negativeSkillsPenaltyFactor,
+        double seniorityScore,
+        double keywordScore,
+        double weightEmbedding,
+        double weightMustHave,
+        double weightNiceToHave,
+        double weightLanguage,
+        double weightIndustry,
+        double weightGeography,
+        double weightSeniority,
+        double weightKeyword
+) {}
