@@ -1,6 +1,6 @@
 import { renderFooter } from "../footer.js";
-import { renderBrand } from "../brand.js";
 import { getPlatformInfo } from "../platform-info.js";
+import { renderTopBar } from "../top-bar.js";
 
 function esc(text) {
   if (!text) return "";
@@ -20,23 +20,20 @@ export async function renderTermsOfService(container) {
   const governingLawLine = info.governingLaw
     ? `These Terms are governed by ${esc(info.governingLaw)}.`
     : "These Terms are governed by the laws of the jurisdiction where the Operator is established.";
+  const legalTopBarHtml = renderTopBar({
+    variant: "legal",
+    organizationName: info.organizationName,
+    rightHtml: `
+      <a href="#/" class="legal-back">
+        <span class="material-symbols-outlined" style="font-size:18px;vertical-align:-3px">arrow_back</span>
+        Back to Home
+      </a>
+    `,
+  });
 
   container.innerHTML = `
     <div class="legal-page">
-      <header class="legal-topbar">
-        <div class="legal-topbar-left">
-          ${renderBrand({
-            className: "app-brand-link",
-            ariaLabel: "Go to PeopleMesh home",
-            iconClass: "app-brand-icon",
-            textClass: "app-brand-text",
-          })}
-        </div>
-        <a href="#/" class="legal-back">
-          <span class="material-symbols-outlined" style="font-size:18px;vertical-align:-3px">arrow_back</span>
-          Back to Home
-        </a>
-      </header>
+      ${legalTopBarHtml}
       <article class="legal-content container">
         <header class="legal-header">
           <h1 class="page-title">Terms of Service</h1>
@@ -51,7 +48,6 @@ export async function renderTermsOfService(container) {
           <div class="legal-card-body">
             <p>By accessing or using this PeopleMesh instance (&ldquo;the Platform&rdquo;), you agree to be bound by these Terms of Service. If you do not agree, do not use the Platform.</p>
             <p>PeopleMesh is open-source software. ${operatorLabel} is responsible for the service. References to &ldquo;we&rdquo; and &ldquo;us&rdquo; in these terms refer to the Operator.</p>
-            <p>PeopleMesh is currently in <strong>early access (MVP)</strong>. Features, APIs, and data formats may change. The Operator will notify users of material changes.</p>
           </div>
         </div>
 
@@ -169,7 +165,7 @@ export async function renderTermsOfService(container) {
             <h2>11. Disclaimer of Warranties</h2>
           </div>
           <div class="legal-card-body">
-            <p>The Platform is provided &ldquo;as is&rdquo; without warranties of any kind, express or implied. Neither the PeopleMesh project nor the Operator warrants that the Platform will be uninterrupted, error-free, or secure. As an MVP product, features may be added, changed, or removed without prior notice.</p>
+            <p>The Platform is provided &ldquo;as is&rdquo; without warranties of any kind, express or implied. Neither the PeopleMesh project nor the Operator warrants that the Platform will be uninterrupted, error-free, or secure.</p>
           </div>
         </div>
 

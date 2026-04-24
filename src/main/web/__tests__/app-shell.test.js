@@ -5,6 +5,8 @@ let updateNavActive;
 let authMock;
 let getMyProfileInFlightMock;
 let deriveInitialsMock;
+let getOrganizationNameMock;
+let renderBrandMock;
 
 describe("app-shell", () => {
   beforeEach(async () => {
@@ -17,10 +19,12 @@ describe("app-shell", () => {
     };
     getMyProfileInFlightMock = vi.fn().mockResolvedValue({});
     deriveInitialsMock = vi.fn().mockReturnValue("JD");
+    getOrganizationNameMock = vi.fn().mockResolvedValue(null);
+    renderBrandMock = vi.fn().mockReturnValue('<span class="brand">PeopleMesh</span>');
 
     vi.doMock("../assets/js/auth.js", () => ({ Auth: authMock }));
     vi.doMock("../assets/js/brand.js", () => ({
-      renderBrand: vi.fn().mockReturnValue('<span class="brand">PeopleMesh</span>'),
+      renderBrand: renderBrandMock,
     }));
     vi.doMock("../assets/js/footer.js", () => ({
       renderFooter: vi.fn().mockReturnValue('<footer class="footer">Footer</footer>'),
@@ -30,6 +34,9 @@ describe("app-shell", () => {
     }));
     vi.doMock("../assets/js/utils/initials.js", () => ({
       deriveInitials: deriveInitialsMock,
+    }));
+    vi.doMock("../assets/js/platform-info.js", () => ({
+      getOrganizationName: getOrganizationNameMock,
     }));
 
     const mod = await import("../assets/js/app-shell.js");
@@ -50,6 +57,28 @@ describe("app-shell", () => {
     expect(root.querySelector(".app-layout")).not.toBeNull();
     expect(root.querySelector(".user-avatar").textContent).toBe("JD");
     expect(root.querySelectorAll(".header-nav-link[data-path]").length).toBe(2);
+    expect(root.querySelector('.header-nav-link[data-path="/search"] .fa-magnifying-glass')).not.toBeNull();
+    expect(root.querySelector('.header-nav-link[data-path="/my-mesh"] .fa-users')).not.toBeNull();
+    expect(root.querySelector('.header-nav-link[data-path="/my-mesh"]')?.getAttribute("data-tooltip"))
+      .toBe("Discover what matches your profile.");
+    expect(renderBrandMock).toHaveBeenCalledWith(expect.objectContaining({
+      text: "PeopleMesh",
+      organizationName: null,
+    }));
+  });
+
+  it("renders organization name in the top brand when available", async () => {
+    const root = document.getElementById("root");
+    getOrganizationNameMock.mockResolvedValue("Acme Corp");
+
+    await renderAppShell(root);
+
+    expect(renderBrandMock).toHaveBeenCalledWith(expect.objectContaining({
+      text: "PeopleMesh",
+      organizationName: "Acme Corp",
+      organizationClass: "app-brand-organization",
+      organizationSeparator: "| ",
+    }));
   });
 
   it("renders profile image when a valid remote photo is available", async () => {
@@ -76,6 +105,7 @@ describe("app-shell", () => {
     await renderAppShell(root);
 
     expect(root.querySelector('.header-nav-link[data-path="/admin"]')).not.toBeNull();
+    expect(root.querySelector('.header-nav-link[data-path="/admin"] .fa-user-shield')).not.toBeNull();
   });
 
   it("executes logout when logout button is clicked", async () => {

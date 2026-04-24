@@ -1,6 +1,6 @@
 import { renderFooter } from "../footer.js";
-import { renderBrand } from "../brand.js";
 import { getPlatformInfo } from "../platform-info.js";
+import { renderTopBar } from "../top-bar.js";
 
 function esc(text) {
   if (!text) return "";
@@ -23,23 +23,20 @@ export async function renderPrivacyPolicy(container) {
   const dataLocationLine = info.dataLocation
     ? `Your data is stored in <strong>${esc(info.dataLocation)}</strong>.`
     : "Data storage location depends on where the Operator deploys the platform.";
+  const legalTopBarHtml = renderTopBar({
+    variant: "legal",
+    organizationName: info.organizationName,
+    rightHtml: `
+      <a href="#/" class="legal-back">
+        <span class="material-symbols-outlined" style="font-size:18px;vertical-align:-3px">arrow_back</span>
+        Back to Home
+      </a>
+    `,
+  });
 
   container.innerHTML = `
     <div class="legal-page">
-      <header class="legal-topbar">
-        <div class="legal-topbar-left">
-          ${renderBrand({
-            className: "app-brand-link",
-            ariaLabel: "Go to PeopleMesh home",
-            iconClass: "app-brand-icon",
-            textClass: "app-brand-text",
-          })}
-        </div>
-        <a href="#/" class="legal-back">
-          <span class="material-symbols-outlined" style="font-size:18px;vertical-align:-3px">arrow_back</span>
-          Back to Home
-        </a>
-      </header>
+      ${legalTopBarHtml}
       <article class="legal-content container">
         <header class="legal-header">
           <h1 class="page-title">Privacy Policy</h1>
