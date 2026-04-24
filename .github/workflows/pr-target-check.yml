@@ -1,0 +1,31 @@
+name: PR Target Check
+
+on:
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+jobs:
+  check-target:
+    name: Verify PR target branch
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR target branch
+        run: |
+          if [ "${{ github.actor }}" = "dependabot[bot]" ]; then
+            echo "Dependabot PR detected: skipping target branch restriction."
+            exit 0
+          fi
+
+          if [ "${{ github.base_ref }}" = "main" ]; then
+            echo "::error::Please target 'develop' for regular contributions."
+            echo ""
+            echo "Please open this PR against 'develop' unless this is a maintainer-managed release/hotfix."
+            echo ""
+            echo "See CONTRIBUTING.md for contribution workflow details."
+            exit 1
+          fi
+
+          echo "PR target is '${{ github.base_ref }}': check passed."

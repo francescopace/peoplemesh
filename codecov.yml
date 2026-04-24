@@ -1,0 +1,44 @@
+# Codecov Configuration
+# https://docs.codecov.com/docs/codecov-yaml
+
+codecov:
+  notify:
+    wait_for_ci: false
+
+coverage:
+  precision: 2
+  round: down
+  range: "60...100"
+  status:
+    project:
+      default:
+        target: 80%
+        threshold: 2%
+    patch:
+      default:
+        target: 70%
+        threshold: 5%
+
+# Keep generated or third-party paths out of coverage signals
+ignore:
+  - "src/test/**"
+  - "src/main/java/org/peoplemesh/domain/dto/**"
+  - "src/main/java/org/peoplemesh/domain/model/**"
+  - "src/main/web/__tests__/**"
+  - "src/main/web/node_modules/**"
+  - "src/main/web/coverage/**"
+
+flags:
+  backend:
+    paths:
+      - "src/main/java"
+  frontend:
+    paths:
+      - "src/main/web/assets"
+
+# Comment on PRs
+comment:
+  layout: "reach,diff,flags,files"
+  behavior: default
+  require_changes: true
+
