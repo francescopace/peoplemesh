@@ -1,0 +1,6 @@
+apiVersion: v2
+name: peoplemesh
+description: Helm chart for deploying PeopleMesh on OpenShift/Kubernetes
+type: application
+version: 0.1.0
+appVersion: "latest"

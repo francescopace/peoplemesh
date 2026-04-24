@@ -1,0 +1,19 @@
+{{- if .Values.docling.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "peoplemesh.doclingServiceName" . }}
+  labels:
+    {{- include "peoplemesh.labels" . | nindent 4 }}
+    app.kubernetes.io/component: docling
+spec:
+  ports:
+    - name: http
+      port: {{ .Values.docling.service.port }}
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/name: {{ include "peoplemesh.name" . }}
+    app.kubernetes.io/component: docling
+{{- end }}

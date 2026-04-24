@@ -1,0 +1,19 @@
+{{- if .Values.ollama.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "peoplemesh.ollamaServiceName" . }}
+  labels:
+    {{- include "peoplemesh.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ollama
+spec:
+  ports:
+    - name: http
+      port: {{ .Values.ollama.service.port }}
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/name: {{ include "peoplemesh.name" . }}
+    app.kubernetes.io/component: ollama
+{{- end }}

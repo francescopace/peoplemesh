@@ -1,0 +1,33 @@
+{{- if .Values.route.enabled }}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ include "peoplemesh.fullname" . }}
+  labels:
+    {{- include "peoplemesh.labels" . | nindent 4 }}
+spec:
+  to:
+    kind: Service
+    name: {{ include "peoplemesh.fullname" . }}
+    weight: 100
+  port:
+    targetPort: http
+  {{- with .Values.route.host }}
+  host: {{ . }}
+  {{- end }}
+  tls:
+    termination: {{ .Values.route.tls.termination }}
+    insecureEdgeTerminationPolicy: {{ .Values.route.tls.insecureEdgeTerminationPolicy }}
+    {{- with .Values.route.tls.certificate }}
+    certificate: |
+      {{- . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.route.tls.key }}
+    key: |
+      {{- . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.route.tls.caCertificate }}
+    caCertificate: |
+      {{- . | nindent 6 }}
+    {{- end }}
+{{- end }}

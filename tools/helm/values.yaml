@@ -1,0 +1,163 @@
+replicaCount: 1
+
+image:
+  repository: frapax/peoplemesh
+  tag: latest
+  pullPolicy: Always
+
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: 8080
+
+route:
+  enabled: true
+  host: ""
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+    certificate: ""
+    key: ""
+    caCertificate: ""
+
+probes:
+  readiness:
+    path: /q/health/ready
+    initialDelaySeconds: 20
+    periodSeconds: 10
+  liveness:
+    path: /q/health/live
+    initialDelaySeconds: 40
+    periodSeconds: 20
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 1Gi
+
+podAnnotations: {}
+podLabels: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+postgresql:
+  enabled: false
+  image:
+    repository: pgvector/pgvector
+    tag: pg16
+    pullPolicy: IfNotPresent
+  service:
+    name: postgresql
+    port: 5432
+  auth:
+    database: peoplemesh
+  persistence:
+    size: 5Gi
+    storageClassName: ""
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+docling:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: ghcr.io/docling-project/docling-serve-cu130
+    tag: "1.16.1"
+    pullPolicy: IfNotPresent
+  service:
+    name: docling
+    port: 5001
+  resources:
+    requests:
+      cpu: 250m
+      memory: 1Gi
+      nvidia.com/gpu: "1"
+    limits:
+      cpu: "1"
+      memory: 2Gi
+      nvidia.com/gpu: "1"
+  nodeSelector: {}
+  tolerations:
+    - key: nvidia.com/gpu
+      operator: Exists
+      effect: NoSchedule
+  affinity: {}
+
+ollama:
+  enabled: false
+  image:
+    repository: ollama/ollama
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    name: ollama
+    port: 11434
+  persistence:
+    size: 10Gi
+    storageClassName: ""
+  dataPath: /models
+  home: /tmp
+  resources:
+    requests:
+      cpu: 250m
+      memory: 1Gi
+      nvidia.com/gpu: "1"
+    limits:
+      cpu: "2"
+      memory: 4Gi
+      nvidia.com/gpu: "1"
+  nodeSelector: {}
+  tolerations:
+    - key: nvidia.com/gpu
+      operator: Exists
+      effect: NoSchedule
+  affinity: {}
+
+config:
+  create: true
+  name: ""
+  data:
+    QUARKUS_HTTP_PROXY_PROXY_ADDRESS_FORWARDING: "true"
+    QUARKUS_HTTP_PROXY_ALLOW_X_FORWARDED: "true"
+    CORS_ORIGINS: https://peoplemesh.example.com
+    PEOPLEMESH_FRONTEND_ENABLED: "true"
+    PEOPLEMESH_FRONTEND_DIR: /deployments/src/main/web
+    DOCLING_BASE_URL: http://docling:5001
+    OLLAMA_BASE_URL: http://ollama:11434
+    ORGANIZATION_NAME: ""
+    ORGANIZATION_CONTACT_EMAIL: ""
+    ORGANIZATION_DPO_NAME: ""
+    ORGANIZATION_DPO_EMAIL: ""
+    ORGANIZATION_DATA_LOCATION: ""
+    ORGANIZATION_GOVERNING_LAW: ""
+
+secret:
+  create: true
+  name: ""
+  stringData:
+    DB_URL: jdbc:postgresql://postgresql:5432/peoplemesh
+    DB_USER: peoplemesh
+    DB_PASSWORD: change-me
+    CONSENT_TOKEN_SECRET: replace-with-32-plus-bytes
+    SESSION_SECRET: replace-with-32-plus-bytes
+    OAUTH_STATE_SECRET: replace-with-32-plus-bytes
+    MAINTENANCE_API_KEY: replace-with-strong-shared-key
+    OIDC_GOOGLE_CLIENT_ID: "none"
+    OIDC_GOOGLE_CLIENT_SECRET: "none"
+    OIDC_MICROSOFT_CLIENT_ID: "none"
+    OIDC_MICROSOFT_CLIENT_SECRET: "none"
+    OIDC_GITHUB_CLIENT_ID: "none"
+    OIDC_GITHUB_CLIENT_SECRET: "none"

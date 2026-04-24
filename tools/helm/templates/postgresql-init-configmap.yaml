@@ -1,0 +1,12 @@
+{{- if .Values.postgresql.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "peoplemesh.fullname" . }}-postgresql-init
+  labels:
+    {{- include "peoplemesh.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgresql
+data:
+  00-enable-pgvector.sql: |
+    CREATE EXTENSION IF NOT EXISTS vector;
+{{- end }}
