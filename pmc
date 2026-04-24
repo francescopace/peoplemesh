@@ -1,0 +1,580 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+VERSION="1.0.0-SNAPSHOT"
+DEFAULT_BASE_URL="http://localhost:8080"
+DEFAULT_TIMEOUT_SECONDS="120"
+DEV_LOCAL_MAINTENANCE_KEY="dev-local-maintenance-key"
+
+NODE_TYPE_OPTIONS=(USER JOB COMMUNITY EVENT PROJECT INTEREST_GROUP)
+
+BASE_URL="${DEFAULT_BASE_URL}"
+MAINTENANCE_KEY="${PEOPLEMESH_MAINTENANCE_KEY:-${MAINTENANCE_API_KEY:-}}"
+TIMEOUT_SECONDS="${PEOPLEMESH_TIMEOUT_SECONDS:-${MAINTENANCE_TIMEOUT_SECONDS:-${DEFAULT_TIMEOUT_SECONDS}}}"
+RAW_OUTPUT="false"
+REMAINING_ARGS=()
+
+print_usage() {
+  cat <<'EOF'
+Usage: maintenance [-hV] [--raw] [--base-url=<baseUrl>] [--maintenance-key=<maintenanceKey>]
+                   [--timeout-seconds=<timeoutSeconds>] [COMMAND]
+Run operational maintenance tasks for PeopleMesh
+      --base-url=<baseUrl>                  PeopleMesh base URL (default: http://localhost:8080)
+      --maintenance-key=<maintenanceKey>    Maintenance API key (fallback: PEOPLEMESH_MAINTENANCE_KEY / MAINTENANCE_API_KEY)
+      --timeout-seconds=<timeoutSeconds>    HTTP timeout in seconds (default: 120)
+      --raw                                 Print raw response body instead of pretty JSON
+  -h, --help                                Show this help message and exit
+  -V, --version                             Print version information and exit
+
+Commands:
+  purge-consent-tokens   Remove expired consent tokens
+  enforce-retention      Delete inactive profiles outside retention policy
+  run-clustering         Rebuild automatic community clustering
+  ingest-nodes           Import or update non-user nodes from a JSON payload
+                         Options: --file <payload.json>
+  ingest-users           Import or update users from a JSON payload
+                         Options: --file <payload.json>
+  regenerate-embeddings  Regenerate node embeddings (all or filtered)
+                         Options: --node-type <type> --only-missing[=true|false]
+                                  --batch-size <1..32> --no-wait --poll-interval-seconds <sec>
+                         node-type values: USER, JOB, COMMUNITY, EVENT, PROJECT, INTEREST_GROUP
+  regenerate-embeddings-status  Poll status for an embedding regeneration job
+                                Options: --job-id <uuid>
+EOF
+}
+
+print_error() {
+  printf "%s\n" "$*" >&2
+}
+
+print_ingest_nodes_usage() {
+  cat <<'EOF'
+Usage: maintenance ingest-nodes --file <payload.json>
+Options:
+  --file <payload.json>   JSON payload file with nodes to import/update (node_type + source + external_id required per node)
+EOF
+}
+
+print_ingest_users_usage() {
+  cat <<'EOF'
+Usage: maintenance ingest-users --file <payload.json>
+Options:
+  --file <payload.json>   JSON payload file with users to import/update
+EOF
+}
+
+print_regenerate_embeddings_usage() {
+  cat <<'EOF'
+Usage: maintenance regenerate-embeddings [--node-type <type>] [--only-missing[=true|false]]
+                                        [--batch-size <1..32>] [--no-wait]
+                                        [--poll-interval-seconds <sec>]
+Options:
+  --node-type <type>      Optional node type filter.
+                          Allowed values: USER, JOB, COMMUNITY, EVENT, PROJECT, INTEREST_GROUP
+  --only-missing          Shortcut for --only-missing=true
+  --only-missing=<bool>   true (default) or false
+  --batch-size <n>        Embedding batch size (default: 1, max: 32)
+  --no-wait               Return immediately with queued job response
+  --poll-interval-seconds Poll interval for status checks (default: 2)
+EOF
+}
+
+print_regenerate_embeddings_status_usage() {
+  cat <<'EOF'
+Usage: maintenance regenerate-embeddings-status --job-id <uuid>
+Options:
+  --job-id <uuid>         Embedding regeneration job id
+EOF
+}
+
+is_local_base_url() {
+  case "${BASE_URL}" in
+    http://localhost:*|http://localhost|https://localhost:*|https://localhost) return 0 ;;
+    http://127.0.0.1:*|http://127.0.0.1|https://127.0.0.1:*|https://127.0.0.1) return 0 ;;
+    http://[::1]:*|http://[::1]|https://[::1]:*|https://[::1]) return 0 ;;
+    http://::1:*|http://::1|https://::1:*|https://::1) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+resolve_maintenance_key() {
+  if [[ -n "${MAINTENANCE_KEY:-}" ]]; then
+    printf "%s" "${MAINTENANCE_KEY}"
+    return 0
+  fi
+  if is_local_base_url; then
+    printf "%s" "${DEV_LOCAL_MAINTENANCE_KEY}"
+    return 0
+  fi
+  print_error "Missing maintenance key. Use --maintenance-key or set PEOPLEMESH_MAINTENANCE_KEY."
+  return 1
+}
+
+format_body() {
+  local body="$1"
+  if [[ "${RAW_OUTPUT}" == "true" ]]; then
+    printf "%s\n" "${body}"
+    return 0
+  fi
+  if [[ -z "${body}" ]]; then
+    printf "\n"
+    return 0
+  fi
+  if command -v jq >/dev/null 2>&1 && printf "%s" "${body}" | jq . >/dev/null 2>&1; then
+    printf "%s" "${body}" | jq .
+    return 0
+  fi
+  if command -v python3 >/dev/null 2>&1 && printf "%s" "${body}" | python3 -m json.tool >/dev/null 2>&1; then
+    printf "%s" "${body}" | python3 -m json.tool
+    return 0
+  fi
+  printf "%s\n" "${body}"
+}
+
+extract_json_field() {
+  local body="$1"
+  local field="$2"
+  if command -v jq >/dev/null 2>&1; then
+    printf "%s" "${body}" | jq -r --arg field "${field}" '.[$field] // empty'
+    return 0
+  fi
+  if command -v python3 >/dev/null 2>&1; then
+    printf "%s" "${body}" | python3 -c "import json,sys; d=json.loads(sys.stdin.read() or '{}'); v=d.get('${field}', ''); print(v if v is not None else '')"
+    return 0
+  fi
+  return 1
+}
+
+request_json() {
+  local method="$1"
+  local path_with_query="$2"
+  local request_body="${3:-}"
+  local url="${BASE_URL%/}${path_with_query}"
+  local key
+  key="$(resolve_maintenance_key)"
+
+  local tmp_body
+  tmp_body="$(mktemp)"
+  local tmp_request=""
+  local http_code
+  if [[ "${method}" == "POST" && -n "${request_body}" ]]; then
+    tmp_request="$(mktemp)"
+    printf "%s" "${request_body}" > "${tmp_request}"
+    http_code="$(
+      curl -sS -o "${tmp_body}" -w "%{http_code}" \
+        --max-time "${TIMEOUT_SECONDS}" \
+        -X "${method}" \
+        -H "X-Maintenance-Key: ${key}" \
+        -H "Accept: application/json" \
+        -H "Content-Type: application/json" \
+        --data-binary "@${tmp_request}" \
+        "${url}"
+    )"
+  else
+    http_code="$(
+      curl -sS -o "${tmp_body}" -w "%{http_code}" \
+        --max-time "${TIMEOUT_SECONDS}" \
+        -X "${method}" \
+        -H "X-Maintenance-Key: ${key}" \
+        -H "Accept: application/json" \
+        "${url}"
+    )"
+  fi
+
+  local body
+  body="$(<"${tmp_body}")"
+  if [[ -n "${tmp_request}" ]]; then
+    rm -f "${tmp_request}"
+  fi
+  rm -f "${tmp_body}"
+
+  if [[ "${http_code}" -lt 200 || "${http_code}" -ge 300 ]]; then
+    print_error "HTTP ${http_code} from ${url}"
+    print_error "${body}"
+    return 1
+  fi
+  printf "%s" "${body}"
+}
+
+post_request() {
+  local path_with_query="$1"
+  local request_body="${2:-}"
+  local body
+  body="$(request_json "POST" "${path_with_query}" "${request_body}")"
+  format_body "${body}"
+}
+
+get_request() {
+  local path_with_query="$1"
+  local body
+  body="$(request_json "GET" "${path_with_query}")"
+  format_body "${body}"
+}
+
+wait_for_regenerate_embeddings_job() {
+  local job_id="$1"
+  local poll_interval_seconds="$2"
+  while true; do
+    local status_body
+    status_body="$(request_json "GET" "/api/v1/maintenance/regenerate-embeddings/${job_id}")"
+    local status
+    status="$(extract_json_field "${status_body}" "status" || true)"
+    case "${status}" in
+      COMPLETED)
+        format_body "${status_body}"
+        return 0
+        ;;
+      FAILED)
+        format_body "${status_body}"
+        return 1
+        ;;
+      QUEUED|RUNNING)
+        sleep "${poll_interval_seconds}"
+        ;;
+      *)
+        print_error "Unexpected regenerate-embeddings job status: ${status:-<empty>}"
+        format_body "${status_body}"
+        return 1
+        ;;
+    esac
+  done
+}
+
+parse_global_options() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h|--help)
+        print_usage
+        exit 0
+        ;;
+      -V|--version)
+        printf "maintenance %s\n" "${VERSION}"
+        exit 0
+        ;;
+      --raw)
+        RAW_OUTPUT="true"
+        shift
+        ;;
+      --base-url=*)
+        BASE_URL="${1#*=}"
+        shift
+        ;;
+      --base-url)
+        BASE_URL="${2:-}"
+        if [[ -z "${BASE_URL}" ]]; then
+          print_error "Missing value for --base-url"
+          exit 2
+        fi
+        shift 2
+        ;;
+      --maintenance-key=*)
+        MAINTENANCE_KEY="${1#*=}"
+        shift
+        ;;
+      --maintenance-key)
+        MAINTENANCE_KEY="${2:-}"
+        if [[ -z "${MAINTENANCE_KEY}" ]]; then
+          print_error "Missing value for --maintenance-key"
+          exit 2
+        fi
+        shift 2
+        ;;
+      --timeout-seconds=*)
+        TIMEOUT_SECONDS="${1#*=}"
+        shift
+        ;;
+      --timeout-seconds)
+        TIMEOUT_SECONDS="${2:-}"
+        if [[ -z "${TIMEOUT_SECONDS}" ]]; then
+          print_error "Missing value for --timeout-seconds"
+          exit 2
+        fi
+        shift 2
+        ;;
+      --)
+        shift
+        break
+        ;;
+      -*)
+        print_error "Unknown option: $1"
+        exit 2
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
+
+  if [[ ! "${TIMEOUT_SECONDS}" =~ ^[0-9]+$ ]]; then
+    print_error "--timeout-seconds must be an integer"
+    exit 2
+  fi
+
+  REMAINING_ARGS=("$@")
+}
+
+normalize_node_type() {
+  local value="$1"
+  local upper_value
+  upper_value="$(printf "%s" "${value}" | tr '[:lower:]' '[:upper:]')"
+  local option
+  for option in "${NODE_TYPE_OPTIONS[@]}"; do
+    if [[ "${upper_value}" == "${option}" ]]; then
+      printf "%s" "${option}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+command_ingest_nodes() {
+  local file_path=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h|--help)
+        print_ingest_nodes_usage
+        exit 0
+        ;;
+      --file)
+        file_path="${2:-}"
+        shift 2
+        ;;
+      --file=*)
+        file_path="${1#*=}"
+        shift
+        ;;
+      *)
+        print_error "Unknown option for ingest-nodes: $1"
+        print_ingest_nodes_usage
+        exit 2
+        ;;
+    esac
+  done
+
+  if [[ -z "${file_path}" ]]; then
+    print_error "Missing required option --file for ingest-nodes"
+    print_ingest_nodes_usage
+    exit 2
+  fi
+  if [[ ! -f "${file_path}" ]]; then
+    print_error "Cannot read payload file ${file_path}: file does not exist"
+    exit 2
+  fi
+
+  local payload
+  payload="$(<"${file_path}")"
+  post_request "/api/v1/maintenance/ingest/nodes" "${payload}"
+}
+
+command_ingest_users() {
+  local file_path=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h|--help)
+        print_ingest_users_usage
+        exit 0
+        ;;
+      --file)
+        file_path="${2:-}"
+        shift 2
+        ;;
+      --file=*)
+        file_path="${1#*=}"
+        shift
+        ;;
+      *)
+        print_error "Unknown option for ingest-users: $1"
+        print_ingest_users_usage
+        exit 2
+        ;;
+    esac
+  done
+
+  if [[ -z "${file_path}" ]]; then
+    print_error "Missing required option --file for ingest-users"
+    print_ingest_users_usage
+    exit 2
+  fi
+  if [[ ! -f "${file_path}" ]]; then
+    print_error "Cannot read payload file ${file_path}: file does not exist"
+    exit 2
+  fi
+
+  local payload
+  payload="$(<"${file_path}")"
+  post_request "/api/v1/maintenance/ingest/users" "${payload}"
+}
+
+command_regenerate_embeddings() {
+  local node_type=""
+  local only_missing="true"
+  local batch_size="1"
+  local no_wait="false"
+  local poll_interval_seconds="2"
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h|--help)
+        print_regenerate_embeddings_usage
+        exit 0
+        ;;
+      --node-type)
+        node_type="${2:-}"
+        shift 2
+        ;;
+      --node-type=*)
+        node_type="${1#*=}"
+        shift
+        ;;
+      --only-missing)
+        only_missing="true"
+        shift
+        ;;
+      --only-missing=*)
+        only_missing="${1#*=}"
+        shift
+        ;;
+      --batch-size)
+        batch_size="${2:-}"
+        shift 2
+        ;;
+      --batch-size=*)
+        batch_size="${1#*=}"
+        shift
+        ;;
+      --no-wait)
+        no_wait="true"
+        shift
+        ;;
+      --poll-interval-seconds)
+        poll_interval_seconds="${2:-}"
+        shift 2
+        ;;
+      --poll-interval-seconds=*)
+        poll_interval_seconds="${1#*=}"
+        shift
+        ;;
+      *)
+        print_error "Unknown option for regenerate-embeddings: $1"
+        print_regenerate_embeddings_usage
+        exit 2
+        ;;
+    esac
+  done
+
+  if [[ "${only_missing}" != "true" && "${only_missing}" != "false" ]]; then
+    print_error "--only-missing must be true or false"
+    exit 2
+  fi
+  if [[ ! "${batch_size}" =~ ^[0-9]+$ ]]; then
+    print_error "--batch-size must be an integer between 1 and 32"
+    exit 2
+  fi
+  if (( batch_size < 1 || batch_size > 32 )); then
+    print_error "--batch-size must be between 1 and 32"
+    exit 2
+  fi
+  if [[ ! "${poll_interval_seconds}" =~ ^[0-9]+$ ]] || (( poll_interval_seconds < 1 )); then
+    print_error "--poll-interval-seconds must be an integer >= 1"
+    exit 2
+  fi
+
+  local path="/api/v1/maintenance/regenerate-embeddings?onlyMissing=${only_missing}&batchSize=${batch_size}"
+
+  if [[ -n "${node_type}" ]]; then
+    local normalized_node_type
+    if ! normalized_node_type="$(normalize_node_type "${node_type}")"; then
+      print_error "Invalid --node-type: ${node_type}"
+      print_error "Allowed values: ${NODE_TYPE_OPTIONS[*]}"
+      exit 2
+    fi
+    path="${path}&nodeType=${normalized_node_type}"
+  fi
+
+  local started_body
+  started_body="$(request_json "POST" "${path}")"
+  if [[ "${no_wait}" == "true" ]]; then
+    format_body "${started_body}"
+    return 0
+  fi
+
+  local job_id
+  job_id="$(extract_json_field "${started_body}" "jobId" || true)"
+  if [[ -z "${job_id}" ]]; then
+    print_error "Missing jobId from regenerate-embeddings response"
+    format_body "${started_body}"
+    return 1
+  fi
+  wait_for_regenerate_embeddings_job "${job_id}" "${poll_interval_seconds}"
+}
+
+command_regenerate_embeddings_status() {
+  local job_id=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h|--help)
+        print_regenerate_embeddings_status_usage
+        exit 0
+        ;;
+      --job-id)
+        job_id="${2:-}"
+        shift 2
+        ;;
+      --job-id=*)
+        job_id="${1#*=}"
+        shift
+        ;;
+      *)
+        print_error "Unknown option for regenerate-embeddings-status: $1"
+        print_regenerate_embeddings_status_usage
+        exit 2
+        ;;
+    esac
+  done
+  if [[ -z "${job_id}" ]]; then
+    print_error "Missing required option --job-id"
+    print_regenerate_embeddings_status_usage
+    exit 2
+  fi
+  get_request "/api/v1/maintenance/regenerate-embeddings/${job_id}"
+}
+
+main() {
+  parse_global_options "$@"
+  set -- "${REMAINING_ARGS[@]+"${REMAINING_ARGS[@]}"}"
+
+  if [[ $# -eq 0 ]]; then
+    print_usage
+    exit 0
+  fi
+
+  local command="$1"
+  shift
+
+  if [[ "${command}" == "ops" ]]; then
+    if [[ $# -eq 0 ]]; then
+      print_usage
+      exit 0
+    fi
+    command="$1"
+    shift
+  fi
+
+  case "${command}" in
+    purge-consent-tokens) post_request "/api/v1/maintenance/purge-consent-tokens" ;;
+    enforce-retention) post_request "/api/v1/maintenance/enforce-retention" ;;
+    run-clustering) post_request "/api/v1/maintenance/run-clustering" ;;
+    ingest-nodes) command_ingest_nodes "$@" ;;
+    ingest-users) command_ingest_users "$@" ;;
+    regenerate-embeddings) command_regenerate_embeddings "$@" ;;
+    regenerate-embeddings-status) command_regenerate_embeddings_status "$@" ;;
+    *)
+      print_error "Unknown command: ${command}"
+      print_usage
+      exit 2
+      ;;
+  esac
+}
+
+main "$@"
+exit $?

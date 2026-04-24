@@ -1,0 +1,54 @@
+# Maven
+target/
+!.mvn/wrapper/maven-wrapper.jar
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+
+# IDE
+.idea/
+*.iml
+.project
+.classpath
+.settings/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Quarkus
+.quarkus/
+
+# Environment
+*.pem
+*.key
+*.crt
+.certs
+.venv
+ignored/
+
+# Node
+node_modules/
+coverage/
+
+# Logs
+*.log
+logs/
+
+# Python
+__pycache__/
+*.pyc
+
+# Data files
+tools/data/stack-overflow-survey/survey_results_public.csv
+tools/data/results/
+
+# OpenShift
+values-openshift.yaml
+
