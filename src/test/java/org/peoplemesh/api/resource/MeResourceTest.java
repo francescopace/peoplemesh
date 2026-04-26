@@ -13,6 +13,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.peoplemesh.domain.dto.MeIdentityResponse;
 import org.peoplemesh.config.AppConfig;
 import org.peoplemesh.domain.dto.PrivacyDashboard;
 import org.peoplemesh.domain.dto.ProfileSchema;
@@ -78,8 +79,7 @@ class MeResourceTest {
 
     @Test
     void getProfile_identityOnly_anonymous_returns204() {
-        when(meService.resolveIdentityPayload(identity)).thenReturn(Optional.empty());
-        when(identity.isAnonymous()).thenReturn(true);
+        when(currentUserService.findCurrentUserId()).thenReturn(Optional.empty());
 
         Response response = resource.getProfile(true);
 
@@ -88,7 +88,17 @@ class MeResourceTest {
 
     @Test
     void getProfile_identityOnly_registeredUser_returnsPayload() {
-        Map<String, Object> payload = Map.of("user_id", UUID.randomUUID());
+        MeIdentityResponse payload = new MeIdentityResponse(
+                new MeIdentityResponse.IdentityInfo("Alice", "https://cdn.example/avatar.png"),
+                new MeIdentityResponse.SessionInfo(
+                        UUID.randomUUID(),
+                        "github",
+                        true,
+                        UUID.randomUUID(),
+                        new MeIdentityResponse.EntitlementsInfo(false)
+                )
+        );
+        when(currentUserService.findCurrentUserId()).thenReturn(Optional.of(UUID.randomUUID()));
         when(meService.resolveIdentityPayload(identity)).thenReturn(Optional.of(payload));
 
         Response response = resource.getProfile(true);
@@ -98,13 +108,13 @@ class MeResourceTest {
     }
 
     @Test
-    void getProfile_identityOnly_nonAnonymousNotFound_returns404Problem() {
+    void getProfile_identityOnly_nonAnonymousNotFound_returns204() {
+        when(currentUserService.findCurrentUserId()).thenReturn(Optional.of(UUID.randomUUID()));
         when(meService.resolveIdentityPayload(identity)).thenReturn(Optional.empty());
-        when(identity.isAnonymous()).thenReturn(false);
 
         Response response = resource.getProfile(true);
 
-        assertEquals(404, response.getStatus());
+        assertEquals(204, response.getStatus());
     }
 
     @Test

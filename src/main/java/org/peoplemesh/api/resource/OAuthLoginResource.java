@@ -42,12 +42,6 @@ public class OAuthLoginResource {
     AppConfig appConfig;
 
     @GET
-    @Path("/providers")
-    public Response providers() {
-        return Response.ok(oAuthLoginService.providers()).build();
-    }
-
-    @GET
     @Path("/login/{provider}")
     public Response login(@PathParam("provider")
                           @Pattern(regexp = "^[a-zA-Z0-9_-]+$", message = "provider contains invalid characters")

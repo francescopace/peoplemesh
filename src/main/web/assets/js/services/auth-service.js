@@ -1,10 +1,6 @@
 import { Config } from "../../../config.js";
 import { api } from "../api.js";
 
-export function getAuthProviders() {
-  return api.get("/api/v1/auth/providers");
-}
-
 export function getCurrentUserIdentityOnly() {
   return api.get("/api/v1/me", { identity_only: true });
 }

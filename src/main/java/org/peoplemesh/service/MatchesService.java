@@ -51,12 +51,12 @@ public class MatchesService {
     }
 
     public SearchResponse matchFromPrompt(UUID userId, SearchRequest request) {
-        return matchFromPrompt(userId, request, null, null);
+        return matchFromPrompt(userId, request, null);
     }
 
-    public SearchResponse matchFromPrompt(UUID userId, SearchRequest request, Integer limit, Integer offset) {
+    public SearchResponse matchFromPrompt(UUID userId, SearchRequest request, Integer limit) {
         SearchService.MatchContext context = resolveMatchContext(userId);
-        return searchService.search(userId, request.query(), null, null, null, limit, offset, context);
+        return searchService.search(userId, request.query(), null, null, null, limit, null, context);
     }
 
     public List<MeshMatchResult> matchMyProfile(UUID userId, String type, String country) {

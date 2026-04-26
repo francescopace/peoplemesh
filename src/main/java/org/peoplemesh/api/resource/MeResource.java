@@ -30,7 +30,6 @@ import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriInfo;
 import org.jboss.resteasy.reactive.RestForm;
 import org.jboss.resteasy.reactive.multipart.FileUpload;
-import org.peoplemesh.api.error.ProblemDetail;
 import org.peoplemesh.config.AppConfig;
 import org.peoplemesh.domain.dto.ProfileSchema;
 import org.peoplemesh.domain.dto.UserNotificationDto;
@@ -87,26 +86,18 @@ public class MeResource {
     @GET
     @PermitAll
     public Response getProfile(@QueryParam("identity_only") boolean identityOnly) {
-        if (identityOnly) {
-            return identityPayload();
-        }
         var maybeUserId = currentUserService.findCurrentUserId();
         if (maybeUserId.isEmpty()) {
             return Response.noContent().build();
         }
+        if (identityOnly) {
+            return meService.resolveIdentityPayload(identity)
+                    .map(payload -> Response.ok(payload).build())
+                    .orElse(Response.noContent().build());
+        }
         return profileService.getProfile(maybeUserId.get())
                 .map(schema -> Response.ok(schema).build())
                 .orElse(Response.noContent().build());
-    }
-
-    private Response identityPayload() {
-        return meService.resolveIdentityPayload(identity)
-                .map(payload -> Response.ok(payload).build())
-                .orElseGet(() -> identity.isAnonymous()
-                        ? Response.noContent().build()
-                        : Response.status(404)
-                        .entity(ProblemDetail.of(404, "Not Found", "User not registered"))
-                        .build());
     }
 
     @PUT

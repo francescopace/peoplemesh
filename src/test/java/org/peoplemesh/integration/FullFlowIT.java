@@ -48,12 +48,13 @@ class FullFlowIT {
     }
 
     @Test
-    void authProvidersEndpoint_isPublic_returns200() {
+    void infoEndpoint_isPublic_returns200WithAuthProviders() {
         given()
-                .when().get("/api/v1/auth/providers")
+                .when().get("/api/v1/info")
                 .then()
                 .statusCode(200)
-                .body("providers", notNullValue());
+                .body("authProviders.providers", notNullValue())
+                .body("authProviders.configured", notNullValue());
     }
 
     @Test
@@ -121,8 +122,8 @@ class FullFlowIT {
                 .when().get("/api/v1/me")
                 .then()
                 .statusCode(200)
-                .body("user_id", is(user.nodeId.toString()))
-                .body("provider", is("github"));
+                .body("session.user_id", is(user.nodeId.toString()))
+                .body("session.provider", is("github"));
 
         given()
                 .cookie(SessionService.COOKIE_NAME, cookie)

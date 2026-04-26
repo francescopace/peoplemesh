@@ -3,7 +3,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 let renderAppShell;
 let updateNavActive;
 let authMock;
-let getMyProfileInFlightMock;
 let deriveInitialsMock;
 let getOrganizationNameMock;
 let renderBrandMock;
@@ -14,10 +13,9 @@ describe("app-shell", () => {
     document.body.innerHTML = '<div id="root"></div>';
 
     authMock = {
-      getUser: vi.fn().mockReturnValue({ name: "John Doe", entitlements: {} }),
+      getUser: vi.fn().mockReturnValue({ display_name: "John Doe", entitlements: {} }),
       logout: vi.fn(),
     };
-    getMyProfileInFlightMock = vi.fn().mockResolvedValue({});
     deriveInitialsMock = vi.fn().mockReturnValue("JD");
     getOrganizationNameMock = vi.fn().mockResolvedValue(null);
     renderBrandMock = vi.fn().mockReturnValue('<span class="brand">PeopleMesh</span>');
@@ -28,9 +26,6 @@ describe("app-shell", () => {
     }));
     vi.doMock("../assets/js/footer.js", () => ({
       renderFooter: vi.fn().mockReturnValue('<footer class="footer">Footer</footer>'),
-    }));
-    vi.doMock("../assets/js/services/profile-service.js", () => ({
-      getMyProfileInFlight: getMyProfileInFlightMock,
     }));
     vi.doMock("../assets/js/utils/initials.js", () => ({
       deriveInitials: deriveInitialsMock,
@@ -83,8 +78,10 @@ describe("app-shell", () => {
 
   it("renders profile image when a valid remote photo is available", async () => {
     const root = document.getElementById("root");
-    getMyProfileInFlightMock.mockResolvedValue({
-      identity: { photo_url: "https://cdn.example.com/photo.png" },
+    authMock.getUser.mockReturnValue({
+      display_name: "John Doe",
+      photo_url: "https://cdn.example.com/photo.png",
+      entitlements: {},
     });
 
     await renderAppShell(root);

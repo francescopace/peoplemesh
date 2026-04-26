@@ -9,6 +9,7 @@ import jakarta.inject.Inject;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Validator;
+import org.peoplemesh.domain.dto.MeIdentityResponse;
 import org.peoplemesh.domain.dto.ProfileSchema;
 import org.peoplemesh.domain.enums.NodeType;
 import org.peoplemesh.domain.exception.ValidationBusinessException;
@@ -19,7 +20,6 @@ import org.peoplemesh.repository.UserIdentityRepository;
 import org.peoplemesh.util.JsonMergePatchUtils;
 
 import java.util.Collection;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -53,7 +53,7 @@ public class MeService {
     @Inject
     Validator validator;
 
-    public Optional<Map<String, Object>> resolveIdentityPayload(SecurityIdentity identity) {
+    public Optional<MeIdentityResponse> resolveIdentityPayload(SecurityIdentity identity) {
         UUID userId = identity.<UUID>getAttribute("pm.userId");
         String provider = identity.<String>getAttribute("pm.provider");
         String displayName = identity.<String>getAttribute("pm.displayName");
@@ -156,18 +156,40 @@ public class MeService {
         }
     }
 
-    private Map<String, Object> buildPayload(UUID nodeId, String provider, String displayName, MeshNode node) {
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("user_id", nodeId);
-        payload.put("provider", provider);
-        payload.put("email_present", node.externalId != null && !node.externalId.isBlank());
-        payload.put("profile_id", node.id);
-        if (displayName != null && !displayName.isBlank()) {
-            payload.put("display_name", displayName);
+    private MeIdentityResponse buildPayload(UUID nodeId, String provider, String displayName, MeshNode node) {
+        String photoUrl = readPhotoUrl(node);
+        String safeDisplayName = normalizeString(displayName);
+        MeIdentityResponse.IdentityInfo identityInfo = new MeIdentityResponse.IdentityInfo(
+                safeDisplayName,
+                photoUrl
+        );
+        MeIdentityResponse.SessionInfo sessionInfo = new MeIdentityResponse.SessionInfo(
+                nodeId,
+                normalizeString(provider),
+                node.externalId != null && !node.externalId.isBlank(),
+                node.id,
+                new MeIdentityResponse.EntitlementsInfo(entitlementService.isAdmin(nodeId))
+        );
+        return new MeIdentityResponse(identityInfo, sessionInfo);
+    }
+
+    private static String readPhotoUrl(MeshNode node) {
+        if (node == null || node.structuredData == null) {
+            return null;
         }
-        Map<String, Boolean> entitlements = new LinkedHashMap<>();
-        entitlements.put("is_admin", entitlementService.isAdmin(nodeId));
-        payload.put("entitlements", entitlements);
-        return payload;
+        Object raw = node.structuredData.get("avatar_url");
+        if (!(raw instanceof String value)) {
+            return null;
+        }
+        String normalized = value.trim();
+        return normalized.isEmpty() ? null : normalized;
+    }
+
+    private static String normalizeString(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.trim();
+        return normalized.isEmpty() ? null : normalized;
     }
 }

@@ -15,7 +15,6 @@ import org.peoplemesh.service.OAuthLoginService;
 import org.peoplemesh.service.SessionService;
 
 import java.net.URI;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -45,19 +44,6 @@ class OAuthLoginResourceTest {
 
     @InjectMocks
     OAuthLoginResource resource;
-
-    @Test
-    void providers_returnsConfiguredProviderLists() {
-        when(oAuthLoginService.providers()).thenReturn(Map.of(
-                "providers", List.of("google"),
-                "configured", List.of("google", "github")));
-
-        Response response = resource.providers();
-
-        assertEquals(200, response.getStatus());
-        assertEquals(Map.of("providers", List.of("google"), "configured", List.of("google", "github")),
-                response.getEntity());
-    }
 
     @Test
     void login_whenServiceReturnsRedirect_returnsTemporaryRedirect() {

@@ -6,6 +6,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.peoplemesh.domain.dto.MeIdentityResponse;
 import org.peoplemesh.domain.dto.ProfileSchema;
 import org.peoplemesh.domain.enums.NodeType;
 import org.peoplemesh.domain.exception.ValidationBusinessException;
@@ -93,15 +94,20 @@ class MeServiceTest {
         node.id = nodeId;
         node.nodeType = NodeType.USER;
         node.externalId = "mail@test.com";
+        node.structuredData = Map.of("avatar_url", "https://cdn.example.com/avatar.png");
         when(identity.getAttribute("pm.userId")).thenReturn(nodeId);
         when(identity.getAttribute("pm.provider")).thenReturn("google");
         when(identity.getAttribute("pm.displayName")).thenReturn("Alice");
         when(nodeRepository.findById(nodeId)).thenReturn(Optional.of(node));
         when(entitlementService.isAdmin(nodeId)).thenReturn(true);
 
-        Optional<Map<String, Object>> payload = service.resolveIdentityPayload(identity);
+        Optional<MeIdentityResponse> payload = service.resolveIdentityPayload(identity);
         assertTrue(payload.isPresent());
-        assertEquals(nodeId, payload.get().get("user_id"));
+        MeIdentityResponse schema = payload.get();
+        assertEquals(nodeId, schema.session().userId());
+        assertEquals("google", schema.session().provider());
+        assertEquals("Alice", schema.identity().displayName());
+        assertEquals("https://cdn.example.com/avatar.png", schema.identity().photoUrl());
     }
 
     @Test

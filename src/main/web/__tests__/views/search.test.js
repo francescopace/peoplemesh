@@ -307,7 +307,6 @@ describe("search view skill highlighting", () => {
 
     expect(apiMock.post.mock.calls[0][0]).toContain("/api/v1/matches/prompt?");
     expect(apiMock.post.mock.calls[0][0]).toContain("limit=10");
-    expect(apiMock.post.mock.calls[0][0]).toContain("offset=0");
     expect(apiMock.post.mock.calls[0][1]).toEqual({ query: "community in italy" });
     expect(apiMock.post.mock.calls[1][0]).toContain("/api/v1/matches?type=PEOPLE");
     expect(apiMock.post.mock.calls[1][0]).toContain("limit=10");
@@ -372,7 +371,7 @@ describe("search view skill highlighting", () => {
     expect(peopleTab.classList.contains("active")).toBe(false);
   });
 
-  it("load more fetches next prompt page from backend", async () => {
+  it("load more after prompt parse uses /matches endpoint", async () => {
     const makeProfile = (id) => ({
       id,
       resultType: "profile",
@@ -386,13 +385,34 @@ describe("search view skill highlighting", () => {
       },
       skill_levels: {},
     });
+    const parsedQuery = {
+      must_have: { roles: [], skills: ["java"], languages: [], location: [], industries: [] },
+      nice_to_have: { skills: [], industries: [], experience: [] },
+      seniority: "unknown",
+      negative_filters: { seniority: null, skills: [], location: [] },
+      keywords: ["java"],
+      embedding_text: "java developer",
+    };
     apiMock.post
       .mockResolvedValueOnce({
+        parsedQuery,
         results: Array.from({ length: 10 }, (_, i) => makeProfile(`u-${i}`)),
       })
-      .mockResolvedValueOnce({
-        results: [makeProfile("u-10")],
-      });
+      .mockResolvedValueOnce([
+        {
+          id: "u-10",
+          nodeType: "PEOPLE",
+          title: "User u-10",
+          score: 0.72,
+          person: {
+            roles: ["Developer"],
+            skillsTechnical: ["Java"],
+            toolsAndTech: [],
+          },
+          tags: [],
+          breakdown: { commonItems: ["java"] },
+        },
+      ]);
 
     const container = document.createElement("div");
     document.body.appendChild(container);
@@ -409,8 +429,11 @@ describe("search view skill highlighting", () => {
     loadMoreBtn.dispatchEvent(new Event("click", { bubbles: true }));
     await flushPromises();
 
-    expect(apiMock.post.mock.calls[1][0]).toContain("/api/v1/matches/prompt?");
-    expect(apiMock.post.mock.calls[1][0]).toContain("offset=10");
+    expect(apiMock.post.mock.calls[0][0]).toContain("/api/v1/matches/prompt?");
+    expect(apiMock.post.mock.calls[0][0]).toContain("limit=10");
+    expect(apiMock.post.mock.calls[0][1]).toEqual({ query: "java developer" });
+    expect(apiMock.post.mock.calls[1][0]).toContain("/api/v1/matches?limit=10&offset=10");
+    expect(apiMock.post.mock.calls[1][1]).toEqual(parsedQuery);
     expect(container.querySelectorAll(".discover-card").length).toBe(11);
   });
 

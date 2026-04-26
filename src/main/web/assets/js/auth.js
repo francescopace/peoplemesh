@@ -1,10 +1,10 @@
 import { api } from "./api.js";
 import {
   buildAuthLoginUrl,
-  getAuthProviders,
   getCurrentUserIdentityOnly,
   logoutSession,
 } from "./services/auth-service.js";
+import { getPlatformInfo } from "./platform-info.js";
 import { Config } from "../../config.js";
 
 const USER_KEY = "pm_user";
@@ -32,7 +32,7 @@ class AuthManager {
     await this.refreshProviders();
     try {
       const user = await getCurrentUserIdentityOnly();
-      this.setUser(user);
+      this.setUser(normalizeIdentityUser(user));
     } catch {
       this.setUser(null);
     }
@@ -41,9 +41,10 @@ class AuthManager {
 
   async refreshProviders() {
     try {
-      const data = await getAuthProviders();
-      const login = Array.isArray(data?.providers) ? data.providers : [];
-      const configured = Array.isArray(data?.configured) ? data.configured : [];
+      const info = await getPlatformInfo();
+      const providersBlock = info?.authProviders;
+      const login = Array.isArray(providersBlock?.providers) ? providersBlock.providers : [];
+      const configured = Array.isArray(providersBlock?.configured) ? providersBlock.configured : [];
       this._providers = Config.providers.filter((p) => login.includes(p));
       this._configured = Config.providers.filter((p) => configured.includes(p));
     } catch {
@@ -102,6 +103,33 @@ class AuthManager {
 }
 
 export const Auth = new AuthManager();
+
+function normalizeIdentityUser(payload) {
+  if (!payload || typeof payload !== "object") {
+    return payload;
+  }
+  const session = payload.session;
+  const identity = payload.identity;
+  if (session && typeof session === "object") {
+    return {
+      user_id: session.user_id ?? null,
+      provider: session.provider ?? "",
+      email_present: session.email_present === true,
+      profile_id: session.profile_id ?? null,
+      entitlements: session.entitlements || {},
+      display_name: identity?.display_name || "",
+      photo_url: identity?.photo_url || "",
+    };
+  }
+  if (identity && typeof identity === "object") {
+    return {
+      ...payload,
+      display_name: payload.display_name || identity.display_name || "",
+      photo_url: payload.photo_url || identity.photo_url || "",
+    };
+  }
+  return payload;
+}
 
 api.setUnauthorizedHandler(({ path }) => {
   if (!path || path === "/api/v1/me" || path.startsWith("/api/v1/auth/")) {

@@ -11,8 +11,8 @@ function toQueryString(params) {
   return query.toString();
 }
 
-export async function fetchPromptMatches({ queryText, limit, offset }) {
-  const qs = toQueryString({ limit, offset });
+export async function fetchPromptMatches({ queryText, limit }) {
+  const qs = toQueryString({ limit });
   return api.post(`/api/v1/matches/prompt?${qs}`, { query: queryText });
 }
 
@@ -52,7 +52,6 @@ export async function fetchSearchResultsPage({
   const promptPayload = await fetchPromptMatches({
     queryText,
     limit,
-    offset,
   });
   return {
     results: promptPayload?.results || [],

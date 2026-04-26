@@ -1,5 +1,4 @@
 import { Auth } from "./auth.js";
-import { getMyProfileInFlight } from "./services/profile-service.js";
 import { deriveInitials } from "./utils/initials.js";
 
 let _dropdownCloseHandler = null;
@@ -12,19 +11,14 @@ function escAttr(s) {
     .replace(/>/g, "&gt;");
 }
 
-export async function renderTopBarUserMenu() {
+export function renderTopBarUserMenu() {
   const user = Auth.getUser();
   const initials = deriveInitials(user);
 
   let avatarHtml = `<div class="user-avatar">${escAttr(initials)}</div>`;
-  try {
-    const profile = await getMyProfileInFlight().catch(() => null);
-    const photoUrl = profile?.identity?.photo_url;
-    if (photoUrl && /^https?:\/\//i.test(photoUrl)) {
-      avatarHtml = `<img class="user-avatar user-avatar--img" src="${escAttr(photoUrl)}" alt="${escAttr(initials)}" referrerpolicy="no-referrer">`;
-    }
-  } catch {
-    // Keep initials fallback when profile fetch fails.
+  const photoUrl = user?.photo_url;
+  if (photoUrl && /^https?:\/\//i.test(photoUrl)) {
+    avatarHtml = `<img class="user-avatar user-avatar--img" src="${escAttr(photoUrl)}" alt="${escAttr(initials)}" referrerpolicy="no-referrer">`;
   }
 
   return `

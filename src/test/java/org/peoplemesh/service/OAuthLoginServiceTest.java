@@ -5,11 +5,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.peoplemesh.domain.dto.AuthProvidersDto;
 import org.peoplemesh.domain.dto.OidcSubject;
 import org.peoplemesh.domain.dto.ProfileSchema;
 
 import java.net.URI;
-import java.util.Map;
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -40,10 +41,10 @@ class OAuthLoginServiceTest {
         when(tokenExchangeService.isProviderEnabled("google")).thenReturn(true);
         when(tokenExchangeService.isProviderEnabled("github")).thenReturn(true);
 
-        Map<String, Object> result = service.providers();
+        AuthProvidersDto result = service.providers();
 
-        assertTrue(result.containsKey("providers"));
-        assertTrue(result.containsKey("configured"));
+        assertEquals(List.of("google"), result.providers());
+        assertEquals(List.of("google", "github"), result.configured());
     }
 
     @Test
