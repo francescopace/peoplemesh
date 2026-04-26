@@ -27,6 +27,7 @@ Public endpoints for OAuth login flow.
 | GET | `/api/v1/auth/login/{provider}` | Start OAuth login (Google, Microsoft, GitHub) |
 | GET | `/api/v1/auth/callback/{provider}` | OAuth callback — sets session cookie on login success, or redirects import popups to frontend import route |
 | GET | `/api/v1/auth/callback/{provider}/import-finalize` | Finalize OAuth import and return preview payload (`imported`, `source`) |
+| GET | `/api/v1/auth/identity` | Lightweight current identity payload for frontend bootstrap |
 | POST | `/api/v1/auth/logout` | End session — clears session cookie |
 
 **Access:** `@PermitAll` — no session required.
@@ -75,11 +76,14 @@ Endpoints for the authenticated user to manage their own profile, privacy, and d
 
 | Endpoint | Parameters |
 |----------|-----------|
-| `GET /api/v1/me` | `?identity_only=true` — lightweight session check, returns a compact identity payload with `identity` and `session` sections |
+| `GET /api/v1/me` | No query params. Returns full profile for current user or `204` when anonymous |
 | `PUT /api/v1/me` | Body: `ProfileSchema` (JSON). Identity updates are limited to `identity.birth_date`; other identity fields are OAuth-managed |
 | `PATCH /api/v1/me` | Body: JSON Merge Patch (`application/merge-patch+json`). RFC 7396 semantics: object keys overwrite, arrays replace fully, `null` clears mapped fields |
 | `POST /api/v1/me/import-apply` | Body: partial `ProfileSchema` (JSON). `?source` (required, validated pattern) |
 | `POST /api/v1/me/cv-import` | Body: multipart file upload (`multipart/form-data`, field `file`) |
+
+`GET /api/v1/auth/identity` returns a flat payload:
+- `user_id`, `provider`, `entitlements`, `display_name`, `photo_url`.
 
 Import-apply merge behavior:
 - For list fields (skills, tools, industries, languages, professional interests): the server persists the array values sent by the client — merge is client-driven.

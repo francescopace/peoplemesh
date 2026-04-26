@@ -2,7 +2,6 @@ package org.peoplemesh.api.resource;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import io.quarkus.security.Authenticated;
-import io.quarkus.security.identity.SecurityIdentity;
 import io.smallrye.common.annotation.Blocking;
 import jakarta.annotation.security.PermitAll;
 import jakarta.inject.Inject;
@@ -36,7 +35,6 @@ import org.peoplemesh.domain.dto.UserNotificationDto;
 import org.peoplemesh.service.CurrentUserService;
 import org.peoplemesh.service.CvImportService;
 import org.peoplemesh.service.GdprService;
-import org.peoplemesh.service.MeService;
 import org.peoplemesh.service.ConsentService;
 import org.peoplemesh.service.ProfileService;
 import org.peoplemesh.service.SessionService;
@@ -54,16 +52,13 @@ import java.util.Map;
 public class MeResource {
 
     @Inject
-    SecurityIdentity identity;
-
-    @Inject
     CurrentUserService currentUserService;
 
     @Inject
     ProfileService profileService;
 
     @Inject
-    MeService meService;
+    ConsentService consentService;
 
     @Inject
     GdprService gdprService;
@@ -85,15 +80,10 @@ public class MeResource {
 
     @GET
     @PermitAll
-    public Response getProfile(@QueryParam("identity_only") boolean identityOnly) {
+    public Response getProfile() {
         var maybeUserId = currentUserService.findCurrentUserId();
         if (maybeUserId.isEmpty()) {
             return Response.noContent().build();
-        }
-        if (identityOnly) {
-            return meService.resolveIdentityPayload(identity)
-                    .map(payload -> Response.ok(payload).build())
-                    .orElse(Response.noContent().build());
         }
         return profileService.getProfile(maybeUserId.get())
                 .map(schema -> Response.ok(schema).build())
@@ -105,7 +95,7 @@ public class MeResource {
     @Consumes(MediaType.APPLICATION_JSON)
     public Response updateProfile(@Valid ProfileSchema updates) {
         UUID userId = currentUserService.resolveUserId();
-        ProfileSchema profile = meService.resolveProfile(userId, updates);
+        ProfileSchema profile = profileService.updateProfile(userId, updates);
         return Response.ok(profile).build();
     }
 
@@ -114,7 +104,7 @@ public class MeResource {
     @Consumes("application/merge-patch+json")
     public Response patchProfile(JsonNode mergePatch) {
         UUID userId = currentUserService.resolveUserId();
-        ProfileSchema profile = meService.patchProfile(userId, mergePatch);
+        ProfileSchema profile = profileService.patchProfile(userId, mergePatch);
         return Response.ok(profile).build();
     }
 
@@ -126,7 +116,7 @@ public class MeResource {
             @Valid ProfileSchema selectedFields,
             @QueryParam("source") @Size(max = 50) @Pattern(regexp = "^[a-zA-Z0-9_-]*$") String source) {
         UUID userId = currentUserService.resolveUserId();
-        meService.applySelectiveImport(userId, selectedFields, source);
+        profileService.applySelectiveImport(userId, selectedFields, source);
         return profileService.getProfile(userId)
                 .map(schema -> Response.ok(schema).build())
                 .orElse(Response.noContent().build());
@@ -183,7 +173,7 @@ public class MeResource {
     @Path("/consents")
     public Response getConsents() {
         UUID userId = currentUserService.resolveUserId();
-        return Response.ok(meService.getConsentView(userId)).build();
+        return Response.ok(consentService.getConsentView(userId)).build();
     }
 
     @POST
@@ -197,7 +187,7 @@ public class MeResource {
             @Context HttpHeaders headers
     ) {
         UUID userId = currentUserService.resolveUserId();
-        meService.grantConsent(
+        consentService.grantConsent(
                 userId,
                 scope,
                 ConsentService.DEFAULT_CONSENT_SCOPES,
@@ -214,7 +204,7 @@ public class MeResource {
             String scope
     ) {
         UUID userId = currentUserService.resolveUserId();
-        meService.revokeConsent(userId, scope, ConsentService.DEFAULT_CONSENT_SCOPES);
+        consentService.revokeConsent(userId, scope, ConsentService.DEFAULT_CONSENT_SCOPES);
         return Response.ok(Map.of("scope", scope, "status", "revoked")).build();
     }
 

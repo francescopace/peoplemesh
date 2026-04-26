@@ -1,7 +1,7 @@
 import { api } from "./api.js";
 import {
   buildAuthLoginUrl,
-  getCurrentUserIdentityOnly,
+  getCurrentAuthIdentity,
   logoutSession,
 } from "./services/auth-service.js";
 import { getPlatformInfo } from "./platform-info.js";
@@ -31,8 +31,8 @@ class AuthManager {
     if (this._initialized) return;
     await this.refreshProviders();
     try {
-      const user = await getCurrentUserIdentityOnly();
-      this.setUser(normalizeIdentityUser(user));
+      const user = await getCurrentAuthIdentity();
+      this.setUser(user);
     } catch {
       this.setUser(null);
     }
@@ -103,33 +103,6 @@ class AuthManager {
 }
 
 export const Auth = new AuthManager();
-
-function normalizeIdentityUser(payload) {
-  if (!payload || typeof payload !== "object") {
-    return payload;
-  }
-  const session = payload.session;
-  const identity = payload.identity;
-  if (session && typeof session === "object") {
-    return {
-      user_id: session.user_id ?? null,
-      provider: session.provider ?? "",
-      email_present: session.email_present === true,
-      profile_id: session.profile_id ?? null,
-      entitlements: session.entitlements || {},
-      display_name: identity?.display_name || "",
-      photo_url: identity?.photo_url || "",
-    };
-  }
-  if (identity && typeof identity === "object") {
-    return {
-      ...payload,
-      display_name: payload.display_name || identity.display_name || "",
-      photo_url: payload.photo_url || identity.photo_url || "",
-    };
-  }
-  return payload;
-}
 
 api.setUnauthorizedHandler(({ path }) => {
   if (!path || path === "/api/v1/me" || path.startsWith("/api/v1/auth/")) {

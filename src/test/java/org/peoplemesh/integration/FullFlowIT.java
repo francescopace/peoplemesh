@@ -58,11 +58,10 @@ class FullFlowIT {
     }
 
     @Test
-    void meEndpoint_withoutAuth_identityOnly_returns204() {
+    void authIdentityEndpoint_withoutAuth_returns204() {
         given()
                 .contentType(ContentType.JSON)
-                .queryParam("identity_only", "true")
-                .when().get("/api/v1/me")
+                .when().get("/api/v1/auth/identity")
                 .then()
                 .statusCode(204);
     }
@@ -118,12 +117,11 @@ class FullFlowIT {
 
         given()
                 .cookie(SessionService.COOKIE_NAME, cookie)
-                .queryParam("identity_only", "true")
-                .when().get("/api/v1/me")
+                .when().get("/api/v1/auth/identity")
                 .then()
                 .statusCode(200)
-                .body("session.user_id", is(user.nodeId.toString()))
-                .body("session.provider", is("github"));
+                .body("user_id", is(user.nodeId.toString()))
+                .body("provider", is("github"));
 
         given()
                 .cookie(SessionService.COOKIE_NAME, cookie)

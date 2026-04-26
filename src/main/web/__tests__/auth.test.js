@@ -56,7 +56,7 @@ describe("AuthManager", () => {
     expect(sessionStorage.getItem("pm_user")).toBeNull();
   });
 
-  it("init fetches /api/v1/me and sets user", async () => {
+  it("init fetches /api/v1/auth/identity and sets user", async () => {
     const user = { id: "u1", name: "Bob" };
     apiMock.get.mockImplementation((path) => {
       if (path === "/api/v1/info") {
@@ -64,7 +64,7 @@ describe("AuthManager", () => {
           authProviders: { providers: ["google"], configured: ["google"] },
         });
       }
-      if (path.startsWith("/api/v1/me")) return Promise.resolve(user);
+      if (path === "/api/v1/auth/identity") return Promise.resolve(user);
       return Promise.resolve(null);
     });
 
@@ -74,7 +74,7 @@ describe("AuthManager", () => {
     expect(Auth.getUser()).toEqual(user);
   });
 
-  it("init sets user null when /api/v1/me fails", async () => {
+  it("init sets user null when /api/v1/auth/identity fails", async () => {
     apiMock.get.mockImplementation((path) => {
       if (path === "/api/v1/info") {
         return Promise.resolve({
@@ -89,7 +89,7 @@ describe("AuthManager", () => {
     expect(Auth.isAuthenticated()).toBe(false);
   });
 
-  it("init normalizes identity-only ProfileSchema payload", async () => {
+  it("init consumes flat auth identity payload", async () => {
     apiMock.get.mockImplementation((path) => {
       if (path === "/api/v1/info") {
         return Promise.resolve({
@@ -97,14 +97,11 @@ describe("AuthManager", () => {
         });
       }
       return Promise.resolve({
-        identity: { display_name: "Alice Admin", photo_url: "https://cdn.example.com/alice.png" },
-        session: {
-          user_id: "u-1",
-          provider: "google",
-          email_present: true,
-          profile_id: "u-1",
-          entitlements: { is_admin: true },
-        },
+        user_id: "u-1",
+        provider: "google",
+        entitlements: { is_admin: true },
+        display_name: "Alice Admin",
+        photo_url: "https://cdn.example.com/alice.png",
       });
     });
 
@@ -113,8 +110,6 @@ describe("AuthManager", () => {
     expect(Auth.getUser()).toEqual({
       user_id: "u-1",
       provider: "google",
-      email_present: true,
-      profile_id: "u-1",
       entitlements: { is_admin: true },
       display_name: "Alice Admin",
       photo_url: "https://cdn.example.com/alice.png",

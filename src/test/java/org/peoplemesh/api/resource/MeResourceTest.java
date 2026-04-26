@@ -2,7 +2,6 @@ package org.peoplemesh.api.resource;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.quarkus.security.identity.SecurityIdentity;
 import org.jboss.resteasy.reactive.multipart.FileUpload;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.NewCookie;
@@ -13,7 +12,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.peoplemesh.domain.dto.MeIdentityResponse;
 import org.peoplemesh.config.AppConfig;
 import org.peoplemesh.domain.dto.PrivacyDashboard;
 import org.peoplemesh.domain.dto.ProfileSchema;
@@ -21,9 +19,9 @@ import org.peoplemesh.domain.exception.BusinessException;
 import org.peoplemesh.domain.exception.ValidationBusinessException;
 import org.peoplemesh.domain.dto.UserNotificationDto;
 import org.peoplemesh.service.CurrentUserService;
+import org.peoplemesh.service.ConsentService;
 import org.peoplemesh.service.CvImportService;
 import org.peoplemesh.service.GdprService;
-import org.peoplemesh.service.MeService;
 import org.peoplemesh.service.ProfileService;
 import org.peoplemesh.service.SessionService;
 import org.peoplemesh.service.UserNotificationService;
@@ -50,13 +48,11 @@ class MeResourceTest {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Mock
-    SecurityIdentity identity;
-    @Mock
     CurrentUserService currentUserService;
     @Mock
     ProfileService profileService;
     @Mock
-    MeService meService;
+    ConsentService consentService;
     @Mock
     GdprService gdprService;
     @Mock
@@ -78,41 +74,10 @@ class MeResourceTest {
     MeResource resource;
 
     @Test
-    void getProfile_identityOnly_anonymous_returns204() {
+    void getProfile_anonymous_returns204() {
         when(currentUserService.findCurrentUserId()).thenReturn(Optional.empty());
 
-        Response response = resource.getProfile(true);
-
-        assertEquals(204, response.getStatus());
-    }
-
-    @Test
-    void getProfile_identityOnly_registeredUser_returnsPayload() {
-        MeIdentityResponse payload = new MeIdentityResponse(
-                new MeIdentityResponse.IdentityInfo("Alice", "https://cdn.example/avatar.png"),
-                new MeIdentityResponse.SessionInfo(
-                        UUID.randomUUID(),
-                        "github",
-                        true,
-                        UUID.randomUUID(),
-                        new MeIdentityResponse.EntitlementsInfo(false)
-                )
-        );
-        when(currentUserService.findCurrentUserId()).thenReturn(Optional.of(UUID.randomUUID()));
-        when(meService.resolveIdentityPayload(identity)).thenReturn(Optional.of(payload));
-
-        Response response = resource.getProfile(true);
-
-        assertEquals(200, response.getStatus());
-        assertEquals(payload, response.getEntity());
-    }
-
-    @Test
-    void getProfile_identityOnly_nonAnonymousNotFound_returns204() {
-        when(currentUserService.findCurrentUserId()).thenReturn(Optional.of(UUID.randomUUID()));
-        when(meService.resolveIdentityPayload(identity)).thenReturn(Optional.empty());
-
-        Response response = resource.getProfile(true);
+        Response response = resource.getProfile();
 
         assertEquals(204, response.getStatus());
     }
@@ -121,7 +86,7 @@ class MeResourceTest {
     void getProfile_whenCurrentUserCannotBeResolved_returns204() {
         when(currentUserService.findCurrentUserId()).thenReturn(Optional.empty());
 
-        Response response = resource.getProfile(false);
+        Response response = resource.getProfile();
 
         assertEquals(204, response.getStatus());
     }
@@ -136,7 +101,7 @@ class MeResourceTest {
         when(currentUserService.findCurrentUserId()).thenReturn(Optional.of(userId));
         when(profileService.getProfile(userId)).thenReturn(Optional.of(schema));
 
-        Response response = resource.getProfile(false);
+        Response response = resource.getProfile();
 
         assertEquals(200, response.getStatus());
         assertEquals(schema, response.getEntity());
@@ -148,7 +113,7 @@ class MeResourceTest {
         when(currentUserService.findCurrentUserId()).thenReturn(Optional.of(userId));
         when(profileService.getProfile(userId)).thenReturn(Optional.empty());
 
-        Response response = resource.getProfile(false);
+        Response response = resource.getProfile();
 
         assertEquals(204, response.getStatus());
     }
@@ -162,7 +127,7 @@ class MeResourceTest {
                 new ProfileSchema.ProfessionalInfo(List.of("Engineer"), null, null, List.of("Java"), null, null, null, null, null),
                 null, null, null, null, null, null);
         when(currentUserService.resolveUserId()).thenReturn(userId);
-        when(meService.resolveProfile(userId, updates)).thenReturn(resolved);
+        when(profileService.updateProfile(userId, updates)).thenReturn(resolved);
 
         Response response = resource.updateProfile(updates);
 
@@ -185,7 +150,7 @@ class MeResourceTest {
                 new ProfileSchema.ProfessionalInfo(List.of("Engineer"), null, null, List.of("Java"), null, null, null, null, null),
                 null, null, null, null, null, null);
         when(currentUserService.resolveUserId()).thenReturn(userId);
-        when(meService.patchProfile(userId, patch)).thenReturn(resolved);
+        when(profileService.patchProfile(userId, patch)).thenReturn(resolved);
 
         Response response = resource.patchProfile(patch);
 
@@ -197,7 +162,7 @@ class MeResourceTest {
     void patchProfile_missingPayload_throwsValidationBusinessException() {
         UUID userId = UUID.randomUUID();
         when(currentUserService.resolveUserId()).thenReturn(userId);
-        when(meService.patchProfile(userId, null)).thenThrow(new ValidationBusinessException("Missing merge patch payload"));
+        when(profileService.patchProfile(userId, null)).thenThrow(new ValidationBusinessException("Missing merge patch payload"));
 
         ValidationBusinessException error = assertThrows(
                 ValidationBusinessException.class,
@@ -220,7 +185,7 @@ class MeResourceTest {
 
         assertEquals(200, response.getStatus());
         assertEquals(profile, response.getEntity());
-        verify(meService).applySelectiveImport(userId, selected, "github");
+        verify(profileService).applySelectiveImport(userId, selected, "github");
     }
 
     @Test
@@ -339,7 +304,7 @@ class MeResourceTest {
         UUID userId = UUID.randomUUID();
         Map<String, Object> view = Map.of("active", List.of("profile"));
         when(currentUserService.resolveUserId()).thenReturn(userId);
-        when(meService.getConsentView(userId)).thenReturn(view);
+        when(consentService.getConsentView(userId)).thenReturn(view);
 
         Response response = resource.getConsents();
 
@@ -358,7 +323,7 @@ class MeResourceTest {
 
         assertEquals(200, response.getStatus());
         assertEquals(Map.of("scope", "profile", "status", "granted"), response.getEntity());
-        verify(meService).grantConsent(eq(userId), eq("profile"), any(), eq(HashUtils.sha256(ip)));
+        verify(consentService).grantConsent(eq(userId), eq("profile"), any(), eq(HashUtils.sha256(ip)));
     }
 
     @Test
@@ -370,7 +335,7 @@ class MeResourceTest {
 
         assertEquals(200, response.getStatus());
         assertEquals(Map.of("scope", "profile", "status", "revoked"), response.getEntity());
-        verify(meService).revokeConsent(eq(userId), eq("profile"), any());
+        verify(consentService).revokeConsent(eq(userId), eq("profile"), any());
     }
 
     @Test
