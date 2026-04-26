@@ -43,10 +43,12 @@ class AuthManager {
     try {
       const info = await getPlatformInfo();
       const providersBlock = info?.authProviders;
-      const login = Array.isArray(providersBlock?.providers) ? providersBlock.providers : [];
-      const configured = Array.isArray(providersBlock?.configured) ? providersBlock.configured : [];
+      const login = Array.isArray(providersBlock?.loginProviders) ? providersBlock.loginProviders : [];
+      const importProviders = Array.isArray(providersBlock?.profileImportProviders)
+        ? providersBlock.profileImportProviders
+        : [];
       this._providers = Config.providers.filter((p) => login.includes(p));
-      this._configured = Config.providers.filter((p) => configured.includes(p));
+      this._configured = Config.providers.filter((p) => importProviders.includes(p));
     } catch {
       this._providers = [];
       this._configured = [];

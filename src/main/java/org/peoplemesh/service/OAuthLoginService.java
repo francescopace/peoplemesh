@@ -32,10 +32,11 @@ public class OAuthLoginService {
         List<String> loginProviders = PROVIDER_ORDER.stream()
                 .filter(tokenExchangeService::isLoginEnabled)
                 .toList();
-        List<String> configuredProviders = PROVIDER_ORDER.stream()
+        List<String> importProviders = PROVIDER_ORDER.stream()
                 .filter(tokenExchangeService::isProviderEnabled)
+                .filter(provider -> !tokenExchangeService.isLoginEnabled(provider))
                 .toList();
-        return new AuthProvidersDto(loginProviders, configuredProviders);
+        return new AuthProvidersDto(loginProviders, importProviders);
     }
 
     public LoginOutcome login(String provider, String intent, String callbackUri) {

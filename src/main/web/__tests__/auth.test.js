@@ -61,7 +61,7 @@ describe("AuthManager", () => {
     apiMock.get.mockImplementation((path) => {
       if (path === "/api/v1/info") {
         return Promise.resolve({
-          authProviders: { providers: ["google"], configured: ["google"] },
+          authProviders: { loginProviders: ["google"], profileImportProviders: [] },
         });
       }
       if (path === "/api/v1/auth/identity") return Promise.resolve(user);
@@ -78,7 +78,7 @@ describe("AuthManager", () => {
     apiMock.get.mockImplementation((path) => {
       if (path === "/api/v1/info") {
         return Promise.resolve({
-          authProviders: { providers: [], configured: [] },
+          authProviders: { loginProviders: [], profileImportProviders: [] },
         });
       }
       return Promise.reject(new Error("401"));
@@ -93,7 +93,7 @@ describe("AuthManager", () => {
     apiMock.get.mockImplementation((path) => {
       if (path === "/api/v1/info") {
         return Promise.resolve({
-          authProviders: { providers: ["google"], configured: ["google"] },
+          authProviders: { loginProviders: ["google"], profileImportProviders: [] },
         });
       }
       return Promise.resolve({
@@ -120,7 +120,7 @@ describe("AuthManager", () => {
     apiMock.get.mockImplementation((path) => {
       if (path === "/api/v1/info") {
         return Promise.resolve({
-          authProviders: { providers: [], configured: [] },
+          authProviders: { loginProviders: [], profileImportProviders: [] },
         });
       }
       return Promise.resolve({ id: "u1" });
@@ -135,16 +135,17 @@ describe("AuthManager", () => {
   it("refreshProviders filters against Config.providers", async () => {
     apiMock.get.mockResolvedValue({
       authProviders: {
-        providers: ["google", "unknown"],
-        configured: ["google", "microsoft"],
+        loginProviders: ["google", "unknown"],
+        profileImportProviders: ["github", "unknown"],
       },
     });
 
     await Auth.refreshProviders();
 
     expect(Auth.getProviders()).toEqual(["google"]);
-    expect(Auth.isProviderConfigured("google")).toBe(true);
-    expect(Auth.isProviderConfigured("microsoft")).toBe(true);
+    expect(Auth.isProviderConfigured("google")).toBe(false);
+    expect(Auth.isProviderConfigured("github")).toBe(true);
+    expect(Auth.isProviderConfigured("microsoft")).toBe(false);
     expect(Auth.isProviderConfigured("unknown")).toBe(false);
   });
 

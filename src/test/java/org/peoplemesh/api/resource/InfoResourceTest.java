@@ -43,7 +43,7 @@ class InfoResourceTest {
         when(organizationConfig.governingLaw()).thenReturn(Optional.of("Italian law"));
         AuthProvidersDto providers = new AuthProvidersDto(
                 List.of("google"),
-                List.of("google", "github"));
+                List.of("github"));
         when(oAuthLoginService.providers()).thenReturn(providers);
 
         Response response = resource.info();

@@ -53,8 +53,8 @@ Public bootstrap metadata for branding/legal details and OAuth provider availabi
 `GET /api/v1/info` response includes:
 - Organization fields (`organizationName`, `contactEmail`, `dpoName`, `dpoEmail`, `dataLocation`, `governingLaw`).
 - `authProviders` object with:
-  - `providers`: providers enabled for login.
-  - `configured`: providers configured for login/import.
+  - `loginProviders`: providers enabled for interactive login.
+  - `profileImportProviders`: providers enabled for profile import only.
 
 ---
 

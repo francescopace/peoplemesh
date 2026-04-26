@@ -53,8 +53,8 @@ class FullFlowIT {
                 .when().get("/api/v1/info")
                 .then()
                 .statusCode(200)
-                .body("authProviders.providers", notNullValue())
-                .body("authProviders.configured", notNullValue());
+                .body("authProviders.loginProviders", notNullValue())
+                .body("authProviders.profileImportProviders", notNullValue());
     }
 
     @Test
