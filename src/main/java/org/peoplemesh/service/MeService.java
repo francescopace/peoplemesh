@@ -1,22 +1,30 @@
 package org.peoplemesh.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.security.identity.SecurityIdentity;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.ConstraintViolationException;
+import jakarta.validation.Validator;
+import org.peoplemesh.domain.dto.ProfileSchema;
 import org.peoplemesh.domain.enums.NodeType;
 import org.peoplemesh.domain.exception.ValidationBusinessException;
 import org.peoplemesh.domain.model.MeshNode;
 import org.peoplemesh.domain.model.UserIdentity;
-import org.peoplemesh.domain.dto.ProfileSchema;
 import org.peoplemesh.repository.NodeRepository;
 import org.peoplemesh.repository.UserIdentityRepository;
+import org.peoplemesh.util.JsonMergePatchUtils;
 
 import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
-import java.util.List;
 
 @ApplicationScoped
 public class MeService {
@@ -38,6 +46,12 @@ public class MeService {
 
     @Inject
     AuditService auditService;
+
+    @Inject
+    ObjectMapper objectMapper;
+
+    @Inject
+    Validator validator;
 
     public Optional<Map<String, Object>> resolveIdentityPayload(SecurityIdentity identity) {
         UUID userId = identity.<UUID>getAttribute("pm.userId");
@@ -65,6 +79,31 @@ public class MeService {
     public ProfileSchema resolveProfile(UUID userId, ProfileSchema updates) {
         profileService.upsertProfile(userId, updates);
         return profileService.getProfile(userId).orElse(updates);
+    }
+
+    public ProfileSchema patchProfile(UUID userId, JsonNode mergePatch) {
+        if (mergePatch == null) {
+            throw new ValidationBusinessException("Missing merge patch payload");
+        }
+
+        JsonNode currentProfileNode;
+        Optional<ProfileSchema> currentProfile = profileService.getProfile(userId);
+        if (currentProfile.isPresent()) {
+            currentProfileNode = objectMapper.convertValue(currentProfile.get(), JsonNode.class);
+        } else {
+            currentProfileNode = objectMapper.createObjectNode();
+        }
+        JsonNode mergedNode = JsonMergePatchUtils.apply(currentProfileNode, mergePatch);
+
+        if (mergedNode == null || !mergedNode.isObject()) {
+            throw new ValidationBusinessException("Merge patch must resolve to a JSON object");
+        }
+
+        ProfileSchema mergedSchema = toProfileSchema(mergedNode);
+        validatePatchedSchema(mergedSchema);
+
+        profileService.upsertProfileReplace(userId, mergedSchema);
+        return profileService.getProfile(userId).orElse(mergedSchema);
     }
 
     public void applySelectiveImport(UUID userId, ProfileSchema selectedFields, String source) {
@@ -99,6 +138,21 @@ public class MeService {
     public void validateConsentScope(String scope, Collection<String> allowedScopes) {
         if (scope == null || scope.isBlank() || !allowedScopes.contains(scope)) {
             throw new ValidationBusinessException("Invalid consent scope: " + scope);
+        }
+    }
+
+    private ProfileSchema toProfileSchema(JsonNode mergedNode) {
+        try {
+            return objectMapper.treeToValue(mergedNode, ProfileSchema.class);
+        } catch (JsonProcessingException e) {
+            throw new ValidationBusinessException("Invalid merge patch payload");
+        }
+    }
+
+    private void validatePatchedSchema(ProfileSchema schema) {
+        Set<ConstraintViolation<ProfileSchema>> violations = validator.validate(schema);
+        if (!violations.isEmpty()) {
+            throw new ConstraintViolationException(violations);
         }
     }
 

@@ -49,6 +49,7 @@ describe("profile view identity/import constraints", () => {
       }),
       post: vi.fn().mockResolvedValue({}),
       put: vi.fn().mockResolvedValue({}),
+      patch: vi.fn().mockResolvedValue({}),
     };
     toastMock = vi.fn();
 
@@ -86,15 +87,11 @@ describe("profile view identity/import constraints", () => {
     );
     expect(identityCard).toBeTruthy();
 
-    identityCard.querySelector(".profile-edit-link").click();
+    identityCard.querySelector('[data-profile-field="birthDate"] .profile-field-value--interactive').click();
 
-    expect(identityCard.querySelector('[data-field="birthDate"]')).not.toBeNull();
-    expect(identityCard.querySelector('[data-field="displayName"]')).toBeNull();
-    expect(identityCard.querySelector('[data-field="firstName"]')).toBeNull();
-    expect(identityCard.querySelector('[data-field="lastName"]')).toBeNull();
-    expect(identityCard.querySelector('[data-field="email"]')).toBeNull();
-    expect(identityCard.querySelector('[data-field="photoUrl"]')).toBeNull();
-    expect(identityCard.querySelector('[data-field="company"]')).toBeNull();
+    expect(identityCard.querySelector('[data-profile-field="birthDate"] input[type="date"]')).not.toBeNull();
+    const identityInputs = [...identityCard.querySelectorAll("input")].filter((inp) => inp.type !== "date");
+    expect(identityInputs.length).toBe(0);
   });
 
   it("sends only identity.birth_date in /api/v1/me update payload", async () => {
@@ -105,20 +102,21 @@ describe("profile view identity/import constraints", () => {
     const identityCard = [...container.querySelectorAll(".profile-card")].find((card) =>
       card.querySelector(".profile-card-title")?.textContent.includes("Identity")
     );
-    identityCard.querySelector(".profile-edit-link").click();
+    identityCard.querySelector('[data-profile-field="birthDate"] .profile-field-value--interactive').click();
 
-    const birthInput = identityCard.querySelector('[data-field="birthDate"]');
+    const birthInput = identityCard.querySelector('[data-profile-field="birthDate"] input[type="date"]');
     birthInput.value = "1992-04-12";
-
-    identityCard.querySelector(".profile-inline-actions .btn-primary").click();
+    birthInput.dispatchEvent(new Event("blur", { bubbles: true }));
     await flushPromises();
 
-    expect(apiMock.put).toHaveBeenCalled();
-    const [url, payload] = apiMock.put.mock.calls[0];
+    expect(apiMock.patch).toHaveBeenCalled();
+    const [url, payload] = apiMock.patch.mock.calls[0];
     expect(url).toBe("/api/v1/me");
     expect(payload.identity).toEqual({ birth_date: "1992-04-12" });
     expect(payload.identity.display_name).toBeUndefined();
     expect(payload.identity.email).toBeUndefined();
+    const consentCalls = apiMock.get.mock.calls.filter(([path]) => path === "/api/v1/me/consents");
+    expect(consentCalls).toHaveLength(1);
   });
 
   it("import modal exposes only Identity Birth Date and payload builder keeps only that", async () => {
@@ -174,7 +172,7 @@ describe("profile view identity/import constraints", () => {
   });
 
   it("shows error toast on 403 for profile save", async () => {
-    apiMock.put.mockRejectedValueOnce(Object.assign(new Error("Forbidden"), { status: 403 }));
+    apiMock.patch.mockRejectedValueOnce(Object.assign(new Error("Forbidden"), { status: 403 }));
 
     const container = document.createElement("div");
     document.body.appendChild(container);
@@ -183,8 +181,10 @@ describe("profile view identity/import constraints", () => {
     const identityCard = [...container.querySelectorAll(".profile-card")].find((card) =>
       card.querySelector(".profile-card-title")?.textContent.includes("Identity")
     );
-    identityCard.querySelector(".profile-edit-link").click();
-    identityCard.querySelector(".profile-inline-actions .btn-primary").click();
+    identityCard.querySelector('[data-profile-field="birthDate"] .profile-field-value--interactive').click();
+    const birthInput403 = identityCard.querySelector('[data-profile-field="birthDate"] input[type="date"]');
+    birthInput403.value = "1992-04-12";
+    birthInput403.dispatchEvent(new Event("blur", { bubbles: true }));
     await flushPromises();
 
     expect(toastMock).toHaveBeenCalledWith("Forbidden", "error");
@@ -245,8 +245,8 @@ describe("profile view identity/import constraints", () => {
     await flushPromises();
     await flushPromises();
 
-    expect(apiMock.put).toHaveBeenCalled();
-    const [, payload] = apiMock.put.mock.calls[0];
+    expect(apiMock.patch).toHaveBeenCalled();
+    const [, payload] = apiMock.patch.mock.calls[0];
     expect(payload.professional.skills_technical).toEqual([]);
   });
 
@@ -268,8 +268,8 @@ describe("profile view identity/import constraints", () => {
     await flushPromises();
     await flushPromises();
 
-    expect(apiMock.put).toHaveBeenCalled();
-    const [, payload] = apiMock.put.mock.calls[0];
+    expect(apiMock.patch).toHaveBeenCalled();
+    const [, payload] = apiMock.patch.mock.calls[0];
     expect(payload.professional.skills_technical).toEqual(["Java", "Kotlin"]);
   });
 
@@ -330,8 +330,8 @@ describe("profile view identity/import constraints", () => {
     await flushPromises();
     await flushPromises();
 
-    expect(apiMock.put).toHaveBeenCalled();
-    const [, payload] = apiMock.put.mock.calls[0];
+    expect(apiMock.patch).toHaveBeenCalled();
+    const [, payload] = apiMock.patch.mock.calls[0];
     expect(payload.professional.skills_technical).toEqual(["Java", "Kotlin"]);
   });
 });

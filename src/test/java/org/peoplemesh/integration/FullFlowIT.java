@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.UUID;
 
 import static io.restassured.RestAssured.given;
@@ -181,6 +182,169 @@ class FullFlowIT {
 
         assertEquals("1992-04-12", readBirthDate(userA.nodeId));
         assertNull(readBirthDate(userB.nodeId));
+    }
+
+    @Test
+    void mePatch_onlyAffectsAuthenticatedUsersOwnProfile() throws Exception {
+        UserIdentity userA = createUser("github");
+        UserIdentity userB = createUser("google");
+        String cookieA = sessionService.encodeSession(userA.nodeId, userA.oauthProvider);
+
+        given()
+                .cookie(SessionService.COOKIE_NAME, cookieA)
+                .header("X-Requested-With", "XMLHttpRequest")
+                .contentType("application/merge-patch+json")
+                .body("""
+                        {
+                          "identity": {
+                            "birth_date": "1993-05-22"
+                          }
+                        }
+                        """)
+                .when().patch("/api/v1/me")
+                .then()
+                .statusCode(200);
+
+        assertEquals("1993-05-22", readBirthDate(userA.nodeId));
+        assertNull(readBirthDate(userB.nodeId));
+    }
+
+    @Test
+    void mePatch_nullClearsBirthDate() throws Exception {
+        UserIdentity user = createUser("github");
+        String cookie = sessionService.encodeSession(user.nodeId, user.oauthProvider);
+
+        given()
+                .cookie(SessionService.COOKIE_NAME, cookie)
+                .header("X-Requested-With", "XMLHttpRequest")
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "identity": {
+                            "birth_date": "1992-04-12"
+                          }
+                        }
+                        """)
+                .when().put("/api/v1/me")
+                .then()
+                .statusCode(200);
+
+        given()
+                .cookie(SessionService.COOKIE_NAME, cookie)
+                .header("X-Requested-With", "XMLHttpRequest")
+                .contentType("application/merge-patch+json")
+                .body("""
+                        {
+                          "identity": {
+                            "birth_date": null
+                          }
+                        }
+                        """)
+                .when().patch("/api/v1/me")
+                .then()
+                .statusCode(200);
+
+        assertNull(readBirthDate(user.nodeId));
+    }
+
+    @Test
+    void mePatch_replacesSkillsTechnicalArray() throws Exception {
+        UserIdentity user = createUser("github");
+        String cookie = sessionService.encodeSession(user.nodeId, user.oauthProvider);
+
+        given()
+                .cookie(SessionService.COOKIE_NAME, cookie)
+                .header("X-Requested-With", "XMLHttpRequest")
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "professional": {
+                            "skills_technical": ["Java", "Kotlin"]
+                          }
+                        }
+                        """)
+                .when().put("/api/v1/me")
+                .then()
+                .statusCode(200);
+
+        given()
+                .cookie(SessionService.COOKIE_NAME, cookie)
+                .header("X-Requested-With", "XMLHttpRequest")
+                .contentType("application/merge-patch+json")
+                .body("""
+                        {
+                          "professional": {
+                            "skills_technical": ["Rust"]
+                          }
+                        }
+                        """)
+                .when().patch("/api/v1/me")
+                .then()
+                .statusCode(200);
+
+        assertEquals(List.of("rust"), readSkillsTechnical(user.nodeId));
+    }
+
+    @Test
+    void mePatch_rejectsNonObjectPayload() throws Exception {
+        UserIdentity user = createUser("github");
+        String cookie = sessionService.encodeSession(user.nodeId, user.oauthProvider);
+
+        given()
+                .cookie(SessionService.COOKIE_NAME, cookie)
+                .header("X-Requested-With", "XMLHttpRequest")
+                .contentType("application/merge-patch+json")
+                .body("""
+                        ["invalid"]
+                        """)
+                .when().patch("/api/v1/me")
+                .then()
+                .statusCode(400);
+    }
+
+    @Test
+    void mePatch_cannotOverrideOAuthManagedDisplayName() throws Exception {
+        UserIdentity user = createUser("github");
+        String cookie = sessionService.encodeSession(user.nodeId, user.oauthProvider);
+        String beforeTitle = readNodeTitle(user.nodeId);
+
+        given()
+                .cookie(SessionService.COOKIE_NAME, cookie)
+                .header("X-Requested-With", "XMLHttpRequest")
+                .contentType("application/merge-patch+json")
+                .body("""
+                        {
+                          "identity": {
+                            "display_name": "Injected Name"
+                          }
+                        }
+                        """)
+                .when().patch("/api/v1/me")
+                .then()
+                .statusCode(200);
+
+        assertEquals(beforeTitle, readNodeTitle(user.nodeId));
+    }
+
+    @Test
+    void mePatch_withWrongContentType_returns415() throws Exception {
+        UserIdentity user = createUser("github");
+        String cookie = sessionService.encodeSession(user.nodeId, user.oauthProvider);
+
+        given()
+                .cookie(SessionService.COOKIE_NAME, cookie)
+                .header("X-Requested-With", "XMLHttpRequest")
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "identity": {
+                            "birth_date": "1992-04-12"
+                          }
+                        }
+                        """)
+                .when().patch("/api/v1/me")
+                .then()
+                .statusCode(415);
     }
 
     @Test
@@ -377,6 +541,21 @@ class FullFlowIT {
             }
             userTransaction.commit();
             return birthDate;
+        } catch (Exception e) {
+            userTransaction.rollback();
+            throw e;
+        }
+    }
+
+    private List<String> readSkillsTechnical(UUID nodeId) throws Exception {
+        userTransaction.begin();
+        try {
+            MeshNode node = nodeRepository.findById(nodeId).orElse(null);
+            List<String> technicalSkills = node != null && node.tags != null
+                    ? new ArrayList<>(node.tags)
+                    : List.of();
+            userTransaction.commit();
+            return technicalSkills;
         } catch (Exception e) {
             userTransaction.rollback();
             throw e;

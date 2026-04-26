@@ -1,5 +1,7 @@
 package org.peoplemesh.api.resource;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.security.identity.SecurityIdentity;
 import org.jboss.resteasy.reactive.multipart.FileUpload;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -43,6 +45,8 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class MeResourceTest {
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Mock
     SecurityIdentity identity;
@@ -154,6 +158,41 @@ class MeResourceTest {
 
         assertEquals(200, response.getStatus());
         assertEquals(resolved, response.getEntity());
+    }
+
+    @Test
+    void patchProfile_returnsResolvedProfile() throws Exception {
+        UUID userId = UUID.randomUUID();
+        JsonNode patch = OBJECT_MAPPER.readTree("""
+                {
+                  "identity": {
+                    "birth_date": "1992-04-12"
+                  }
+                }
+                """);
+        ProfileSchema resolved = new ProfileSchema(
+                null, null, null,
+                new ProfileSchema.ProfessionalInfo(List.of("Engineer"), null, null, List.of("Java"), null, null, null, null, null),
+                null, null, null, null, null, null);
+        when(currentUserService.resolveUserId()).thenReturn(userId);
+        when(meService.patchProfile(userId, patch)).thenReturn(resolved);
+
+        Response response = resource.patchProfile(patch);
+
+        assertEquals(200, response.getStatus());
+        assertEquals(resolved, response.getEntity());
+    }
+
+    @Test
+    void patchProfile_missingPayload_throwsValidationBusinessException() {
+        UUID userId = UUID.randomUUID();
+        when(currentUserService.resolveUserId()).thenReturn(userId);
+        when(meService.patchProfile(userId, null)).thenThrow(new ValidationBusinessException("Missing merge patch payload"));
+
+        ValidationBusinessException error = assertThrows(
+                ValidationBusinessException.class,
+                () -> resource.patchProfile(null));
+        assertEquals("Missing merge patch payload", error.publicDetail());
     }
 
     @Test

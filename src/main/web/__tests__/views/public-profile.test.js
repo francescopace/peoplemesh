@@ -138,7 +138,8 @@ describe("public-profile view", () => {
     expect(container.querySelector(".profile-avatar-img")).not.toBeNull();
     expect(container.textContent).toContain("PeopleMesh");
     expect(container.textContent).toContain("Birth Date");
-    expect(container.querySelector('a[href^="slack://user"]')).not.toBeNull();
+    expect(container.querySelector('a[href^="slack://"]')).toBeNull();
+    expect(container.textContent).toContain("@alice");
     const linkedIn = container.querySelector('a[href*="linkedin.com/in/alice"]');
     expect(linkedIn).not.toBeNull();
     expect(linkedIn.getAttribute("href")).toBe("https://linkedin.com/in/alice");

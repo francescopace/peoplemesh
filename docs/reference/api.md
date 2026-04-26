@@ -50,6 +50,7 @@ Endpoints for the authenticated user to manage their own profile, privacy, and d
 |--------|------|-------------|
 | GET | `/api/v1/me` | Get profile |
 | PUT | `/api/v1/me` | Update profile |
+| PATCH | `/api/v1/me` | Partially update profile with JSON Merge Patch |
 | POST | `/api/v1/me/import-apply` | Apply selected fields from an import preview |
 | POST | `/api/v1/me/cv-import` | Import CV (Docling + LLM extraction) |
 
@@ -59,6 +60,7 @@ Endpoints for the authenticated user to manage their own profile, privacy, and d
 |----------|-----------|
 | `GET /api/v1/me` | `?identity_only=true` — lightweight session check, returns identity payload only |
 | `PUT /api/v1/me` | Body: `ProfileSchema` (JSON). Identity updates are limited to `identity.birth_date`; other identity fields are OAuth-managed |
+| `PATCH /api/v1/me` | Body: JSON Merge Patch (`application/merge-patch+json`). RFC 7396 semantics: object keys overwrite, arrays replace fully, `null` clears mapped fields |
 | `POST /api/v1/me/import-apply` | Body: partial `ProfileSchema` (JSON). `?source` (required, validated pattern) |
 | `POST /api/v1/me/cv-import` | Body: multipart file upload (`multipart/form-data`, field `file`) |
 

@@ -1,5 +1,6 @@
 package org.peoplemesh.api.resource;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import io.quarkus.security.Authenticated;
 import io.quarkus.security.identity.SecurityIdentity;
 import io.smallrye.common.annotation.Blocking;
@@ -14,6 +15,7 @@ import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
@@ -113,6 +115,15 @@ public class MeResource {
     public Response updateProfile(@Valid ProfileSchema updates) {
         UUID userId = currentUserService.resolveUserId();
         ProfileSchema profile = meService.resolveProfile(userId, updates);
+        return Response.ok(profile).build();
+    }
+
+    @PATCH
+    @Authenticated
+    @Consumes("application/merge-patch+json")
+    public Response patchProfile(JsonNode mergePatch) {
+        UUID userId = currentUserService.resolveUserId();
+        ProfileSchema profile = meService.patchProfile(userId, mergePatch);
         return Response.ok(profile).build();
     }
 

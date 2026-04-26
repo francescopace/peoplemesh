@@ -1501,20 +1501,67 @@
   padding: var(--space-6) var(--space-8);
 }
 
-.profile-edit-link {
-  background: none;
-  border: none;
-  color: var(--color-primary-500);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  cursor: pointer;
-  padding: 0;
-  transition: color var(--duration-fast) var(--ease-default);
+.profile-field-control-slot {
+  margin-top: 0.15rem;
 }
 
-.profile-edit-link:hover {
-  color: var(--color-primary-700);
-  text-decoration: underline;
+.profile-field-control-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+button.profile-field-value--interactive {
+  display: inline-block;
+  max-width: 100%;
+  font: inherit;
+  font-size: 1.05rem;
+  font-weight: var(--font-medium);
+  color: var(--text-primary);
+  text-align: left;
+  border: 1px dashed transparent;
+  background: transparent;
+  padding: 0.2rem 0.45rem;
+  margin: -0.2rem -0.45rem;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-default),
+              background var(--duration-fast) var(--ease-default);
+}
+
+button.profile-field-value--interactive:hover {
+  border-color: var(--color-primary-200);
+  background: rgba(99, 102, 241, 0.04);
+}
+
+.profile-field-value-extras {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.profile-field-open-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius-md);
+  color: var(--color-gray-500);
+  text-decoration: none;
+  transition: background var(--duration-fast) var(--ease-default),
+              color var(--duration-fast) var(--ease-default);
+}
+
+.profile-field-open-link:hover {
+  background: rgba(15, 23, 42, 0.06);
+  color: var(--color-primary-500);
+}
+
+.profile-editable-value--block {
+  width: 100%;
+  max-width: 28rem;
 }
 
 /* Section icons */
@@ -1787,15 +1834,6 @@
 }
 
 /* Inline editing – editable values that look like the view until focused */
-.profile-card--editing {
-  border-color: var(--color-primary-200);
-  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.08);
-}
-
-.profile-card-body--editing {
-  gap: var(--space-4);
-}
-
 .profile-editable-value {
   width: 100%;
   padding: 0.15rem 0.4rem;
