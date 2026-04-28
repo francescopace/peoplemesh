@@ -76,6 +76,23 @@ describe("ApiClient", () => {
     expect(opts.method).toBe("PATCH");
   });
 
+  it("PATCH allows custom content-type header", async () => {
+    global.fetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({}),
+    });
+
+    await api.patch(
+      "/api/v1/me",
+      { identity: { birth_date: null } },
+      { headers: { "Content-Type": "application/merge-patch+json" } }
+    );
+
+    const [, opts] = global.fetch.mock.calls[0];
+    expect(opts.headers["Content-Type"]).toBe("application/merge-patch+json");
+  });
+
   it("DELETE sends correct method", async () => {
     global.fetch.mockResolvedValue({
       ok: true,

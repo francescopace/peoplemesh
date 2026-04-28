@@ -18,7 +18,7 @@ Before exposing PeopleMesh in staging or production, explicitly configure:
 
 ## Recommended validation
 
-- Verify `GET /api/v1/auth/providers` returns the expected providers.
+- Verify `GET /api/v1/info` returns expected provider metadata in `authProviders`.
 - Verify login flow works end-to-end for at least one configured provider.
 - Verify maintenance endpoints are rejected without `X-Maintenance-Key`.
 

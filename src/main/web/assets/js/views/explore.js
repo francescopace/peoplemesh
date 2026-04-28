@@ -35,11 +35,6 @@ export async function renderExplore(container) {
   container.dataset.page = "explore";
   container.innerHTML = "";
 
-  const header = el("header", { className: "explore-header" });
-  header.appendChild(el("h1", { className: "page-title" }, "My Mesh"));
-  header.appendChild(el("p", { className: "page-subtitle text-secondary" }, "Explore people, jobs, and communities in your mesh."));
-  container.appendChild(header);
-
   /* === Filter bar === */
   const filterBar = el("div", { className: "explore-filter-bar" });
 

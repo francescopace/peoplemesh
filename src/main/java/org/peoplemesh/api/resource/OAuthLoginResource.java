@@ -1,5 +1,6 @@
 package org.peoplemesh.api.resource;
 
+import io.quarkus.security.identity.SecurityIdentity;
 import io.smallrye.common.annotation.Blocking;
 import jakarta.annotation.security.PermitAll;
 import jakarta.inject.Inject;
@@ -18,6 +19,7 @@ import jakarta.ws.rs.core.UriBuilder;
 import jakarta.ws.rs.core.UriInfo;
 import org.peoplemesh.api.error.ProblemDetail;
 import org.peoplemesh.config.AppConfig;
+import org.peoplemesh.service.AuthIdentityService;
 import org.peoplemesh.service.OAuthLoginService;
 import org.peoplemesh.service.SessionService;
 
@@ -39,13 +41,13 @@ public class OAuthLoginResource {
     SessionService sessionService;
 
     @Inject
-    AppConfig appConfig;
+    SecurityIdentity identity;
 
-    @GET
-    @Path("/providers")
-    public Response providers() {
-        return Response.ok(oAuthLoginService.providers()).build();
-    }
+    @Inject
+    AuthIdentityService authIdentityService;
+
+    @Inject
+    AppConfig appConfig;
 
     @GET
     @Path("/login/{provider}")
@@ -126,6 +128,14 @@ public class OAuthLoginResource {
     public Response logout() {
         NewCookie clearCookie = buildClearCookie(isSecure());
         return Response.noContent().cookie(clearCookie).build();
+    }
+
+    @GET
+    @Path("/identity")
+    public Response getIdentity() {
+        return authIdentityService.resolveCurrentIdentity(identity)
+                .map(payload -> Response.ok(payload).build())
+                .orElse(Response.noContent().build());
     }
 
     private String callbackUri(String provider) {

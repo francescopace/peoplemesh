@@ -69,7 +69,7 @@ docker exec -it peoplemesh-ollama ollama pull granite-embedding:30m
 
 ```bash
 curl -f http://localhost:8080/q/health
-curl -f http://localhost:8080/api/v1/auth/providers
+curl -f http://localhost:8080/api/v1/info
 ```
 
 ### 5) Stop or clean up
@@ -87,7 +87,7 @@ docker compose -f tools/compose/docker-compose.dependencies.yml down -v
 ## Verification
 
 - Health endpoint responds successfully: `GET /q/health`.
-- Auth provider endpoint responds successfully: `GET /api/v1/auth/providers`.
+- Info endpoint responds successfully: `GET /api/v1/info` (including `authProviders`).
 - Core services (`peoplemesh`, `postgres`, `ollama`, `docling`) are running in Compose.
 
 ## Troubleshooting

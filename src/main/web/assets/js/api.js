@@ -9,7 +9,7 @@ class ApiClient {
     this._onUnauthorized = typeof handler === "function" ? handler : null;
   }
 
-  async request(method, path, { body, query } = {}) {
+  async request(method, path, { body, query, headers: customHeaders } = {}) {
     let url = `${Config.apiBase}${path}`;
     if (query) {
       const params = new URLSearchParams();
@@ -21,16 +21,19 @@ class ApiClient {
     }
 
     const headers = { Accept: "application/json", "X-Requested-With": "XMLHttpRequest" };
+    if (customHeaders && typeof customHeaders === "object") {
+      Object.assign(headers, customHeaders);
+    }
 
     const opts = { method, headers };
     if (body != null) {
       if (body instanceof FormData) {
         opts.body = body;
       } else if (body instanceof ArrayBuffer || body instanceof Blob) {
-        headers["Content-Type"] = "application/octet-stream";
+        if (!headers["Content-Type"]) headers["Content-Type"] = "application/octet-stream";
         opts.body = body;
       } else {
-        headers["Content-Type"] = "application/json";
+        if (!headers["Content-Type"]) headers["Content-Type"] = "application/json";
         opts.body = JSON.stringify(body);
       }
     }
@@ -67,14 +70,14 @@ class ApiClient {
   get(path, query) {
     return this.request("GET", path, { query });
   }
-  post(path, body) {
-    return this.request("POST", path, { body });
+  post(path, body, options = {}) {
+    return this.request("POST", path, { ...options, body });
   }
-  put(path, body) {
-    return this.request("PUT", path, { body });
+  put(path, body, options = {}) {
+    return this.request("PUT", path, { ...options, body });
   }
-  patch(path, body) {
-    return this.request("PATCH", path, { body });
+  patch(path, body, options = {}) {
+    return this.request("PATCH", path, { ...options, body });
   }
   delete(path) {
     return this.request("DELETE", path);

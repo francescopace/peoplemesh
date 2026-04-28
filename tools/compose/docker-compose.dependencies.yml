@@ -1,6 +1,6 @@
 services:
   peoplemesh:
-    image: ${PEOPLEMESH_IMAGE:-frapax/peoplemesh:latest}
+    image: ${PEOPLEMESH_IMAGE:-frapax/peoplemesh:main}
     container_name: peoplemesh-app
     restart: unless-stopped
     depends_on:
@@ -21,10 +21,10 @@ services:
       MAINTENANCE_API_KEY: ${MAINTENANCE_API_KEY:-replace-with-strong-shared-key}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
       PEOPLEMESH_FRONTEND_ENABLED: ${PEOPLEMESH_FRONTEND_ENABLED:-true}
-      OIDC_GOOGLE_CLIENT_ID: ${OIDC_GOOGLE_CLIENT_ID:-}
-      OIDC_GOOGLE_CLIENT_SECRET: ${OIDC_GOOGLE_CLIENT_SECRET:-}
-      OIDC_MICROSOFT_CLIENT_ID: ${OIDC_MICROSOFT_CLIENT_ID:-}
-      OIDC_MICROSOFT_CLIENT_SECRET: ${OIDC_MICROSOFT_CLIENT_SECRET:-}
+      OIDC_GOOGLE_CLIENT_ID: ${OIDC_GOOGLE_CLIENT_ID}
+      OIDC_GOOGLE_CLIENT_SECRET: ${OIDC_GOOGLE_CLIENT_SECRET}
+      # OIDC_MICROSOFT_CLIENT_ID: ${OIDC_MICROSOFT_CLIENT_ID}
+      # OIDC_MICROSOFT_CLIENT_SECRET: ${OIDC_MICROSOFT_CLIENT_SECRET}
       ORGANIZATION_NAME: ${ORGANIZATION_NAME:-}
       ORGANIZATION_CONTACT_EMAIL: ${ORGANIZATION_CONTACT_EMAIL:-}
       ORGANIZATION_DPO_NAME: ${ORGANIZATION_DPO_NAME:-}
@@ -60,7 +60,7 @@ services:
       - peoplemesh-ollama-data:/root/.ollama
 
   docling:
-    image: ${DOCLING_IMAGE:-ghcr.io/docling-project/docling-serve:latest}
+    image: ${DOCLING_IMAGE:-ghcr.io/docling-project/docling-serve:v1.14.3}
     container_name: peoplemesh-docling
     restart: unless-stopped
     ports:

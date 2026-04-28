@@ -1,10 +1,10 @@
 import { api } from "./api.js";
 import {
   buildAuthLoginUrl,
-  getAuthProviders,
-  getCurrentUserIdentityOnly,
+  getCurrentAuthIdentity,
   logoutSession,
 } from "./services/auth-service.js";
+import { getPlatformInfo } from "./platform-info.js";
 import { Config } from "../../config.js";
 
 const USER_KEY = "pm_user";
@@ -31,7 +31,7 @@ class AuthManager {
     if (this._initialized) return;
     await this.refreshProviders();
     try {
-      const user = await getCurrentUserIdentityOnly();
+      const user = await getCurrentAuthIdentity();
       this.setUser(user);
     } catch {
       this.setUser(null);
@@ -41,11 +41,14 @@ class AuthManager {
 
   async refreshProviders() {
     try {
-      const data = await getAuthProviders();
-      const login = Array.isArray(data?.providers) ? data.providers : [];
-      const configured = Array.isArray(data?.configured) ? data.configured : [];
+      const info = await getPlatformInfo();
+      const providersBlock = info?.authProviders;
+      const login = Array.isArray(providersBlock?.loginProviders) ? providersBlock.loginProviders : [];
+      const importProviders = Array.isArray(providersBlock?.profileImportProviders)
+        ? providersBlock.profileImportProviders
+        : [];
       this._providers = Config.providers.filter((p) => login.includes(p));
-      this._configured = Config.providers.filter((p) => configured.includes(p));
+      this._configured = Config.providers.filter((p) => importProviders.includes(p));
     } catch {
       this._providers = [];
       this._configured = [];

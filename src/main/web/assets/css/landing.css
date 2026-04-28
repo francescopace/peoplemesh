@@ -98,6 +98,15 @@ body:has(.landing-nav) a:hover {
   letter-spacing: -0.02em;
 }
 
+.nav-logo-organization {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: var(--font-semibold);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  margin-left: 0.25rem;
+}
+
 .nav-logo-icon {
   width: 2.25rem;
   height: 2.25rem;

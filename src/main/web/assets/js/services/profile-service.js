@@ -24,7 +24,13 @@ export function applyImportedProfile(source, partialProfile) {
 }
 
 export function updateMyProfile(payload) {
-  return Promise.resolve(api.put("/api/v1/me", payload));
+  return patchMyProfile(payload);
+}
+
+export function patchMyProfile(mergePatchPayload) {
+  return Promise.resolve(api.patch("/api/v1/me", mergePatchPayload, {
+    headers: { "Content-Type": "application/merge-patch+json" },
+  }));
 }
 
 export function getMyConsents() {

@@ -157,11 +157,11 @@ Check route:
 oc get route -n peoplemesh
 ```
 
-Check health and auth providers:
+Check health and info bootstrap payload:
 
 ```bash
 curl -f https://<route-host>/q/health
-curl -f https://<route-host>/api/v1/auth/providers
+curl -f https://<route-host>/api/v1/info
 ```
 
 ## Models donwload 

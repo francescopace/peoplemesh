@@ -16,8 +16,8 @@ describe("matches-service", () => {
 
   it("builds prompt endpoint with paging params", async () => {
     apiMock.post.mockResolvedValue({ results: [] });
-    await service.fetchPromptMatches({ queryText: "java", limit: 10, offset: 20 });
-    expect(apiMock.post).toHaveBeenCalledWith("/api/v1/matches/prompt?limit=10&offset=20", { query: "java" });
+    await service.fetchPromptMatches({ queryText: "java", limit: 10 });
+    expect(apiMock.post).toHaveBeenCalledWith("/api/v1/matches/prompt?limit=10", { query: "java" });
   });
 
   it("builds structured endpoint while filtering empty params", async () => {
@@ -62,7 +62,7 @@ describe("matches-service", () => {
       offset: 0,
     });
 
-    expect(apiMock.post).toHaveBeenCalledWith("/api/v1/matches/prompt?limit=10&offset=0", { query: "java" });
+    expect(apiMock.post).toHaveBeenCalledWith("/api/v1/matches/prompt?limit=10", { query: "java" });
     expect(page).toEqual({
       parsedQuery: { keywords: ["java"] },
       results: [{ id: "p-1", resultType: "profile" }],

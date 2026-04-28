@@ -14,14 +14,9 @@ describe("auth-service", () => {
     service = await import("../../assets/js/services/auth-service.js");
   });
 
-  it("loads auth providers", async () => {
-    await service.getAuthProviders();
-    expect(apiMock.get).toHaveBeenCalledWith("/api/v1/auth/providers");
-  });
-
-  it("loads identity-only me endpoint", async () => {
-    await service.getCurrentUserIdentityOnly();
-    expect(apiMock.get).toHaveBeenCalledWith("/api/v1/me", { identity_only: true });
+  it("loads current auth identity", async () => {
+    await service.getCurrentAuthIdentity();
+    expect(apiMock.get).toHaveBeenCalledWith("/api/v1/auth/identity");
   });
 
   it("posts logout session", async () => {

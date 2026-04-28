@@ -40,8 +40,13 @@
 }
 
 .header-nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
   font-family: var(--font-display);
+  font-size: 1rem;
   font-weight: var(--font-medium);
+  letter-spacing: -0.01em;
   color: var(--color-gray-500);
   text-decoration: none;
   cursor: pointer;
@@ -56,6 +61,59 @@
 .header-nav-link.active {
   color: var(--color-primary-600);
   font-weight: var(--font-semibold);
+}
+
+.header-nav-link[data-tooltip] {
+  position: relative;
+}
+
+.header-nav-link[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 0.55rem);
+  transform: translateX(-50%) translateY(-3px);
+  opacity: 0;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 120;
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: var(--font-medium);
+  line-height: 1.2;
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: var(--radius-md);
+  padding: 0.35rem 0.5rem;
+  box-shadow: var(--shadow-md);
+  transition: opacity var(--duration-fast) var(--ease-default), transform var(--duration-fast) var(--ease-default);
+}
+
+.header-nav-link[data-tooltip]:hover::after,
+.header-nav-link[data-tooltip]:focus-visible::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.topbar-nav-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  font-size: 0.85rem;
+}
+
+.topbar-nav-icon i {
+  color: var(--color-gray-500);
+}
+
+.header-nav-link:hover .topbar-nav-icon i {
+  color: var(--color-primary-500);
+}
+
+.header-nav-link.active .topbar-nav-icon i {
+  color: var(--color-primary-600);
 }
 
 .app-brand-link {
@@ -92,6 +150,15 @@
   font-size: 1.35rem;
   font-weight: var(--font-bold);
   letter-spacing: -0.02em;
+}
+
+.app-brand-organization {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: var(--font-semibold);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  margin-left: 0.25rem;
 }
 
 .app-header-right {
@@ -1434,20 +1501,67 @@
   padding: var(--space-6) var(--space-8);
 }
 
-.profile-edit-link {
-  background: none;
-  border: none;
-  color: var(--color-primary-500);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  cursor: pointer;
-  padding: 0;
-  transition: color var(--duration-fast) var(--ease-default);
+.profile-field-control-slot {
+  margin-top: 0.15rem;
 }
 
-.profile-edit-link:hover {
-  color: var(--color-primary-700);
-  text-decoration: underline;
+.profile-field-control-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+button.profile-field-value--interactive {
+  display: inline-block;
+  max-width: 100%;
+  font: inherit;
+  font-size: 1.05rem;
+  font-weight: var(--font-medium);
+  color: var(--text-primary);
+  text-align: left;
+  border: 1px dashed transparent;
+  background: transparent;
+  padding: 0.2rem 0.45rem;
+  margin: -0.2rem -0.45rem;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-default),
+              background var(--duration-fast) var(--ease-default);
+}
+
+button.profile-field-value--interactive:hover {
+  border-color: var(--color-primary-200);
+  background: rgba(99, 102, 241, 0.04);
+}
+
+.profile-field-value-extras {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.profile-field-open-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius-md);
+  color: var(--color-gray-500);
+  text-decoration: none;
+  transition: background var(--duration-fast) var(--ease-default),
+              color var(--duration-fast) var(--ease-default);
+}
+
+.profile-field-open-link:hover {
+  background: rgba(15, 23, 42, 0.06);
+  color: var(--color-primary-500);
+}
+
+.profile-editable-value--block {
+  width: 100%;
+  max-width: 28rem;
 }
 
 /* Section icons */
@@ -1720,15 +1834,6 @@
 }
 
 /* Inline editing – editable values that look like the view until focused */
-.profile-card--editing {
-  border-color: var(--color-primary-200);
-  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.08);
-}
-
-.profile-card-body--editing {
-  gap: var(--space-4);
-}
-
 .profile-editable-value {
   width: 100%;
   padding: 0.15rem 0.4rem;
@@ -1946,6 +2051,7 @@ select.profile-inline-input[multiple] {
   display: flex;
   gap: var(--space-4);
   margin-bottom: var(--space-8);
+  justify-content: center;
   align-items: stretch;
   flex-wrap: wrap;
 }

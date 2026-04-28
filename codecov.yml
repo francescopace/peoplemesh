@@ -19,6 +19,10 @@ coverage:
         target: 70%
         threshold: 5%
 
+parsers:
+  jacoco:
+    partials_as_hits: true
+
 # Keep generated or third-party paths out of coverage signals
 ignore:
   - "src/test/**"

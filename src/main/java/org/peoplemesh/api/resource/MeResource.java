@@ -1,7 +1,7 @@
 package org.peoplemesh.api.resource;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import io.quarkus.security.Authenticated;
-import io.quarkus.security.identity.SecurityIdentity;
 import io.smallrye.common.annotation.Blocking;
 import jakarta.annotation.security.PermitAll;
 import jakarta.inject.Inject;
@@ -14,6 +14,7 @@ import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
@@ -28,14 +29,12 @@ import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriInfo;
 import org.jboss.resteasy.reactive.RestForm;
 import org.jboss.resteasy.reactive.multipart.FileUpload;
-import org.peoplemesh.api.error.ProblemDetail;
 import org.peoplemesh.config.AppConfig;
 import org.peoplemesh.domain.dto.ProfileSchema;
 import org.peoplemesh.domain.dto.UserNotificationDto;
 import org.peoplemesh.service.CurrentUserService;
 import org.peoplemesh.service.CvImportService;
 import org.peoplemesh.service.GdprService;
-import org.peoplemesh.service.MeService;
 import org.peoplemesh.service.ConsentService;
 import org.peoplemesh.service.ProfileService;
 import org.peoplemesh.service.SessionService;
@@ -53,16 +52,13 @@ import java.util.Map;
 public class MeResource {
 
     @Inject
-    SecurityIdentity identity;
-
-    @Inject
     CurrentUserService currentUserService;
 
     @Inject
     ProfileService profileService;
 
     @Inject
-    MeService meService;
+    ConsentService consentService;
 
     @Inject
     GdprService gdprService;
@@ -84,10 +80,7 @@ public class MeResource {
 
     @GET
     @PermitAll
-    public Response getProfile(@QueryParam("identity_only") boolean identityOnly) {
-        if (identityOnly) {
-            return identityPayload();
-        }
+    public Response getProfile() {
         var maybeUserId = currentUserService.findCurrentUserId();
         if (maybeUserId.isEmpty()) {
             return Response.noContent().build();
@@ -97,22 +90,21 @@ public class MeResource {
                 .orElse(Response.noContent().build());
     }
 
-    private Response identityPayload() {
-        return meService.resolveIdentityPayload(identity)
-                .map(payload -> Response.ok(payload).build())
-                .orElseGet(() -> identity.isAnonymous()
-                        ? Response.noContent().build()
-                        : Response.status(404)
-                        .entity(ProblemDetail.of(404, "Not Found", "User not registered"))
-                        .build());
-    }
-
     @PUT
     @Authenticated
     @Consumes(MediaType.APPLICATION_JSON)
     public Response updateProfile(@Valid ProfileSchema updates) {
         UUID userId = currentUserService.resolveUserId();
-        ProfileSchema profile = meService.resolveProfile(userId, updates);
+        ProfileSchema profile = profileService.updateProfile(userId, updates);
+        return Response.ok(profile).build();
+    }
+
+    @PATCH
+    @Authenticated
+    @Consumes("application/merge-patch+json")
+    public Response patchProfile(JsonNode mergePatch) {
+        UUID userId = currentUserService.resolveUserId();
+        ProfileSchema profile = profileService.patchProfile(userId, mergePatch);
         return Response.ok(profile).build();
     }
 
@@ -124,7 +116,7 @@ public class MeResource {
             @Valid ProfileSchema selectedFields,
             @QueryParam("source") @Size(max = 50) @Pattern(regexp = "^[a-zA-Z0-9_-]*$") String source) {
         UUID userId = currentUserService.resolveUserId();
-        meService.applySelectiveImport(userId, selectedFields, source);
+        profileService.applySelectiveImport(userId, selectedFields, source);
         return profileService.getProfile(userId)
                 .map(schema -> Response.ok(schema).build())
                 .orElse(Response.noContent().build());
@@ -181,7 +173,7 @@ public class MeResource {
     @Path("/consents")
     public Response getConsents() {
         UUID userId = currentUserService.resolveUserId();
-        return Response.ok(meService.getConsentView(userId)).build();
+        return Response.ok(consentService.getConsentView(userId)).build();
     }
 
     @POST
@@ -195,7 +187,7 @@ public class MeResource {
             @Context HttpHeaders headers
     ) {
         UUID userId = currentUserService.resolveUserId();
-        meService.grantConsent(
+        consentService.grantConsent(
                 userId,
                 scope,
                 ConsentService.DEFAULT_CONSENT_SCOPES,
@@ -212,7 +204,7 @@ public class MeResource {
             String scope
     ) {
         UUID userId = currentUserService.resolveUserId();
-        meService.revokeConsent(userId, scope, ConsentService.DEFAULT_CONSENT_SCOPES);
+        consentService.revokeConsent(userId, scope, ConsentService.DEFAULT_CONSENT_SCOPES);
         return Response.ok(Map.of("scope", scope, "status", "revoked")).build();
     }
 

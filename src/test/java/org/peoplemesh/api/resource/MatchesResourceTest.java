@@ -49,10 +49,10 @@ class MatchesResourceTest {
         UUID userId = UUID.randomUUID();
         SearchRequest request = new SearchRequest("java developer");
         when(currentUserService.resolveUserId()).thenReturn(userId);
-        when(matchesService.matchFromPrompt(userId, request, 9, 18))
+        when(matchesService.matchFromPrompt(userId, request, 9))
                 .thenReturn(new SearchResponse(null, List.of()));
 
-        Response response = resource.matchFromPrompt(request, 9, 18);
+        Response response = resource.matchFromPrompt(request, 9);
 
         assertEquals(200, response.getStatus());
     }

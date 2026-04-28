@@ -1,6 +1,7 @@
 package org.peoplemesh.service;
 
 import org.peoplemesh.config.AppConfig;
+import org.peoplemesh.domain.exception.ValidationBusinessException;
 import org.peoplemesh.util.HashUtils;
 import org.peoplemesh.util.HmacSigner;
 import org.peoplemesh.domain.model.MeshNodeConsent;
@@ -12,7 +13,9 @@ import org.jboss.logging.Logger;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.Base64;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -37,6 +40,9 @@ public class ConsentService {
 
     @Inject
     MeshNodeConsentRepository meshNodeConsentRepository;
+
+    @Inject
+    AuditService auditService;
 
     /**
      * Validates signature, TTL, scope, and single-use via {@link ConsentTokenStore}.
@@ -109,8 +115,7 @@ public class ConsentService {
         meshNodeConsentRepository.persist(consent);
     }
 
-    @Transactional
-    public void revokeConsent(UUID nodeId, String scope) {
+    private void revokeConsentRecord(UUID nodeId, String scope) {
         meshNodeConsentRepository.revokeByNodeAndScope(nodeId, scope);
     }
 
@@ -120,6 +125,32 @@ public class ConsentService {
 
     public java.util.List<String> getActiveScopes(UUID nodeId) {
         return meshNodeConsentRepository.findActiveScopes(nodeId);
+    }
+
+    public Map<String, Object> getConsentView(UUID userId) {
+        return Map.of(
+                "scopes", DEFAULT_CONSENT_SCOPES,
+                "active", getActiveScopes(userId));
+    }
+
+    @Transactional
+    public void grantConsent(UUID userId, String scope, Collection<String> allowedScopes, String clientIpHash) {
+        validateConsentScope(scope, allowedScopes);
+        recordConsent(userId, scope, clientIpHash);
+        auditService.log(userId, "CONSENT_GRANTED", "privacy_consent");
+    }
+
+    @Transactional
+    public void revokeConsent(UUID userId, String scope, Collection<String> allowedScopes) {
+        validateConsentScope(scope, allowedScopes);
+        revokeConsentRecord(userId, scope);
+        auditService.log(userId, "CONSENT_REVOKED", "privacy_consent");
+    }
+
+    public void validateConsentScope(String scope, Collection<String> allowedScopes) {
+        if (scope == null || scope.isBlank() || !allowedScopes.contains(scope)) {
+            throw new ValidationBusinessException("Invalid consent scope: " + scope);
+        }
     }
 
 }
