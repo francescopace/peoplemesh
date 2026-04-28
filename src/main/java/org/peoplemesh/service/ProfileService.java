@@ -3,6 +3,9 @@ package org.peoplemesh.service;
 import static org.peoplemesh.util.StructuredDataUtils.sdListOrNull;
 import static org.peoplemesh.util.StructuredDataUtils.sdString;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.peoplemesh.util.StringUtils;
 import org.peoplemesh.domain.dto.ProfileSchema;
 import org.peoplemesh.domain.enums.NodeType;
@@ -13,11 +16,16 @@ import org.peoplemesh.domain.enums.EmploymentType;
 import org.peoplemesh.domain.model.MeshNode;
 import org.peoplemesh.repository.NodeRepository;
 import org.peoplemesh.util.EmbeddingTextBuilder;
+import org.peoplemesh.util.JsonMergePatchUtils;
 import org.peoplemesh.util.ProfileSchemaNormalization;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.ConstraintViolationException;
+import jakarta.validation.Validator;
 import org.jboss.logging.Logger;
+import org.peoplemesh.domain.exception.ValidationBusinessException;
 
 import java.util.*;
 
@@ -43,6 +51,12 @@ public class ProfileService {
     @Inject
     ProfileSkillUsageService profileSkillUsageService;
 
+    @Inject
+    ObjectMapper objectMapper;
+
+    @Inject
+    Validator validator;
+
     public Optional<ProfileSchema> getProfile(UUID userId) {
         return findPublishedUserNode(userId)
                 .map(this::toSchema);
@@ -54,18 +68,61 @@ public class ProfileService {
                 .map(this::toSchema);
     }
 
+    public ProfileSchema updateProfile(UUID userId, ProfileSchema updates) {
+        upsertProfile(userId, updates);
+        return getProfile(userId).orElse(updates);
+    }
+
+    public ProfileSchema patchProfile(UUID userId, JsonNode mergePatch) {
+        if (mergePatch == null) {
+            throw new ValidationBusinessException("Missing merge patch payload");
+        }
+        JsonNode currentProfileNode;
+        Optional<ProfileSchema> currentProfile = getProfile(userId);
+        if (currentProfile.isPresent()) {
+            currentProfileNode = objectMapper.convertValue(currentProfile.get(), JsonNode.class);
+        } else {
+            currentProfileNode = objectMapper.createObjectNode();
+        }
+        JsonNode mergedNode = JsonMergePatchUtils.apply(currentProfileNode, mergePatch);
+
+        if (mergedNode == null || !mergedNode.isObject()) {
+            throw new ValidationBusinessException("Merge patch must resolve to a JSON object");
+        }
+
+        ProfileSchema mergedSchema = toProfileSchema(mergedNode);
+        validatePatchedSchema(mergedSchema);
+        upsertProfileReplace(userId, mergedSchema);
+        return getProfile(userId).orElse(mergedSchema);
+    }
+
     @Transactional
     public MeshNode upsertProfile(UUID userId, ProfileSchema schema) {
         LOG.debugf("action=upsertProfile userId=%s", userId);
         MeshNode node = getOrCreateUserNode(userId);
         Set<String> oldSkills = profileSkillUsageService.collectProfileSkills(node);
-        applySchemaToNode(node, schema);
+        applySchemaToNode(node, schema, false);
         Set<String> newSkills = profileSkillUsageService.normalizeSkillFields(node);
         profileSkillUsageService.syncUsageCounters(oldSkills, newSkills);
         applyEmbeddingIfConsented(node, userId);
         persistNode(node);
 
         audit.log(userId, "PROFILE_UPDATED", "peoplemesh_upsert_profile");
+        return node;
+    }
+
+    @Transactional
+    public MeshNode upsertProfileReplace(UUID userId, ProfileSchema schema) {
+        LOG.debugf("action=upsertProfileReplace userId=%s", userId);
+        MeshNode node = getOrCreateUserNode(userId);
+        Set<String> oldSkills = profileSkillUsageService.collectProfileSkills(node);
+        applySchemaToNode(node, schema, true);
+        Set<String> newSkills = profileSkillUsageService.normalizeSkillFields(node);
+        profileSkillUsageService.syncUsageCounters(oldSkills, newSkills);
+        applyEmbeddingIfConsented(node, userId);
+        persistNode(node);
+
+        audit.log(userId, "PROFILE_UPDATED", "peoplemesh_patch_profile");
         return node;
     }
 
@@ -127,6 +184,10 @@ public class ProfileService {
 
     @Transactional
     public void applySelectiveImport(UUID userId, ProfileSchema selectedFields, String source) {
+        if (source == null || source.isBlank()) {
+            throw new ValidationBusinessException("Missing source parameter");
+        }
+        String normalizedSource = source.trim();
         MeshNode node = getOrCreateUserNode(userId);
         Set<String> oldSkills = profileSkillUsageService.collectProfileSkills(node);
 
@@ -136,31 +197,31 @@ public class ProfileService {
         if (selectedFields.identity() != null) {
             var id = selectedFields.identity();
             if (hasText(id.birthDate())) {
-                putWithProvenance(sd, provenance, "birth_date", id.birthDate().trim(), "identity.birth_date", source);
+                putWithProvenance(sd, provenance, "birth_date", id.birthDate().trim(), "identity.birth_date", normalizedSource);
             }
         }
 
         if (selectedFields.professional() != null) {
             var p = selectedFields.professional();
             String importedRole = firstNonBlankListValue(p.roles());
-            if (importedRole != null && shouldReplaceScalarField(provenance, "professional.roles", source, normalizeText(node.description))) {
+            if (importedRole != null && shouldReplaceScalarField(provenance, "professional.roles", normalizedSource, normalizeText(node.description))) {
                 node.description = importedRole;
-                provenance.put("professional.roles", source);
+                provenance.put("professional.roles", normalizedSource);
             }
-            if (p.seniority() != null && shouldReplaceScalarField(provenance, "professional.seniority", source, sdString(sd, "seniority"))) {
-                putWithProvenance(sd, provenance, "seniority", p.seniority().name(), "professional.seniority", source);
+            if (p.seniority() != null && shouldReplaceScalarField(provenance, "professional.seniority", normalizedSource, sdString(sd, "seniority"))) {
+                putWithProvenance(sd, provenance, "seniority", p.seniority().name(), "professional.seniority", normalizedSource);
             }
             if (hasValue(p.industries())) {
                 List<String> mergedIndustries = mergeStringLists(
                         splitCommaSeparated(sdString(sd, "industries")),
                         p.industries(),
                         provenance.get("professional.industries"),
-                        source,
+                        normalizedSource,
                         ProfileSchema.MAX_INDUSTRIES,
                         ProfileSchema.MAX_INDUSTRY_LENGTH
                 );
-                if (hasValue(mergedIndustries) && shouldReplaceScalarField(provenance, "professional.industries", source, sdString(sd, "industries"))) {
-                    putWithProvenance(sd, provenance, "industries", String.join(",", mergedIndustries), "professional.industries", source);
+                if (hasValue(mergedIndustries) && shouldReplaceScalarField(provenance, "professional.industries", normalizedSource, sdString(sd, "industries"))) {
+                    putWithProvenance(sd, provenance, "industries", String.join(",", mergedIndustries), "professional.industries", normalizedSource);
                 }
             }
             if (hasValue(p.skillsTechnical())) {
@@ -168,13 +229,13 @@ public class ProfileService {
                         node.tags,
                         p.skillsTechnical(),
                         provenance.get("professional.skills_technical"),
-                        source,
+                        normalizedSource,
                         ProfileSchema.MAX_SKILLS_TECHNICAL,
                         ProfileSchema.MAX_SKILL_TECHNICAL_LENGTH
                 );
                 if (hasValue(mergedSkills)) {
                     node.tags = new ArrayList<>(mergedSkills);
-                    provenance.put("professional.skills_technical", source);
+                    provenance.put("professional.skills_technical", normalizedSource);
                 }
             }
             if (hasValue(p.skillsSoft())) {
@@ -182,12 +243,12 @@ public class ProfileService {
                         sdList(sd, "skills_soft"),
                         p.skillsSoft(),
                         provenance.get("professional.skills_soft"),
-                        source,
+                        normalizedSource,
                         ProfileSchema.MAX_SKILLS_SOFT,
                         ProfileSchema.MAX_SKILL_SOFT_LENGTH
                 );
                 if (hasValue(mergedSoftSkills)) {
-                    putWithProvenance(sd, provenance, "skills_soft", mergedSoftSkills, "professional.skills_soft", source);
+                    putWithProvenance(sd, provenance, "skills_soft", mergedSoftSkills, "professional.skills_soft", normalizedSource);
                 }
             }
             if (hasValue(p.toolsAndTech())) {
@@ -195,12 +256,12 @@ public class ProfileService {
                         sdList(sd, "tools_and_tech"),
                         p.toolsAndTech(),
                         provenance.get("professional.tools_and_tech"),
-                        source,
+                        normalizedSource,
                         ProfileSchema.MAX_TOOLS_AND_TECH,
                         ProfileSchema.MAX_TOOL_AND_TECH_LENGTH
                 );
                 if (hasValue(mergedTools)) {
-                    putWithProvenance(sd, provenance, "tools_and_tech", mergedTools, "professional.tools_and_tech", source);
+                    putWithProvenance(sd, provenance, "tools_and_tech", mergedTools, "professional.tools_and_tech", normalizedSource);
                 }
             }
             List<String> normalizedLanguages = normalizeLanguages(p.languagesSpoken());
@@ -209,26 +270,26 @@ public class ProfileService {
                         normalizeLanguages(sdList(sd, "languages_spoken")),
                         normalizedLanguages,
                         provenance.get("professional.languages_spoken"),
-                        source
+                        normalizedSource
                 );
                 if (hasValue(mergedLanguages)) {
-                    putWithProvenance(sd, provenance, "languages_spoken", mergedLanguages, "professional.languages_spoken", source);
+                    putWithProvenance(sd, provenance, "languages_spoken", mergedLanguages, "professional.languages_spoken", normalizedSource);
                 }
             }
-            if (p.workModePreference() != null && shouldReplaceScalarField(provenance, "professional.work_mode_preference", source, sdString(sd, "work_mode"))) {
-                putWithProvenance(sd, provenance, "work_mode", p.workModePreference().name(), "professional.work_mode_preference", source);
+            if (p.workModePreference() != null && shouldReplaceScalarField(provenance, "professional.work_mode_preference", normalizedSource, sdString(sd, "work_mode"))) {
+                putWithProvenance(sd, provenance, "work_mode", p.workModePreference().name(), "professional.work_mode_preference", normalizedSource);
             }
-            if (p.employmentType() != null && shouldReplaceScalarField(provenance, "professional.employment_type", source, sdString(sd, "employment_type"))) {
-                putWithProvenance(sd, provenance, "employment_type", p.employmentType().name(), "professional.employment_type", source);
+            if (p.employmentType() != null && shouldReplaceScalarField(provenance, "professional.employment_type", normalizedSource, sdString(sd, "employment_type"))) {
+                putWithProvenance(sd, provenance, "employment_type", p.employmentType().name(), "professional.employment_type", normalizedSource);
             }
         }
 
         if (selectedFields.contacts() != null) {
             var c = selectedFields.contacts();
-            if (hasText(c.slackHandle())) { putWithProvenance(sd, provenance, "slack_handle", normalizeText(c.slackHandle()), "contacts.slack_handle", source); }
-            if (hasText(c.telegramHandle())) { putWithProvenance(sd, provenance, "telegram_handle", normalizeText(c.telegramHandle()), "contacts.telegram_handle", source); }
-            if (hasText(c.mobilePhone())) { putWithProvenance(sd, provenance, "mobile_phone", normalizeText(c.mobilePhone()), "contacts.mobile_phone", source); }
-            if (hasText(c.linkedinUrl())) { putWithProvenance(sd, provenance, "linkedin_url", c.linkedinUrl().trim(), "contacts.linkedin_url", source); }
+            if (hasText(c.slackHandle())) { putWithProvenance(sd, provenance, "slack_handle", normalizeText(c.slackHandle()), "contacts.slack_handle", normalizedSource); }
+            if (hasText(c.telegramHandle())) { putWithProvenance(sd, provenance, "telegram_handle", normalizeText(c.telegramHandle()), "contacts.telegram_handle", normalizedSource); }
+            if (hasText(c.mobilePhone())) { putWithProvenance(sd, provenance, "mobile_phone", normalizeText(c.mobilePhone()), "contacts.mobile_phone", normalizedSource); }
+            if (hasText(c.linkedinUrl())) { putWithProvenance(sd, provenance, "linkedin_url", c.linkedinUrl().trim(), "contacts.linkedin_url", normalizedSource); }
         }
 
         if (selectedFields.interestsProfessional() != null) {
@@ -238,12 +299,12 @@ public class ProfileService {
                         sdList(sd, "learning_areas"),
                         ip.learningAreas(),
                         provenance.get("interests_professional.learning_areas"),
-                        source,
+                        normalizedSource,
                         ProfileSchema.MAX_LEARNING_AREAS,
                         ProfileSchema.MAX_LEARNING_AREA_LENGTH
                 );
                 if (hasValue(mergedLearningAreas)) {
-                    putWithProvenance(sd, provenance, "learning_areas", mergedLearningAreas, "interests_professional.learning_areas", source);
+                    putWithProvenance(sd, provenance, "learning_areas", mergedLearningAreas, "interests_professional.learning_areas", normalizedSource);
                 }
             }
             if (hasValue(ip.projectTypes())) {
@@ -251,38 +312,38 @@ public class ProfileService {
                         sdList(sd, "project_types"),
                         ip.projectTypes(),
                         provenance.get("interests_professional.project_types"),
-                        source,
+                        normalizedSource,
                         ProfileSchema.MAX_PROJECT_TYPES,
                         ProfileSchema.MAX_PROJECT_TYPE_LENGTH
                 );
                 if (hasValue(mergedProjectTypes)) {
-                    putWithProvenance(sd, provenance, "project_types", mergedProjectTypes, "interests_professional.project_types", source);
+                    putWithProvenance(sd, provenance, "project_types", mergedProjectTypes, "interests_professional.project_types", normalizedSource);
                 }
             }
         }
 
         if (selectedFields.personal() != null) {
             var pe = selectedFields.personal();
-            if (hasValue(pe.hobbies())) { putWithProvenance(sd, provenance, "hobbies", pe.hobbies(), "personal.hobbies", source); }
-            if (hasValue(pe.sports())) { putWithProvenance(sd, provenance, "sports", pe.sports(), "personal.sports", source); }
-            if (hasValue(pe.education())) { putWithProvenance(sd, provenance, "education", pe.education(), "personal.education", source); }
-            if (hasValue(pe.causes())) { putWithProvenance(sd, provenance, "causes", pe.causes(), "personal.causes", source); }
-            if (hasValue(pe.personalityTags())) { putWithProvenance(sd, provenance, "personality_tags", pe.personalityTags(), "personal.personality_tags", source); }
-            if (hasValue(pe.musicGenres())) { putWithProvenance(sd, provenance, "music_genres", pe.musicGenres(), "personal.music_genres", source); }
-            if (hasValue(pe.bookGenres())) { putWithProvenance(sd, provenance, "book_genres", pe.bookGenres(), "personal.book_genres", source); }
+            if (hasValue(pe.hobbies())) { putWithProvenance(sd, provenance, "hobbies", pe.hobbies(), "personal.hobbies", normalizedSource); }
+            if (hasValue(pe.sports())) { putWithProvenance(sd, provenance, "sports", pe.sports(), "personal.sports", normalizedSource); }
+            if (hasValue(pe.education())) { putWithProvenance(sd, provenance, "education", pe.education(), "personal.education", normalizedSource); }
+            if (hasValue(pe.causes())) { putWithProvenance(sd, provenance, "causes", pe.causes(), "personal.causes", normalizedSource); }
+            if (hasValue(pe.personalityTags())) { putWithProvenance(sd, provenance, "personality_tags", pe.personalityTags(), "personal.personality_tags", normalizedSource); }
+            if (hasValue(pe.musicGenres())) { putWithProvenance(sd, provenance, "music_genres", pe.musicGenres(), "personal.music_genres", normalizedSource); }
+            if (hasValue(pe.bookGenres())) { putWithProvenance(sd, provenance, "book_genres", pe.bookGenres(), "personal.book_genres", normalizedSource); }
         }
 
         if (selectedFields.geography() != null) {
             var g = selectedFields.geography();
-            if (hasText(g.country()) && shouldReplaceScalarField(provenance, "geography.country", source, node.country)) {
+            if (hasText(g.country()) && shouldReplaceScalarField(provenance, "geography.country", normalizedSource, node.country)) {
                 node.country = g.country();
-                provenance.put("geography.country", source);
+                provenance.put("geography.country", normalizedSource);
             }
-            if (hasText(g.city()) && shouldReplaceScalarField(provenance, "geography.city", source, sdString(sd, "city"))) {
-                putWithProvenance(sd, provenance, "city", g.city(), "geography.city", source);
+            if (hasText(g.city()) && shouldReplaceScalarField(provenance, "geography.city", normalizedSource, sdString(sd, "city"))) {
+                putWithProvenance(sd, provenance, "city", g.city(), "geography.city", normalizedSource);
             }
-            if (hasText(g.timezone()) && shouldReplaceScalarField(provenance, "geography.timezone", source, sdString(sd, "timezone"))) {
-                putWithProvenance(sd, provenance, "timezone", g.timezone(), "geography.timezone", source);
+            if (hasText(g.timezone()) && shouldReplaceScalarField(provenance, "geography.timezone", normalizedSource, sdString(sd, "timezone"))) {
+                putWithProvenance(sd, provenance, "timezone", g.timezone(), "geography.timezone", normalizedSource);
             }
         }
 
@@ -293,7 +354,22 @@ public class ProfileService {
         applyEmbeddingIfConsented(node, userId);
         persistNode(node);
 
-        audit.log(userId, "PROFILE_SELECTIVE_IMPORT", "peoplemesh_selective_import_" + source);
+        audit.log(userId, "PROFILE_SELECTIVE_IMPORT", "peoplemesh_selective_import_" + normalizedSource);
+    }
+
+    private ProfileSchema toProfileSchema(JsonNode mergedNode) {
+        try {
+            return objectMapper.treeToValue(mergedNode, ProfileSchema.class);
+        } catch (JsonProcessingException e) {
+            throw new ValidationBusinessException("Invalid merge patch payload");
+        }
+    }
+
+    private void validatePatchedSchema(ProfileSchema schema) {
+        Set<ConstraintViolation<ProfileSchema>> violations = validator.validate(schema);
+        if (!violations.isEmpty()) {
+            throw new ConstraintViolationException(violations);
+        }
     }
 
     // === Node <-> Schema conversion ===
@@ -315,9 +391,9 @@ public class ProfileService {
                 new ProfileSchema.ConsentInfo(true, node.createdAt,
                         List.of("professional_matching"), 365, true),
                 new ProfileSchema.ProfessionalInfo(
-                        roles != null ? List.of(roles.split(",")) : null,
+                        hasText(roles) ? List.of(roles.split(",")) : null,
                         parseEnum(Seniority.class, seniority),
-                        industries != null ? List.of(industries.split(",")) : null,
+                        hasText(industries) ? List.of(industries.split(",")) : null,
                         node.tags, sdList(sd, "skills_soft"), sdList(sd, "tools_and_tech"),
                         normalizeLanguages(sdList(sd, "languages_spoken")),
                         parseEnum(WorkMode.class, sdString(sd, "work_mode")),
@@ -359,75 +435,287 @@ public class ProfileService {
 
     // === Schema -> Node ===
 
-    private void applySchemaToNode(MeshNode node, ProfileSchema schema) {
+    private void applySchemaToNode(MeshNode node, ProfileSchema schema, boolean replaceNulls) {
         Map<String, Object> sd = node.structuredData != null
                 ? new LinkedHashMap<>(node.structuredData) : new LinkedHashMap<>();
+        Map<String, String> provenance = extractProvenance(sd);
 
-        if (schema.profileVersion() != null) sd.put("profile_version", schema.profileVersion());
+        if (schema.profileVersion() != null) {
+            sd.put("profile_version", schema.profileVersion());
+        } else if (replaceNulls) {
+            removeStructuredField(sd, provenance, "profile_version", null);
+        }
 
         if (schema.professional() != null) {
             var p = schema.professional();
-            if (p.roles() != null) node.description = String.join(",", p.roles());
-            if (p.seniority() != null) sd.put("seniority", p.seniority().name());
-            if (p.industries() != null) sd.put("industries", String.join(",", p.industries()));
-            if (p.skillsTechnical() != null) node.tags = new ArrayList<>(p.skillsTechnical());
-            if (p.skillsSoft() != null) sd.put("skills_soft", p.skillsSoft());
-            if (p.toolsAndTech() != null) sd.put("tools_and_tech", p.toolsAndTech());
+            if (p.roles() != null) {
+                node.description = String.join(",", p.roles());
+            } else if (replaceNulls) {
+                node.description = "";
+                provenance.remove("professional.roles");
+            }
+
+            if (p.seniority() != null) {
+                sd.put("seniority", p.seniority().name());
+            } else if (replaceNulls) {
+                removeStructuredField(sd, provenance, "seniority", "professional.seniority");
+            }
+
+            if (p.industries() != null) {
+                sd.put("industries", String.join(",", p.industries()));
+            } else if (replaceNulls) {
+                removeStructuredField(sd, provenance, "industries", "professional.industries");
+            }
+
+            if (p.skillsTechnical() != null) {
+                node.tags = new ArrayList<>(p.skillsTechnical());
+            } else if (replaceNulls) {
+                node.tags = new ArrayList<>();
+                provenance.remove("professional.skills_technical");
+            }
+
+            if (p.skillsSoft() != null) {
+                sd.put("skills_soft", p.skillsSoft());
+            } else if (replaceNulls) {
+                removeStructuredField(sd, provenance, "skills_soft", "professional.skills_soft");
+            }
+
+            if (p.toolsAndTech() != null) {
+                sd.put("tools_and_tech", p.toolsAndTech());
+            } else if (replaceNulls) {
+                removeStructuredField(sd, provenance, "tools_and_tech", "professional.tools_and_tech");
+            }
+
             List<String> normalizedLanguages = normalizeLanguages(p.languagesSpoken());
-            if (normalizedLanguages != null) sd.put("languages_spoken", normalizedLanguages);
-            if (p.workModePreference() != null) sd.put("work_mode", p.workModePreference().name());
-            if (p.employmentType() != null) sd.put("employment_type", p.employmentType().name());
+            if (normalizedLanguages != null) {
+                sd.put("languages_spoken", normalizedLanguages);
+            } else if (replaceNulls && p.languagesSpoken() == null) {
+                removeStructuredField(sd, provenance, "languages_spoken", "professional.languages_spoken");
+            }
+
+            if (p.workModePreference() != null) {
+                sd.put("work_mode", p.workModePreference().name());
+            } else if (replaceNulls) {
+                removeStructuredField(sd, provenance, "work_mode", "professional.work_mode_preference");
+            }
+
+            if (p.employmentType() != null) {
+                sd.put("employment_type", p.employmentType().name());
+            } else if (replaceNulls) {
+                removeStructuredField(sd, provenance, "employment_type", "professional.employment_type");
+            }
+        } else if (replaceNulls) {
+            clearProfessionalFields(node, sd, provenance);
         }
 
         if (schema.contacts() != null) {
             var c = schema.contacts();
-            if (c.slackHandle() != null) sd.put("slack_handle", c.slackHandle());
-            if (c.telegramHandle() != null) sd.put("telegram_handle", c.telegramHandle());
-            if (c.mobilePhone() != null) sd.put("mobile_phone", c.mobilePhone());
-            if (c.linkedinUrl() != null) sd.put("linkedin_url", c.linkedinUrl().trim());
+            if (c.slackHandle() != null) {
+                sd.put("slack_handle", c.slackHandle());
+            } else if (replaceNulls) {
+                removeStructuredField(sd, provenance, "slack_handle", "contacts.slack_handle");
+            }
+            if (c.telegramHandle() != null) {
+                sd.put("telegram_handle", c.telegramHandle());
+            } else if (replaceNulls) {
+                removeStructuredField(sd, provenance, "telegram_handle", "contacts.telegram_handle");
+            }
+            if (c.mobilePhone() != null) {
+                sd.put("mobile_phone", c.mobilePhone());
+            } else if (replaceNulls) {
+                removeStructuredField(sd, provenance, "mobile_phone", "contacts.mobile_phone");
+            }
+            if (c.linkedinUrl() != null) {
+                sd.put("linkedin_url", c.linkedinUrl().trim());
+            } else if (replaceNulls) {
+                removeStructuredField(sd, provenance, "linkedin_url", "contacts.linkedin_url");
+            }
+        } else if (replaceNulls) {
+            clearContactFields(sd, provenance);
         }
 
         if (schema.interestsProfessional() != null) {
             var ip = schema.interestsProfessional();
-            if (ip.learningAreas() != null) sd.put("learning_areas", ip.learningAreas());
-            if (ip.projectTypes() != null) sd.put("project_types", ip.projectTypes());
+            if (ip.learningAreas() != null) {
+                sd.put("learning_areas", ip.learningAreas());
+            } else if (replaceNulls) {
+                removeStructuredField(sd, provenance, "learning_areas", "interests_professional.learning_areas");
+            }
+            if (ip.projectTypes() != null) {
+                sd.put("project_types", ip.projectTypes());
+            } else if (replaceNulls) {
+                removeStructuredField(sd, provenance, "project_types", "interests_professional.project_types");
+            }
+        } else if (replaceNulls) {
+            clearProfessionalInterestFields(sd, provenance);
         }
 
         if (schema.personal() != null) {
             var pe = schema.personal();
-            if (pe.hobbies() != null) sd.put("hobbies", pe.hobbies());
-            if (pe.sports() != null) sd.put("sports", pe.sports());
-            if (pe.education() != null) sd.put("education", pe.education());
-            if (pe.causes() != null) sd.put("causes", pe.causes());
-            if (pe.personalityTags() != null) sd.put("personality_tags", pe.personalityTags());
-            if (pe.musicGenres() != null) sd.put("music_genres", pe.musicGenres());
-            if (pe.bookGenres() != null) sd.put("book_genres", pe.bookGenres());
+            if (pe.hobbies() != null) {
+                sd.put("hobbies", pe.hobbies());
+            } else if (replaceNulls) {
+                removeStructuredField(sd, provenance, "hobbies", "personal.hobbies");
+            }
+            if (pe.sports() != null) {
+                sd.put("sports", pe.sports());
+            } else if (replaceNulls) {
+                removeStructuredField(sd, provenance, "sports", "personal.sports");
+            }
+            if (pe.education() != null) {
+                sd.put("education", pe.education());
+            } else if (replaceNulls) {
+                removeStructuredField(sd, provenance, "education", "personal.education");
+            }
+            if (pe.causes() != null) {
+                sd.put("causes", pe.causes());
+            } else if (replaceNulls) {
+                removeStructuredField(sd, provenance, "causes", "personal.causes");
+            }
+            if (pe.personalityTags() != null) {
+                sd.put("personality_tags", pe.personalityTags());
+            } else if (replaceNulls) {
+                removeStructuredField(sd, provenance, "personality_tags", "personal.personality_tags");
+            }
+            if (pe.musicGenres() != null) {
+                sd.put("music_genres", pe.musicGenres());
+            } else if (replaceNulls) {
+                removeStructuredField(sd, provenance, "music_genres", "personal.music_genres");
+            }
+            if (pe.bookGenres() != null) {
+                sd.put("book_genres", pe.bookGenres());
+            } else if (replaceNulls) {
+                removeStructuredField(sd, provenance, "book_genres", "personal.book_genres");
+            }
+        } else if (replaceNulls) {
+            clearPersonalFields(sd, provenance);
         }
 
         if (schema.geography() != null) {
             var g = schema.geography();
-            if (g.country() != null) node.country = g.country();
-            if (g.city() != null) sd.put("city", g.city());
-            if (g.timezone() != null) sd.put("timezone", g.timezone());
+            if (g.country() != null) {
+                node.country = g.country();
+            } else if (replaceNulls) {
+                node.country = null;
+                provenance.remove("geography.country");
+            }
+            if (g.city() != null) {
+                sd.put("city", g.city());
+            } else if (replaceNulls) {
+                removeStructuredField(sd, provenance, "city", "geography.city");
+            }
+            if (g.timezone() != null) {
+                sd.put("timezone", g.timezone());
+            } else if (replaceNulls) {
+                removeStructuredField(sd, provenance, "timezone", "geography.timezone");
+            }
+        } else if (replaceNulls) {
+            clearGeographyFields(node, sd, provenance);
         }
 
-        if (schema.fieldProvenance() != null) {
-            @SuppressWarnings("unchecked")
-            Map<String, String> prov = sd.containsKey("field_provenance")
-                    ? new HashMap<>((Map<String, String>) sd.get("field_provenance"))
-                    : new HashMap<>();
-            prov.putAll(schema.fieldProvenance());
-            sd.put("field_provenance", prov);
+        if (!replaceNulls && schema.fieldProvenance() != null) {
+            provenance.putAll(schema.fieldProvenance());
+        } else if (replaceNulls && schema.fieldProvenance() == null) {
+            provenance.clear();
         }
 
         if (schema.identity() != null) {
             var id = schema.identity();
             if (id.birthDate() != null) {
                 sd.put("birth_date", id.birthDate().trim());
+            } else if (replaceNulls) {
+                removeStructuredField(sd, provenance, "birth_date", "identity.birth_date");
             }
+        } else if (replaceNulls) {
+            clearIdentityFields(sd, provenance);
+        }
+
+        if (provenance.isEmpty()) {
+            sd.remove("field_provenance");
+        } else {
+            sd.put("field_provenance", provenance);
         }
 
         node.structuredData = sd;
+    }
+
+    private static void removeStructuredField(
+            Map<String, Object> structuredData,
+            Map<String, String> provenance,
+            String field,
+            String provenanceField
+    ) {
+        structuredData.remove(field);
+        if (provenanceField != null) {
+            provenance.remove(provenanceField);
+        }
+    }
+
+    private static void clearProfessionalFields(
+            MeshNode node,
+            Map<String, Object> structuredData,
+            Map<String, String> provenance
+    ) {
+        node.description = "";
+        node.tags = new ArrayList<>();
+        provenance.remove("professional.roles");
+        provenance.remove("professional.skills_technical");
+        removeStructuredField(structuredData, provenance, "seniority", "professional.seniority");
+        removeStructuredField(structuredData, provenance, "industries", "professional.industries");
+        removeStructuredField(structuredData, provenance, "skills_soft", "professional.skills_soft");
+        removeStructuredField(structuredData, provenance, "tools_and_tech", "professional.tools_and_tech");
+        removeStructuredField(structuredData, provenance, "languages_spoken", "professional.languages_spoken");
+        removeStructuredField(structuredData, provenance, "work_mode", "professional.work_mode_preference");
+        removeStructuredField(structuredData, provenance, "employment_type", "professional.employment_type");
+    }
+
+    private static void clearContactFields(
+            Map<String, Object> structuredData,
+            Map<String, String> provenance
+    ) {
+        removeStructuredField(structuredData, provenance, "slack_handle", "contacts.slack_handle");
+        removeStructuredField(structuredData, provenance, "telegram_handle", "contacts.telegram_handle");
+        removeStructuredField(structuredData, provenance, "mobile_phone", "contacts.mobile_phone");
+        removeStructuredField(structuredData, provenance, "linkedin_url", "contacts.linkedin_url");
+    }
+
+    private static void clearProfessionalInterestFields(
+            Map<String, Object> structuredData,
+            Map<String, String> provenance
+    ) {
+        removeStructuredField(structuredData, provenance, "learning_areas", "interests_professional.learning_areas");
+        removeStructuredField(structuredData, provenance, "project_types", "interests_professional.project_types");
+    }
+
+    private static void clearPersonalFields(
+            Map<String, Object> structuredData,
+            Map<String, String> provenance
+    ) {
+        removeStructuredField(structuredData, provenance, "hobbies", "personal.hobbies");
+        removeStructuredField(structuredData, provenance, "sports", "personal.sports");
+        removeStructuredField(structuredData, provenance, "education", "personal.education");
+        removeStructuredField(structuredData, provenance, "causes", "personal.causes");
+        removeStructuredField(structuredData, provenance, "personality_tags", "personal.personality_tags");
+        removeStructuredField(structuredData, provenance, "music_genres", "personal.music_genres");
+        removeStructuredField(structuredData, provenance, "book_genres", "personal.book_genres");
+    }
+
+    private static void clearGeographyFields(
+            MeshNode node,
+            Map<String, Object> structuredData,
+            Map<String, String> provenance
+    ) {
+        node.country = null;
+        provenance.remove("geography.country");
+        removeStructuredField(structuredData, provenance, "city", "geography.city");
+        removeStructuredField(structuredData, provenance, "timezone", "geography.timezone");
+    }
+
+    private static void clearIdentityFields(
+            Map<String, Object> structuredData,
+            Map<String, String> provenance
+    ) {
+        removeStructuredField(structuredData, provenance, "birth_date", "identity.birth_date");
     }
 
     // === Helpers ===

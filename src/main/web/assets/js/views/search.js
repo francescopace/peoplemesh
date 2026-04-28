@@ -118,6 +118,9 @@ export async function renderSearch(container) {
       const pageResults = page.results || [];
       if (!lastParsedQuery && page.parsedQuery) {
         lastParsedQuery = page.parsedQuery;
+        // After the first prompt parse, keep paginated requests on /matches
+        // so "load more" does not trigger another LLM parse.
+        activeBackendMode = "matches";
         const autoType = inferAutoTypeFromParsedQuery(lastParsedQuery);
         if (autoType && RESULT_TYPE_TABS.some((t) => t.id === autoType)) {
           activeTypeFilter = autoType;

@@ -56,6 +56,27 @@ describe("renderBrandElement()", () => {
     const i = icon.querySelector("i");
     expect(i.className).toContain("fa-network-wired");
   });
+
+  it("renders organization text outside the link", () => {
+    const element = renderBrandElement({
+      organizationName: "Acme Corp",
+      organizationClass: "brand-organization",
+    });
+    const link = element.querySelector("a");
+    const organization = element.querySelector(".brand-organization");
+    expect(link).not.toBeNull();
+    expect(organization).not.toBeNull();
+    expect(organization.textContent).toBe("| Acme Corp");
+    expect(link.textContent).not.toContain("Acme Corp");
+  });
+
+  it("does not render organization text when value is blank", () => {
+    const element = renderBrandElement({
+      organizationName: "   ",
+      organizationClass: "brand-organization",
+    });
+    expect(element.querySelector(".brand-organization")).toBeNull();
+  });
 });
 
 describe("renderBrand()", () => {

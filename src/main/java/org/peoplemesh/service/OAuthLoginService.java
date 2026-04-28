@@ -3,6 +3,7 @@ package org.peoplemesh.service;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
+import org.peoplemesh.domain.dto.AuthProvidersDto;
 import org.peoplemesh.domain.dto.OidcSubject;
 import org.peoplemesh.domain.dto.ProfileSchema;
 
@@ -10,7 +11,6 @@ import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Map;
 
 @ApplicationScoped
 public class OAuthLoginService {
@@ -28,14 +28,15 @@ public class OAuthLoginService {
     @Inject
     OAuthCallbackService oAuthCallbackService;
 
-    public Map<String, Object> providers() {
+    public AuthProvidersDto providers() {
         List<String> loginProviders = PROVIDER_ORDER.stream()
                 .filter(tokenExchangeService::isLoginEnabled)
                 .toList();
-        List<String> configuredProviders = PROVIDER_ORDER.stream()
+        List<String> importProviders = PROVIDER_ORDER.stream()
                 .filter(tokenExchangeService::isProviderEnabled)
+                .filter(provider -> !tokenExchangeService.isLoginEnabled(provider))
                 .toList();
-        return Map.of("providers", loginProviders, "configured", configuredProviders);
+        return new AuthProvidersDto(loginProviders, importProviders);
     }
 
     public LoginOutcome login(String provider, String intent, String callbackUri) {

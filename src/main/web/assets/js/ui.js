@@ -132,7 +132,8 @@ export function toast(message, variant = "info", duration = 4000) {
     _toastContainer = el("div", { className: "toast-container", "aria-live": "polite" });
     document.body.appendChild(_toastContainer);
   }
-  const t = el("div", { className: `toast toast-${variant}` }, message);
+  const t = el("div", { className: `toast toast-${variant}` });
+  t.textContent = message == null ? "" : String(message);
   _toastContainer.appendChild(t);
   requestAnimationFrame(() => t.classList.add("toast-visible"));
   let closed = false;

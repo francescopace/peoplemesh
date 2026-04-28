@@ -69,7 +69,7 @@ PeopleMesh uses a single global `skills.skill_definition` table as the normaliza
 - `usage_count`: synchronous profile reference counter
 - `embedding`: semantic vector for skill similarity
 
-On profile save (`PUT /api/v1/me` and import-apply), the backend:
+On profile save (`PUT /api/v1/me`, `PATCH /api/v1/me`, and import-apply), the backend:
 
 1. Reads previous profile skill set (`tags`, `skills_soft`, `tools_and_tech`).
 2. Normalizes incoming skill terms through dictionary name/alias lookup.

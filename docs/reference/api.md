@@ -24,10 +24,10 @@ Public endpoints for OAuth login flow.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/v1/auth/providers` | List enabled OAuth providers |
 | GET | `/api/v1/auth/login/{provider}` | Start OAuth login (Google, Microsoft, GitHub) |
 | GET | `/api/v1/auth/callback/{provider}` | OAuth callback — sets session cookie on login success, or redirects import popups to frontend import route |
 | GET | `/api/v1/auth/callback/{provider}/import-finalize` | Finalize OAuth import and return preview payload (`imported`, `source`) |
+| GET | `/api/v1/auth/identity` | Lightweight current identity payload for frontend bootstrap |
 | POST | `/api/v1/auth/logout` | End session — clears session cookie |
 
 **Access:** `@PermitAll` — no session required.
@@ -37,6 +37,24 @@ Public endpoints for OAuth login flow.
 For `intent=profile_import`, OAuth callback behavior is two-step:
 - `GET /api/v1/auth/callback/{provider}` redirects to frontend popup route `/#/oauth/import?...`.
 - The frontend popup calls `GET /api/v1/auth/callback/{provider}/import-finalize` to fetch import preview data and then notifies the opener window.
+
+---
+
+## Info
+
+Public bootstrap metadata for branding/legal details and OAuth provider availability.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/info` | Organization metadata and auth provider availability |
+
+**Access:** `@PermitAll` — no session required.
+
+`GET /api/v1/info` response includes:
+- Organization fields (`organizationName`, `contactEmail`, `dpoName`, `dpoEmail`, `dataLocation`, `governingLaw`).
+- `authProviders` object with:
+  - `loginProviders`: providers enabled for interactive login.
+  - `profileImportProviders`: providers enabled for profile import only.
 
 ---
 
@@ -50,6 +68,7 @@ Endpoints for the authenticated user to manage their own profile, privacy, and d
 |--------|------|-------------|
 | GET | `/api/v1/me` | Get profile |
 | PUT | `/api/v1/me` | Update profile |
+| PATCH | `/api/v1/me` | Partially update profile with JSON Merge Patch |
 | POST | `/api/v1/me/import-apply` | Apply selected fields from an import preview |
 | POST | `/api/v1/me/cv-import` | Import CV (Docling + LLM extraction) |
 
@@ -57,10 +76,14 @@ Endpoints for the authenticated user to manage their own profile, privacy, and d
 
 | Endpoint | Parameters |
 |----------|-----------|
-| `GET /api/v1/me` | `?identity_only=true` — lightweight session check, returns identity payload only |
+| `GET /api/v1/me` | No query params. Returns full profile for current user or `204` when anonymous |
 | `PUT /api/v1/me` | Body: `ProfileSchema` (JSON). Identity updates are limited to `identity.birth_date`; other identity fields are OAuth-managed |
+| `PATCH /api/v1/me` | Body: JSON Merge Patch (`application/merge-patch+json`). RFC 7396 semantics: object keys overwrite, arrays replace fully, `null` clears mapped fields |
 | `POST /api/v1/me/import-apply` | Body: partial `ProfileSchema` (JSON). `?source` (required, validated pattern) |
 | `POST /api/v1/me/cv-import` | Body: multipart file upload (`multipart/form-data`, field `file`) |
+
+`GET /api/v1/auth/identity` returns a flat payload:
+- `user_id`, `provider`, `entitlements`, `display_name`, `photo_url`.
 
 Import-apply merge behavior:
 - For list fields (skills, tools, industries, languages, professional interests): the server persists the array values sent by the client — merge is client-driven.
@@ -115,7 +138,7 @@ Endpoints for finding similar profiles and nodes.
 
 | Endpoint | Parameters |
 |----------|-----------|
-| `POST /api/v1/matches/prompt` | Body: `SearchRequest` (JSON, `query` only). `?limit={1..100}`, `?offset={>=0}` |
+| `POST /api/v1/matches/prompt` | Body: `SearchRequest` (JSON, `query` only). Optional `?limit={1..100}`. `offset` is not supported |
 | `POST /api/v1/matches` | Body: `SearchQuery` (JSON). `?type`, `?country` (validated), `?limit={1..100}`, `?offset={>=0}` |
 | `GET /api/v1/matches/me` | `?type`, `?country`, `?limit={1..100}`, `?offset={>=0}` |
 | `GET /api/v1/matches/{nodeId}` | `?type`, `?country`. `{nodeId}` is a UUID |
@@ -136,7 +159,7 @@ Notes:
 - Query parsing is LLM-first and fail-fast (invalid/unparseable structured output returns an error, with no heuristic fallback).
 - `result_scope` is inferred (`all`, `people`, `jobs`, `communities`, `events`, `projects`, `groups`, `unknown`) and used for initial client intent.
 - Prompt and structured matching both include geography score/reason in breakdown.
-- Prompt and schema endpoints support `limit/offset`; defaults apply when omitted (`limit=10`, `offset=0`).
+- Prompt supports only first-page bootstrap (`limit` only). Use `/api/v1/matches` with `SearchQuery` for paginated follow-up (`limit/offset`).
 - Tuning reference: `peoplemesh.skills.match-threshold` in [configuration.md](configuration.md).
 
 ### My Mesh matching details (`GET /api/v1/matches/me`)

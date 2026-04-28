@@ -59,10 +59,9 @@ public class MatchesResource {
     @Consumes(MediaType.APPLICATION_JSON)
     public Response matchFromPrompt(
             @Valid SearchRequest request,
-            @QueryParam("limit") @Min(1) @Max(100) Integer limit,
-            @QueryParam("offset") @Min(0) Integer offset) {
+            @QueryParam("limit") @Min(1) @Max(100) Integer limit) {
         UUID userId = currentUserService.resolveUserId();
-        SearchResponse result = matchesService.matchFromPrompt(userId, request, limit, offset);
+        SearchResponse result = matchesService.matchFromPrompt(userId, request, limit);
         return Response.ok(result).build();
     }
 

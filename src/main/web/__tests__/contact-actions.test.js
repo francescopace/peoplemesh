@@ -8,36 +8,27 @@ import {
 } from "../assets/js/contact-actions.js";
 
 describe("slackButton()", () => {
-  it("creates an anchor element", () => {
+  it("creates a button element", () => {
     const btn = slackButton("alice");
-    expect(btn.tagName).toBe("A");
+    expect(btn.tagName).toBe("BUTTON");
   });
 
-  it("sets slack:// protocol href", () => {
+  it("copies normalized @handle on click", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+
     const btn = slackButton("alice");
-    expect(btn.getAttribute("href")).toContain("slack://user");
-    expect(btn.getAttribute("href")).toContain("alice");
+    btn.click();
+    expect(writeText).toHaveBeenCalledWith("@alice");
+
+    const btn2 = slackButton("@bob");
+    btn2.click();
+    expect(writeText).toHaveBeenCalledWith("@bob");
   });
 
-  it("strips leading @ from handle", () => {
-    const btn = slackButton("@bob");
-    expect(btn.getAttribute("href")).toContain("bob");
-    expect(btn.getAttribute("href")).not.toContain("@");
-  });
-
-  it("has noopener rel attribute", () => {
-    const btn = slackButton("charlie");
-    expect(btn.getAttribute("rel")).toBe("noopener");
-  });
-
-  it("opens in new tab", () => {
-    const btn = slackButton("dave");
-    expect(btn.getAttribute("target")).toBe("_blank");
-  });
-
-  it("has accessibility label for slack", () => {
+  it("has copy accessibility label", () => {
     const btn = slackButton("eve");
-    expect(btn.getAttribute("aria-label")).toBe("Contact on Slack");
+    expect(btn.getAttribute("aria-label")).toBe("Copy Slack handle");
   });
 });
 
@@ -88,10 +79,10 @@ describe("mobileButton()", () => {
 });
 
 describe("contactFooter()", () => {
-  it("returns element with slack button when handle provided", () => {
+  it("returns element with slack copy button when handle provided", () => {
     const footer = contactFooter("alice", null, null, null);
     expect(footer).not.toBeNull();
-    expect(footer.querySelector("a")).not.toBeNull();
+    expect(footer.querySelector("button[aria-label='Copy Slack handle']")).not.toBeNull();
   });
 
   it("returns element with email button when email provided", () => {

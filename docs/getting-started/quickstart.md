@@ -54,7 +54,7 @@ Notes:
 
 ## First useful endpoints
 
-- `GET /api/v1/auth/providers`
+- `GET /api/v1/info`
 - `GET /api/v1/me`
 - `POST /api/v1/matches/prompt`
 - `POST /mcp`

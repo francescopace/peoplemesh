@@ -76,13 +76,13 @@ class MatchesServiceTest {
         SearchRequest request = new SearchRequest("java");
         SearchResponse expected = new SearchResponse(null, List.of());
         when(nodeRepository.findPublishedUserNode(userId)).thenReturn(Optional.empty());
-        when(searchService.search(userId, "java", null, null, null, 10, 20,
+        when(searchService.search(userId, "java", null, null, null, 10, null,
                 SearchService.MatchContext.empty())).thenReturn(expected);
 
-        SearchResponse result = service.matchFromPrompt(userId, request, 10, 20);
+        SearchResponse result = service.matchFromPrompt(userId, request, 10);
 
         assertEquals(expected, result);
-        verify(searchService).search(userId, "java", null, null, null, 10, 20,
+        verify(searchService).search(userId, "java", null, null, null, 10, null,
                 SearchService.MatchContext.empty());
     }
 

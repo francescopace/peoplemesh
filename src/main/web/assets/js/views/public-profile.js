@@ -104,20 +104,13 @@ async function renderPublicProfileView(container, p, nodeId) {
     idFields.push(labeledField("Birth Date", identity.birth_date, prov["identity.birth_date"]));
   }
   if (contacts.slack_handle) {
-    const handle = contacts.slack_handle.replace(/^@/, "");
-    const slackWrap = el("div", { className: "profile-field" });
-    slackWrap.appendChild(el("div", { className: "profile-field-label" }, "Slack"));
-    const slackLink = el("a", {
-      href: `slack://user?team=&id=${handle}`,
-      target: "_blank",
-      rel: "noopener",
-      style: "display:flex;align-items:center;gap:0.4rem;text-decoration:none;color:inherit",
-    });
-    slackLink.appendChild(document.createTextNode(contacts.slack_handle));
-    const slackValue = el("div", { className: "profile-field-value" });
-    slackValue.appendChild(slackLink);
-    slackWrap.appendChild(slackValue);
-    idFields.push(slackWrap);
+    const clean = String(contacts.slack_handle).replace(/^@/, "").trim();
+    const slackDisplay = clean ? `@${clean}` : String(contacts.slack_handle).trim();
+    idFields.push(labeledField(
+      "Slack",
+      slackDisplay,
+      prov["contacts.slack_handle"] || prov["professional.slack_handle"],
+    ));
   }
   if (contacts.linkedin_url) {
     const linkedinUrl = normalizeLinkedinUrl(contacts.linkedin_url);

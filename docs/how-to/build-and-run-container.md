@@ -110,7 +110,7 @@ For the full list, see [`../reference/configuration.md`](../reference/configurat
 
 - Open `http://localhost:8080`
 - Check health: `GET /q/health`
-- Check auth providers: `GET /api/v1/auth/providers`
+- Check info bootstrap payload: `GET /api/v1/info`
 
 ## Troubleshooting
 
