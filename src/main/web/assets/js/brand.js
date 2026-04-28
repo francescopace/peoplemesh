@@ -8,6 +8,9 @@ export function renderBrandElement({
   iconClass,
   textClass = "",
   text = "PeopleMesh",
+  organizationName = "",
+  organizationClass = "",
+  organizationSeparator = "| ",
 } = {}) {
   const icon = el("span", { className: iconClass, "aria-hidden": "true" },
     el("i", { className: "fa-solid fa-network-wired" })
@@ -20,8 +23,16 @@ export function renderBrandElement({
   if (wrapperTag === "a") linkAttrs.href = href;
   if (ariaLabel) linkAttrs["aria-label"] = ariaLabel;
   const link = el(wrapperTag, linkAttrs, icon, textSpan);
+  const children = [link];
 
-  const wrapper = el("span", { style: "display:inline-flex;align-items:center;white-space:nowrap" }, link);
+  const normalizedOrganizationName = typeof organizationName === "string" ? organizationName.trim() : "";
+  if (normalizedOrganizationName) {
+    const organizationAttrs = organizationClass ? { className: organizationClass } : {};
+    const organizationLabel = `${organizationSeparator}${normalizedOrganizationName}`;
+    children.push(el("span", organizationAttrs, organizationLabel));
+  }
+
+  const wrapper = el("span", { style: "display:inline-flex;align-items:center;white-space:nowrap" }, ...children);
   return wrapper;
 }
 

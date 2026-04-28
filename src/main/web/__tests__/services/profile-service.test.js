@@ -9,7 +9,7 @@ describe("profile-service", () => {
     apiMock = {
       get: vi.fn(),
       post: vi.fn(),
-      put: vi.fn(),
+      patch: vi.fn(),
     };
     vi.doMock("../../assets/js/api.js", () => ({ api: apiMock }));
     service = await import("../../assets/js/services/profile-service.js");
@@ -57,6 +57,19 @@ describe("profile-service", () => {
 
   it("updates profile", async () => {
     await service.updateMyProfile({ identity: { birth_date: "1991-01-01" } });
-    expect(apiMock.put).toHaveBeenCalledWith("/api/v1/me", { identity: { birth_date: "1991-01-01" } });
+    expect(apiMock.patch).toHaveBeenCalledWith(
+      "/api/v1/me",
+      { identity: { birth_date: "1991-01-01" } },
+      { headers: { "Content-Type": "application/merge-patch+json" } }
+    );
+  });
+
+  it("patches profile via merge patch endpoint", async () => {
+    await service.patchMyProfile({ identity: { birth_date: null } });
+    expect(apiMock.patch).toHaveBeenCalledWith(
+      "/api/v1/me",
+      { identity: { birth_date: null } },
+      { headers: { "Content-Type": "application/merge-patch+json" } }
+    );
   });
 });

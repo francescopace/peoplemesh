@@ -1,5 +1,6 @@
 package org.peoplemesh.api.resource;
 
+import io.quarkus.security.identity.SecurityIdentity;
 import jakarta.ws.rs.core.NewCookie;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriInfo;
@@ -10,14 +11,16 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.peoplemesh.api.error.ProblemDetail;
 import org.peoplemesh.config.AppConfig;
+import org.peoplemesh.domain.dto.AuthIdentityResponse;
+import org.peoplemesh.service.AuthIdentityService;
 import org.peoplemesh.domain.dto.ProfileSchema;
 import org.peoplemesh.service.OAuthLoginService;
 import org.peoplemesh.service.SessionService;
 
 import java.net.URI;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -39,25 +42,16 @@ class OAuthLoginResourceTest {
     @Mock
     SessionService sessionService;
     @Mock
+    SecurityIdentity identity;
+    @Mock
+    AuthIdentityService authIdentityService;
+    @Mock
     AppConfig appConfig;
     @Mock
     AppConfig.FrontendConfig frontendConfig;
 
     @InjectMocks
     OAuthLoginResource resource;
-
-    @Test
-    void providers_returnsConfiguredProviderLists() {
-        when(oAuthLoginService.providers()).thenReturn(Map.of(
-                "providers", List.of("google"),
-                "configured", List.of("google", "github")));
-
-        Response response = resource.providers();
-
-        assertEquals(200, response.getStatus());
-        assertEquals(Map.of("providers", List.of("google"), "configured", List.of("google", "github")),
-                response.getEntity());
-    }
 
     @Test
     void login_whenServiceReturnsRedirect_returnsTemporaryRedirect() {
@@ -193,5 +187,31 @@ class OAuthLoginResourceTest {
         assertEquals(0, cookie.getMaxAge());
         assertEquals("/", cookie.getPath());
         assertEquals(false, cookie.isSecure());
+    }
+
+    @Test
+    void getIdentity_whenIdentityResolved_returnsPayload() {
+        AuthIdentityResponse payload = new AuthIdentityResponse(
+                UUID.randomUUID(),
+                "google",
+                new AuthIdentityResponse.EntitlementsInfo(true),
+                "Alice",
+                "https://cdn.example/avatar.png"
+        );
+        when(authIdentityService.resolveCurrentIdentity(identity)).thenReturn(Optional.of(payload));
+
+        Response response = resource.getIdentity();
+
+        assertEquals(200, response.getStatus());
+        assertEquals(payload, response.getEntity());
+    }
+
+    @Test
+    void getIdentity_whenIdentityMissing_returns204() {
+        when(authIdentityService.resolveCurrentIdentity(identity)).thenReturn(Optional.empty());
+
+        Response response = resource.getIdentity();
+
+        assertEquals(204, response.getStatus());
     }
 }

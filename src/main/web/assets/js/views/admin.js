@@ -1,5 +1,5 @@
 import { Auth } from "../auth.js";
-import { el, emptyState, modal, pageHeader, spinner, toast } from "../ui.js";
+import { el, emptyState, modal, spinner, toast } from "../ui.js";
 import { renderSkillsCatalogPanel } from "../components/skills-catalog-panel.js";
 import { getUserFacingErrorMessage } from "../utils/errors.js";
 import { getSystemStatistics } from "../services/admin-service.js";
@@ -13,8 +13,6 @@ export async function renderAdmin(container) {
     container.appendChild(emptyState("You do not have permission to access this page."));
     return;
   }
-
-  container.appendChild(pageHeader("Administration", "System overview"));
 
   const overviewSection = el("section", { className: "stack-4" });
   container.appendChild(overviewSection);

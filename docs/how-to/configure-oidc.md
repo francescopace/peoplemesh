@@ -86,7 +86,7 @@ Use GitHub only for profile/import integration (not as a login provider).
 
 ## Verification
 
-- Call `GET /api/v1/auth/providers` and verify expected providers are listed.
+- Call `GET /api/v1/info` and verify `authProviders.loginProviders` / `authProviders.profileImportProviders` list expected providers.
 - Run one full login flow (`/api/v1/auth/login/{provider}` -> callback).
 - Verify authenticated access to `GET /api/v1/me`.
 

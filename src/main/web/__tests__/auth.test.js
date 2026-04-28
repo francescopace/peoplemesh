@@ -56,11 +56,15 @@ describe("AuthManager", () => {
     expect(sessionStorage.getItem("pm_user")).toBeNull();
   });
 
-  it("init fetches /api/v1/me and sets user", async () => {
+  it("init fetches /api/v1/auth/identity and sets user", async () => {
     const user = { id: "u1", name: "Bob" };
     apiMock.get.mockImplementation((path) => {
-      if (path === "/api/v1/auth/providers") return Promise.resolve({ providers: ["google"], configured: ["google"] });
-      if (path.startsWith("/api/v1/me")) return Promise.resolve(user);
+      if (path === "/api/v1/info") {
+        return Promise.resolve({
+          authProviders: { loginProviders: ["google"], profileImportProviders: [] },
+        });
+      }
+      if (path === "/api/v1/auth/identity") return Promise.resolve(user);
       return Promise.resolve(null);
     });
 
@@ -70,9 +74,13 @@ describe("AuthManager", () => {
     expect(Auth.getUser()).toEqual(user);
   });
 
-  it("init sets user null when /api/v1/me fails", async () => {
+  it("init sets user null when /api/v1/auth/identity fails", async () => {
     apiMock.get.mockImplementation((path) => {
-      if (path === "/api/v1/auth/providers") return Promise.resolve({ providers: [], configured: [] });
+      if (path === "/api/v1/info") {
+        return Promise.resolve({
+          authProviders: { loginProviders: [], profileImportProviders: [] },
+        });
+      }
       return Promise.reject(new Error("401"));
     });
 
@@ -81,8 +89,42 @@ describe("AuthManager", () => {
     expect(Auth.isAuthenticated()).toBe(false);
   });
 
+  it("init consumes flat auth identity payload", async () => {
+    apiMock.get.mockImplementation((path) => {
+      if (path === "/api/v1/info") {
+        return Promise.resolve({
+          authProviders: { loginProviders: ["google"], profileImportProviders: [] },
+        });
+      }
+      return Promise.resolve({
+        user_id: "u-1",
+        provider: "google",
+        entitlements: { is_admin: true },
+        display_name: "Alice Admin",
+        photo_url: "https://cdn.example.com/alice.png",
+      });
+    });
+
+    await Auth.init();
+
+    expect(Auth.getUser()).toEqual({
+      user_id: "u-1",
+      provider: "google",
+      entitlements: { is_admin: true },
+      display_name: "Alice Admin",
+      photo_url: "https://cdn.example.com/alice.png",
+    });
+  });
+
   it("init is idempotent (only runs once)", async () => {
-    apiMock.get.mockResolvedValue({ providers: [], configured: [] });
+    apiMock.get.mockImplementation((path) => {
+      if (path === "/api/v1/info") {
+        return Promise.resolve({
+          authProviders: { loginProviders: [], profileImportProviders: [] },
+        });
+      }
+      return Promise.resolve({ id: "u1" });
+    });
 
     await Auth.init();
     await Auth.init();
@@ -92,15 +134,18 @@ describe("AuthManager", () => {
 
   it("refreshProviders filters against Config.providers", async () => {
     apiMock.get.mockResolvedValue({
-      providers: ["google", "unknown"],
-      configured: ["google", "microsoft"],
+      authProviders: {
+        loginProviders: ["google", "unknown"],
+        profileImportProviders: ["github", "unknown"],
+      },
     });
 
     await Auth.refreshProviders();
 
     expect(Auth.getProviders()).toEqual(["google"]);
-    expect(Auth.isProviderConfigured("google")).toBe(true);
-    expect(Auth.isProviderConfigured("microsoft")).toBe(true);
+    expect(Auth.isProviderConfigured("google")).toBe(false);
+    expect(Auth.isProviderConfigured("github")).toBe(true);
+    expect(Auth.isProviderConfigured("microsoft")).toBe(false);
     expect(Auth.isProviderConfigured("unknown")).toBe(false);
   });
 

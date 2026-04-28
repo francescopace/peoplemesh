@@ -5,18 +5,21 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.peoplemesh.domain.dto.AuthProvidersDto;
 import org.peoplemesh.domain.dto.OidcSubject;
 import org.peoplemesh.domain.dto.ProfileSchema;
 
 import java.net.URI;
-import java.util.Map;
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -34,16 +37,18 @@ class OAuthLoginServiceTest {
     OAuthLoginService service;
 
     @Test
-    void providers_returnsLoginAndConfiguredLists() {
+    void providers_returnsLoginAndProfileImportLists() {
         when(tokenExchangeService.isProviderEnabled("microsoft")).thenReturn(false);
         when(tokenExchangeService.isLoginEnabled("google")).thenReturn(true);
+        when(tokenExchangeService.isLoginEnabled("microsoft")).thenReturn(false);
         when(tokenExchangeService.isProviderEnabled("google")).thenReturn(true);
         when(tokenExchangeService.isProviderEnabled("github")).thenReturn(true);
+        when(tokenExchangeService.isLoginEnabled("github")).thenReturn(false);
 
-        Map<String, Object> result = service.providers();
+        AuthProvidersDto result = service.providers();
 
-        assertTrue(result.containsKey("providers"));
-        assertTrue(result.containsKey("configured"));
+        assertEquals(List.of("google"), result.loginProviders());
+        assertEquals(List.of("github"), result.profileImportProviders());
     }
 
     @Test
@@ -126,6 +131,29 @@ class OAuthLoginServiceTest {
         assertNotNull(outcome.error());
         assertEquals(400, outcome.error().status());
         assertEquals("OAuth callback failed", outcome.error().detail());
+    }
+
+    @Test
+    void callback_errorWithBlankState_returnsBadRequestWithoutStateVerification() {
+        OAuthLoginService.CallbackOutcome outcome = service.callback(
+                "google", "code", " ", "access_denied", "cb", "http://localhost");
+
+        assertNotNull(outcome.error());
+        assertEquals(400, outcome.error().status());
+        verify(sessionService, never()).verifyOAuthState(" ", "google");
+    }
+
+    @Test
+    void callback_importIntent_invalidOrigin_returnsInternalServerError() {
+        SessionService.OAuthStatePayload payload = new SessionService.OAuthStatePayload("profile_import");
+        when(sessionService.verifyOAuthState("state", "google")).thenReturn(payload);
+
+        OAuthLoginService.CallbackOutcome outcome = service.callback(
+                "google", "code", "state", null, "cb", "http:// bad-origin");
+
+        assertNotNull(outcome.error());
+        assertEquals(500, outcome.error().status());
+        assertEquals("Import redirect failed", outcome.error().detail());
     }
 
     @Test
@@ -218,6 +246,43 @@ class OAuthLoginServiceTest {
         assertEquals("github", outcome.source());
         assertEquals(schema, outcome.imported());
         assertNull(outcome.error());
+    }
+
+    @Test
+    void finalizeImportCallback_success_nonGithubProviderUsesProviderSource() {
+        SessionService.OAuthStatePayload payload = new SessionService.OAuthStatePayload("profile_import");
+        ProfileSchema schema = mock(ProfileSchema.class);
+        when(sessionService.verifyOAuthState("state", "google")).thenReturn(payload);
+        when(oAuthCallbackService.handleImport("google", "code", "cb")).thenReturn(schema);
+
+        OAuthLoginService.ImportFinalizeOutcome outcome = service.finalizeImportCallback(
+                "google", "code", "state", "cb");
+
+        assertTrue(outcome.isSuccess());
+        assertEquals("google", outcome.source());
+    }
+
+    @Test
+    void finalizeImportCallback_missingCodeOrState_returnsBadRequest() {
+        OAuthLoginService.ImportFinalizeOutcome outcome = service.finalizeImportCallback(
+                "github", " ", "state", "cb");
+
+        assertNotNull(outcome.error());
+        assertEquals(400, outcome.error().status());
+        assertEquals("Missing code or state", outcome.error().detail());
+    }
+
+    @Test
+    void finalizeImportCallback_invalidState_returnsBadRequest() {
+        when(sessionService.verifyOAuthState("state", "github")).thenReturn(null);
+
+        OAuthLoginService.ImportFinalizeOutcome outcome = service.finalizeImportCallback(
+                "github", "code", "state", "cb");
+
+        assertNotNull(outcome.error());
+        assertEquals(400, outcome.error().status());
+        assertEquals("Invalid or expired state", outcome.error().detail());
+        assertFalse(outcome.isSuccess());
     }
 
     @Test

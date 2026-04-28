@@ -1,7 +1,9 @@
 import { showLoginModal } from "../login-modal.js";
 import { Auth } from "../auth.js";
 import { renderFooter } from "../footer.js";
-import { renderBrand } from "../brand.js";
+import { getOrganizationName } from "../platform-info.js";
+import { bindTopBarUserMenu, renderTopBarUserMenu } from "../top-bar-user-menu.js";
+import { getAuthenticatedTopBarNavItems, renderTopBar, renderTopBarNavLinks } from "../top-bar.js";
 
 const EXAMPLE_QUERIES = [
   "Java developer with Kubernetes experience",
@@ -12,30 +14,27 @@ const EXAMPLE_QUERIES = [
 
 const SECTION_IDS = ["hero", "why"];
 
-export function renderLanding(container) {
+export async function renderLanding(container) {
   const isAuth = Auth.isAuthenticated();
+  const user = isAuth ? Auth.getUser() : null;
+  const organizationName = await getOrganizationName();
+  const topBarUserMenuHtml = isAuth ? await renderTopBarUserMenu() : "";
+  const topBarCenterHtml = isAuth
+    ? renderTopBarNavLinks(getAuthenticatedTopBarNavItems(user))
+    : "";
+  const landingTopBarHtml = renderTopBar({
+    variant: "landing",
+    organizationName,
+    centerHtml: topBarCenterHtml,
+    rightHtml: `
+      <div class="nav-actions">
+        ${isAuth ? topBarUserMenuHtml : `<button class="nav-cta" id="nav-action-btn">Sign In</button>`}
+      </div>
+    `,
+  });
 
   container.innerHTML = `
-    <nav class="landing-nav" id="landing-nav">
-      <div class="container">
-        <div class="nav-left">
-          ${renderBrand({
-            wrapperTag: "div",
-            className: "nav-logo",
-            iconClass: "nav-logo-icon",
-          })}
-        </div>
-        <div class="nav-center"></div>
-        <div class="nav-right">
-          <div class="nav-actions">
-            ${isAuth
-              ? `<a href="#/search" class="nav-cta" id="nav-action-btn">Go to Search</a>`
-              : `<button class="nav-cta" id="nav-action-btn">Sign In</button>`
-            }
-          </div>
-        </div>
-      </div>
-    </nav>
+    ${landingTopBarHtml}
 
     <div class="landing-scroll" id="landing-scroll">
 
@@ -160,7 +159,9 @@ export function renderLanding(container) {
     });
   });
 
-  if (!isAuth) {
+  if (isAuth) {
+    bindTopBarUserMenu(container);
+  } else {
     container.querySelector("#nav-action-btn").addEventListener("click", () => showLoginModal());
   }
 

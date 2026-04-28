@@ -11,13 +11,16 @@ function normalizeContactValue(value) {
 
 export function slackButton(slackHandle) {
   const handle = slackHandle.replace(/^@/, "").trim();
-  return el("a", {
+  const display = handle ? `@${handle}` : String(slackHandle || "").trim();
+  return el("button", {
+    type: "button",
     className: "btn btn-sm btn-secondary",
-    href: `slack://user?team=&id=${handle}`,
-    target: "_blank",
-    rel: "noopener",
-    title: "Contact on Slack",
-    "aria-label": "Contact on Slack",
+    title: "Copy Slack handle",
+    "aria-label": "Copy Slack handle",
+    onClick: () => {
+      navigator.clipboard.writeText(display).catch(() => {});
+      toast("Slack handle copied");
+    },
   },
     el("i", { className: "fa-brands fa-slack", style: "font-size:14px;color:#611f69" })
   );

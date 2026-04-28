@@ -3,8 +3,25 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PeopleMesh | The right match in your mesh</title>
-  <meta name="description" content="PeopleMesh is the AI-powered semantic discovery layer for companies and large organizations. Discover people, opportunities, communities, and projects with privacy-first matching.">
+  <title>PeopleMesh | Semantic discovery for large organizations</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <meta name="description" content="PeopleMesh helps large organizations discover people, internal opportunities, communities, and projects with privacy-first semantic matching.">
+
+  <!-- Facebook Meta Tags -->
+  <meta property="og:url" content="https://peoplemesh.org/">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="PeopleMesh | Semantic discovery for large organizations">
+  <meta property="og:description" content="PeopleMesh helps large organizations discover people, internal opportunities, communities, and projects with privacy-first semantic matching.">
+  <meta property="og:image" content="https://peoplemesh.org/images/peoplemesh.jpg">
+  
+  <!-- Twitter Meta Tags -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta property="twitter:domain" content="peoplemesh.org">
+  <meta property="twitter:url" content="https://peoplemesh.org/">
+  <meta name="twitter:title" content="PeopleMesh | Semantic discovery for large organizations">
+  <meta name="twitter:description" content="PeopleMesh helps large organizations discover people, internal opportunities, communities, and projects with privacy-first semantic matching.">
+  <meta name="twitter:image" content="https://peoplemesh.org/images/peoplemesh.jpg">
+  
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
@@ -45,8 +62,9 @@
           communities, and projects through semantic search that understands context, not just keywords.
         </p>
         <div class="hero-cta">
-          <a class="btn btn-primary" href="https://github.com/francescopace/peoplemesh" target="_blank" rel="noreferrer">Get the code</a>
-          <a class="btn btn-secondary" href="https://github.com/francescopace/peoplemesh/issues" target="_blank" rel="noreferrer">Open an issue</a>
+          <button class="btn btn-primary" type="button" data-open-tour>Quick tour</button>
+          <a class="btn btn-secondary" href="https://hub.docker.com/r/frapax/peoplemesh" target="_blank" rel="noreferrer">Docker image</a>
+          <a class="btn btn-secondary" href="https://github.com/francescopace/peoplemesh" target="_blank" rel="noreferrer">Get the code</a>
         </div>
       </div>
     </section>
@@ -104,18 +122,24 @@
         </div>
         <div class="steps-grid">
           <article class="step-card">
-            <div class="step-number">1</div>
-            <h3>Model the organizational mesh</h3>
+            <div class="step-head">
+              <div class="step-number">1</div>
+              <h3>Model the mesh</h3>
+            </div>
             <p>People, opportunities, communities, projects, and initiatives are represented as connected nodes.</p>
           </article>
           <article class="step-card">
-            <div class="step-number">2</div>
-            <h3>Embed meaning and metadata</h3>
+            <div class="step-head">
+              <div class="step-number">2</div>
+              <h3>Embed meaning</h3>
+            </div>
             <p>Each node is transformed into vectors with contextual metadata to capture semantic intent.</p>
           </article>
           <article class="step-card">
-            <div class="step-number">3</div>
-            <h3>Rank relevant matches</h3>
+            <div class="step-head">
+              <div class="step-number">3</div>
+              <h3>Rank best matches</h3>
+            </div>
             <p>User queries are embedded in the same space, then ranked to return the most relevant results.</p>
           </article>
         </div>
@@ -135,14 +159,14 @@
             <p>Consent controls, retention policies, and GDPR-aligned workflows are built into the product direction.</p>
           </article>
           <article class="feature-card">
+            <div class="feature-icon feature-icon-accent"><i class="fa-solid fa-layer-group" aria-hidden="true"></i></div>
+            <h3>MCP for AI workflows</h3>
+            <p>Expose PeopleMesh through a Model Context Protocol server so assistants and tools can run semantic discovery with standard, secure integration patterns.</p>
+          </article>
+          <article class="feature-card">
             <div class="feature-icon feature-icon-primary"><i class="fa-solid fa-plug-circle-check" aria-hidden="true"></i></div>
             <h3>Integration-ready approach</h3>
             <p>Designed to work with enterprise identity and ecosystem patterns, while remaining practical for self-hosting.</p>
-          </article>
-          <article class="feature-card">
-            <div class="feature-icon feature-icon-accent"><i class="fa-solid fa-layer-group" aria-hidden="true"></i></div>
-            <h3>Open core, scalable operations</h3>
-            <p>Adopt in open-source mode and extend with enterprise support, deployment, and proprietary plugins when needed.</p>
           </article>
         </div>
       </div>
@@ -156,13 +180,13 @@
         <div class="split-grid">
           <article class="glass-card">
             <h3>Open-source core</h3>
-            <p>PeopleMesh core is available under Apache License 2.0, with public source code and community collaboration at its foundation.</p>
+            <p>PeopleMesh core is available under Apache License 2.0, with public source code and community support.</p>
             <a class="inline-link" href="https://github.com/francescopace/peoplemesh/blob/main/LICENSE" target="_blank" rel="noreferrer">Read the Apache-2.0 license</a>
           </article>
           <article class="glass-card">
-            <h3>Enterprise support and plugins</h3>
-            <p>Organizations can adopt the open core and optionally add paid enterprise support and official proprietary plugins/connectors.</p>
-            <a class="inline-link" href="https://github.com/francescopace/peoplemesh/blob/main/SUPPORT.md" target="_blank" rel="noreferrer">Contact support for enterprise options</a>
+            <h3>Support and integration roadmap</h3>
+            <p>Planned connector targets include tools and directories such as Slack, Workday, LDAP, and LinkedIn.</p>
+            <a class="inline-link" href="https://github.com/francescopace/peoplemesh/blob/main/SUPPORT.md" target="_blank" rel="noreferrer">See available support options</a>
           </article>
         </div>
       </div>
@@ -173,7 +197,7 @@
     <div class="container footer-content">
       <div class="footer-brand-block">
         <div class="footer-brand-name">PeopleMesh</div>
-        <p class="footer-note">Open-source, Semantic discovery for large organizations.</p>
+        <p class="footer-note">Semantic discovery for large organizations.</p>
       </div>
       <div class="footer-links">
         <a href="https://github.com/francescopace/peoplemesh" target="_blank" rel="noreferrer">Repository</a>
@@ -183,5 +207,220 @@
       </div>
     </div>
   </footer>
+
+  <div class="tour-modal" id="quick-tour-modal" aria-hidden="true">
+    <div class="tour-modal-backdrop" data-close-tour aria-hidden="true"></div>
+    <div class="tour-modal-panel" role="dialog" aria-modal="true" aria-labelledby="quick-tour-title" tabindex="-1">
+      <button class="tour-modal-close" type="button" aria-label="Close quick tour" data-close-tour>
+        <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+      </button>
+      <h2 id="quick-tour-title">Quick tour: <span data-tour-current-section>Landing</span></h2>
+
+      <div class="tour-carousel" aria-live="polite">
+        <ol class="tour-steps">
+          <li class="tour-step is-active" data-tour-slide data-tour-name="Landing search input">
+            <p>A natural-language query is entered directly on the landing page to start discovery.</p>
+            <figure class="tour-shot">
+              <img src="images/landing-search.png" alt="Landing page with a natural-language query entered in the search field.">
+            </figure>
+          </li>
+          <li class="tour-step" data-tour-slide data-tour-name="Search results">
+            <p>Results are ranked by relevance and can be refined by entity type and geography filters.</p>
+            <figure class="tour-shot">
+              <img src="images/search-results.png" alt="Search results page with ranked profiles and filters.">
+            </figure>
+          </li>
+          <li class="tour-step" data-tour-slide data-tour-name="My Mesh">
+            <p>The My Mesh area highlights personalized matches and recurring opportunities.</p>
+            <figure class="tour-shot">
+              <img src="images/my-mesh.png" alt="My Mesh view with cards ranked by match percentage.">
+            </figure>
+          </li>
+          <li class="tour-step" data-tour-slide data-tour-name="My Mesh jobs">
+            <p>The Jobs tab in My Mesh surfaces internal opportunities ranked for profile compatibility.</p>
+            <figure class="tour-shot">
+              <img src="images/my-mesh-jobs.png" alt="My Mesh Jobs tab with ranked job opportunities and match percentages.">
+            </figure>
+          </li>
+          <li class="tour-step" data-tour-slide data-tour-name="My Mesh communities">
+            <p>The Communities tab highlights guilds and groups that fit current skills and interests.</p>
+            <figure class="tour-shot">
+              <img src="images/my-mesh-communities.png" alt="My Mesh Communities tab with ranked internal communities.">
+            </figure>
+          </li>
+          <li class="tour-step" data-tour-slide data-tour-name="My Mesh events">
+            <p>The Events tab proposes relevant internal events and learning opportunities in context.</p>
+            <figure class="tour-shot">
+              <img src="images/my-mesh-events.png" alt="My Mesh Events tab with ranked event recommendations.">
+            </figure>
+          </li>
+          <li class="tour-step" data-tour-slide data-tour-name="Admin">
+            <p>The admin dashboard provides a quick operational overview with usage, embedding, and inference metrics.</p>
+            <figure class="tour-shot">
+              <img src="images/admin.png" alt="Admin dashboard with data overview and inference statistics.">
+            </figure>
+          </li>
+          <li class="tour-step" data-tour-slide data-tour-name="Profile">
+            <p>Profiles aggregate identity and enrichment sources to improve match quality over time.</p>
+            <figure class="tour-shot">
+              <img src="images/profile.png" alt="My Profile page with identity fields and profile completion widget.">
+            </figure>
+          </li>
+          <li class="tour-step" data-tour-slide data-tour-name="Events">
+            <p>The event timeline keeps imports, updates, and processing changes auditable.</p>
+            <figure class="tour-shot">
+              <img src="images/events.png" alt="Events timeline with consent updates and profile import entries.">
+            </figure>
+          </li>
+          <li class="tour-step" data-tour-slide data-tour-name="Privacy">
+            <p>Users can manage consent, processing permissions, and personal data controls directly.</p>
+            <figure class="tour-shot">
+              <img src="images/privacy.png" alt="Privacy section with consent management toggles and data export options.">
+            </figure>
+          </li>
+        </ol>
+
+        <div class="tour-carousel-controls">
+          <button class="tour-nav-btn" type="button" data-tour-prev aria-label="Previous slide">
+            <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
+            <span>Previous</span>
+          </button>
+          <div class="tour-pagination">
+            <span class="tour-counter" data-tour-counter>1 / 10</span>
+            <div class="tour-dots" role="tablist" aria-label="Quick tour slides" data-tour-dots></div>
+          </div>
+          <button class="tour-nav-btn" type="button" data-tour-next aria-label="Next slide">
+            <span>Next</span>
+            <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      const modal = document.getElementById("quick-tour-modal");
+      const panel = modal ? modal.querySelector(".tour-modal-panel") : null;
+      const openButton = document.querySelector("[data-open-tour]");
+      const closeButtons = modal ? modal.querySelectorAll("[data-close-tour]") : [];
+      const slides = modal ? Array.from(modal.querySelectorAll("[data-tour-slide]")) : [];
+      const prevButton = modal ? modal.querySelector("[data-tour-prev]") : null;
+      const nextButton = modal ? modal.querySelector("[data-tour-next]") : null;
+      const counter = modal ? modal.querySelector("[data-tour-counter]") : null;
+      const dotsContainer = modal ? modal.querySelector("[data-tour-dots]") : null;
+      const currentSectionLabel = modal ? modal.querySelector("[data-tour-current-section]") : null;
+      let dots = [];
+
+      if (!modal || !panel || !openButton) {
+        return;
+      }
+
+      let previousActiveElement = null;
+      let currentSlideIndex = 0;
+
+      const buildDots = () => {
+        if (!dotsContainer || !slides.length) {
+          return;
+        }
+
+        dotsContainer.innerHTML = "";
+        dots = slides.map((_, index) => {
+          const dot = document.createElement("button");
+          dot.className = "tour-dot";
+          dot.type = "button";
+          dot.setAttribute("data-tour-dot", String(index));
+          dot.setAttribute("aria-label", `Go to slide ${index + 1}`);
+          dot.addEventListener("click", () => updateCarousel(index));
+          dotsContainer.appendChild(dot);
+          return dot;
+        });
+      };
+
+      const updateCarousel = (newIndex) => {
+        if (!slides.length) {
+          return;
+        }
+
+        currentSlideIndex = (newIndex + slides.length) % slides.length;
+        slides.forEach((slide, index) => {
+          const isActive = index === currentSlideIndex;
+          slide.classList.toggle("is-active", isActive);
+          slide.setAttribute("aria-hidden", isActive ? "false" : "true");
+        });
+
+        dots.forEach((dot, index) => {
+          const isActive = index === currentSlideIndex;
+          dot.classList.toggle("is-active", isActive);
+          if (isActive) {
+            dot.setAttribute("aria-current", "true");
+          } else {
+            dot.removeAttribute("aria-current");
+          }
+        });
+
+        if (counter) {
+          counter.textContent = `${currentSlideIndex + 1} / ${slides.length}`;
+        }
+
+        if (currentSectionLabel) {
+          const currentSlide = slides[currentSlideIndex];
+          const sectionName = currentSlide ? currentSlide.getAttribute("data-tour-name") : "";
+          currentSectionLabel.textContent = sectionName || "";
+        }
+      };
+
+      const openModal = () => {
+        previousActiveElement = document.activeElement;
+        modal.classList.add("is-open");
+        modal.setAttribute("aria-hidden", "false");
+        document.body.classList.add("tour-open");
+        updateCarousel(0);
+        panel.focus();
+      };
+
+      const closeModal = () => {
+        modal.classList.remove("is-open");
+        modal.setAttribute("aria-hidden", "true");
+        document.body.classList.remove("tour-open");
+        if (previousActiveElement && typeof previousActiveElement.focus === "function") {
+          previousActiveElement.focus();
+        }
+      };
+
+      openButton.addEventListener("click", openModal);
+      closeButtons.forEach((button) => {
+        button.addEventListener("click", closeModal);
+      });
+
+      if (prevButton) {
+        prevButton.addEventListener("click", () => updateCarousel(currentSlideIndex - 1));
+      }
+
+      if (nextButton) {
+        nextButton.addEventListener("click", () => updateCarousel(currentSlideIndex + 1));
+      }
+
+      buildDots();
+      updateCarousel(0);
+
+      document.addEventListener("keydown", (event) => {
+        if (!modal.classList.contains("is-open")) {
+          return;
+        }
+        if (event.key === "Escape") {
+          closeModal();
+          return;
+        }
+        if (event.key === "ArrowLeft") {
+          updateCarousel(currentSlideIndex - 1);
+          return;
+        }
+        if (event.key === "ArrowRight") {
+          updateCarousel(currentSlideIndex + 1);
+        }
+      });
+    })();
+  </script>
 </body>
 </html>
