@@ -1,6 +1,5 @@
 package org.peoplemesh.api.resource;
 
-import io.smallrye.common.annotation.Blocking;
 import jakarta.annotation.security.PermitAll;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
@@ -15,7 +14,6 @@ import org.peoplemesh.service.OAuthLoginService;
 @Path("/api/v1/info")
 @PermitAll
 @Produces(MediaType.APPLICATION_JSON)
-@Blocking
 public class InfoResource {
 
     @Inject

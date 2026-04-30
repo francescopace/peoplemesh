@@ -60,7 +60,7 @@ services:
       - peoplemesh-ollama-data:/root/.ollama
 
   docling:
-    image: ${DOCLING_IMAGE:-ghcr.io/docling-project/docling-serve:v1.14.3}
+    image: ${DOCLING_IMAGE:-ghcr.io/docling-project/docling-serve:v1.16.1}
     container_name: peoplemesh-docling
     restart: unless-stopped
     ports:

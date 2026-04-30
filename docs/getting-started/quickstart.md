@@ -11,7 +11,7 @@ For production deployment hardening, see [`production-baseline.md`](production-b
 
 ## Prerequisites
 
-- Java 21+
+- Java 25+
 - Maven 3.9+
 - Docker
 - Node.js 20+ (frontend tests only)

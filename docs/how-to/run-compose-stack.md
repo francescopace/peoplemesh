@@ -48,8 +48,8 @@ OIDC_GOOGLE_CLIENT_SECRET=...
 
 Optional overrides:
 
-- `PEOPLEMESH_IMAGE` (default: `frapax/peoplemesh:latest`)
-- `DOCLING_IMAGE` (default: `ghcr.io/docling-project/docling-serve:latest`)
+- `PEOPLEMESH_IMAGE` (default: `frapax/peoplemesh:main`)
+- `DOCLING_IMAGE` (default: `ghcr.io/docling-project/docling-serve:v1.16.1`)
 - `PEOPLEMESH_FRONTEND_ENABLED` (default: `true`)
 
 ### 2) Start the stack

@@ -11,13 +11,13 @@
     <description>AI-powered professional matchmaking via MCP server</description>
 
     <properties>
-        <maven.compiler.release>21</maven.compiler.release>
+        <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
-        <quarkus.platform.version>3.33.1</quarkus.platform.version>
-        <quarkus-mcp-server.version>1.11.1</quarkus-mcp-server.version>
+        <quarkus.platform.version>3.34.6</quarkus.platform.version>
+        <quarkus-mcp-server.version>1.12.0</quarkus-mcp-server.version>
         <pgvector.version>0.1.6</pgvector.version>
         <compiler-plugin.version>3.15.0</compiler-plugin.version>
         <surefire-plugin.version>3.5.5</surefire-plugin.version>

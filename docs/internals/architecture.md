@@ -58,7 +58,7 @@ PeopleMesh is built as a Quarkus backend serving both a browser SPA and MCP clie
 
 ## Primary technology choices
 
-- Quarkus 3.x and Java 21 for the backend
+- Quarkus 3.x and Java 25 for the backend
 - PostgreSQL 16 with pgvector for persistence and vector search
 - LangChain4j as model-provider abstraction
 - OIDC for login and identity federation

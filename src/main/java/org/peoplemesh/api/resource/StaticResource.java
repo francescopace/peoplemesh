@@ -1,6 +1,5 @@
 package org.peoplemesh.api.resource;
 
-import io.smallrye.common.annotation.Blocking;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import jakarta.annotation.Priority;
 import jakarta.ws.rs.GET;
@@ -18,7 +17,6 @@ import java.nio.file.Paths;
 
 @Path("/")
 @Priority(Priorities.USER + 1000)
-@Blocking
 public class StaticResource {
 
     @ConfigProperty(name = "peoplemesh.frontend.enabled", defaultValue = "false")

@@ -1,6 +1,5 @@
 package org.peoplemesh.api.resource;
 
-import io.smallrye.common.annotation.Blocking;
 import jakarta.inject.Inject;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
@@ -22,7 +21,6 @@ import org.peoplemesh.service.IngestService;
 
 @Path("/api/v1/maintenance/ingest")
 @Produces(MediaType.APPLICATION_JSON)
-@Blocking
 public class IngestResource {
 
     @Inject
