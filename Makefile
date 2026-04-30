@@ -1,13 +1,15 @@
-.PHONY: help start test-backend test-integration test-frontend image clean
+.PHONY: help start test-backend test-integration test-frontend test-security image clean
 
 MVN ?= mvn
 MVN_FLAGS ?= --batch-mode --no-transfer-progress -q
 IMAGE_NAME ?= peoplemesh:local
 DOCKERFILE_JVM ?= src/main/docker/Dockerfile.jvm
+include tools/make/security/security.mk
 
 help:
 	@echo "Available targets:"
 	@echo "  start         Run app in dev mode (quarkus:dev)"
+	@echo "  test-security      Run CVE scan (owasp)"
 	@echo "  test-backend      Run backend unit tests (Surefire)"
 	@echo "  test-frontend     Run frontend unit tests (Vitest)"
 	@echo "  test-integration  Run integration tests (Failsafe)"
