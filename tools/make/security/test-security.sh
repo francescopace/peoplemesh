@@ -6,10 +6,13 @@ NVD_API_DELAY_MS="${NVD_API_DELAY_MS:-6000}"
 NVD_RESULTS_PER_PAGE="${NVD_RESULTS_PER_PAGE:-1000}"
 SECURITY_FAIL_ON_ERROR="${SECURITY_FAIL_ON_ERROR:-true}"
 NVD_DATAFEED_URL="${NVD_DATAFEED_URL:-}"
+HAS_NVD_API_KEY=false
 
 if [ -z "${NVD_API_KEY:-}" ]; then
 	echo "WARNING: NVD_API_KEY not set - NVD may throttle or return 503 during updates."
 	echo "         Get a free key: https://nvd.nist.gov/developers/request-an-api-key"
+else
+	HAS_NVD_API_KEY=true
 fi
 
 common_flags=(
@@ -17,7 +20,6 @@ common_flags=(
 	-DnvdMaxRetryCount=5
 	"-DnvdApiDelay=${NVD_API_DELAY_MS}"
 	"-DnvdApiResultsPerPage=${NVD_RESULTS_PER_PAGE}"
-	-DnvdApiKeyEnvironmentVariable=NVD_API_KEY
 	-DconnectionTimeout=10000
 	-DreadTimeout=120000
 	-DversionCheckEnabled=false
@@ -25,6 +27,9 @@ common_flags=(
 	-DretireJsAnalyzerEnabled=false
 	-DnodeAuditAnalyzerEnabled=false
 )
+if [ "${HAS_NVD_API_KEY}" = "true" ]; then
+	common_flags+=(-DnvdApiKeyEnvironmentVariable=NVD_API_KEY)
+fi
 
 extra_flags=()
 if [ -n "${NVD_DATAFEED_URL}" ]; then
@@ -40,13 +45,30 @@ fi
 
 echo "Step 1/2: updating vulnerability database..."
 update_rc=0
-if "${MVN_CMD}" org.owasp:dependency-check-maven:update-only \
-	"${common_flags[@]}" \
-	"${extra_flags[@]}" \
-	"${fail_flags[@]}"; then
+update_args=(
+	org.owasp:dependency-check-maven:update-only
+	"${common_flags[@]}"
+)
+if [ "${#extra_flags[@]}" -gt 0 ]; then
+	update_args+=("${extra_flags[@]}")
+fi
+if [ "${#fail_flags[@]}" -gt 0 ]; then
+	update_args+=("${fail_flags[@]}")
+fi
+
+if "${MVN_CMD}" "${update_args[@]}"; then
 	:
 else
 	update_rc=$?
+fi
+
+if [ "${update_rc}" -ne 0 ] && [ "${HAS_NVD_API_KEY}" = "true" ]; then
+	echo "WARNING: update-only failed while using NVD_API_KEY; retrying once without API key."
+	if NVD_API_KEY= "${MVN_CMD}" "${update_args[@]}"; then
+		update_rc=0
+	else
+		update_rc=$?
+	fi
 fi
 
 if [ "${update_rc}" -ne 0 ]; then
@@ -58,9 +80,17 @@ if [ "${update_rc}" -ne 0 ]; then
 fi
 
 echo "Step 2/2: running dependency scan (autoUpdate=false)..."
-"${MVN_CMD}" org.owasp:dependency-check-maven:check \
-	"${common_flags[@]}" \
-	-DautoUpdate=false \
-	-DfailBuildOnCVSS=9.0 \
-	"${extra_flags[@]}" \
-	"${fail_flags[@]}"
+check_args=(
+	org.owasp:dependency-check-maven:check
+	"${common_flags[@]}"
+	-DautoUpdate=false
+	-DfailBuildOnCVSS=9.0
+)
+if [ "${#extra_flags[@]}" -gt 0 ]; then
+	check_args+=("${extra_flags[@]}")
+fi
+if [ "${#fail_flags[@]}" -gt 0 ]; then
+	check_args+=("${fail_flags[@]}")
+fi
+
+"${MVN_CMD}" "${check_args[@]}"
