@@ -2,7 +2,6 @@ package org.peoplemesh.api.resource;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import io.quarkus.security.Authenticated;
-import io.smallrye.common.annotation.Blocking;
 import jakarta.annotation.security.PermitAll;
 import jakarta.inject.Inject;
 import jakarta.validation.Valid;
@@ -48,7 +47,6 @@ import java.util.Map;
 
 @Path("/api/v1/me")
 @Produces(MediaType.APPLICATION_JSON)
-@Blocking
 public class MeResource {
 
     @Inject

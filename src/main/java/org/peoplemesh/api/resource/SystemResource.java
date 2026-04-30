@@ -1,7 +1,6 @@
 package org.peoplemesh.api.resource;
 
 import io.quarkus.security.Authenticated;
-import io.smallrye.common.annotation.Blocking;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
@@ -14,7 +13,6 @@ import org.peoplemesh.service.SystemStatisticsService;
 
 @Path("/api/v1/system")
 @Produces(MediaType.APPLICATION_JSON)
-@Blocking
 public class SystemResource {
 
     @Inject

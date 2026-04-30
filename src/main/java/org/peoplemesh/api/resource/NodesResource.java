@@ -1,7 +1,6 @@
 package org.peoplemesh.api.resource;
 
 import io.quarkus.security.Authenticated;
-import io.smallrye.common.annotation.Blocking;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
@@ -20,7 +19,6 @@ import java.util.UUID;
 @Path("/api/v1/nodes")
 @Produces(MediaType.APPLICATION_JSON)
 @Authenticated
-@Blocking
 public class NodesResource {
 
     @Inject

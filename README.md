@@ -53,7 +53,7 @@ Run locally with:
 make start
 ```
 
-Requirements: Java 21+, Maven 3.9+, Docker.
+Requirements: Java 25+, Maven 3.9+, Docker.
 
 DevServices auto-starts PostgreSQL (pgvector) and Docling.
 Ensure Ollama is available locally for LLM inference and embeddings.
