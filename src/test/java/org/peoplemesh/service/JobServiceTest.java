@@ -59,7 +59,7 @@ class JobServiceTest {
     @Test
     void jobNodeToText_fullJob_containsAllFields() throws Throwable {
         Map<String, Object> sd = new HashMap<>();
-        sd.put("requirements_text", "Java 21");
+        sd.put("requirements_text", "Java 25");
         sd.put("skills_required", List.of("Java", "Quarkus"));
         sd.put("work_mode", "HYBRID");
         sd.put("employment_type", "FREELANCE");
@@ -70,7 +70,7 @@ class JobServiceTest {
 
         assertTrue(text.contains("Title: Senior Dev"));
         assertTrue(text.contains("Description: Ship features"));
-        assertTrue(text.contains("Requirements: Java 21"));
+        assertTrue(text.contains("Requirements: Java 25"));
         assertTrue(text.contains("Required Skills: Java, Quarkus"));
         assertTrue(text.contains("Work Mode: HYBRID"));
         assertTrue(text.contains("Employment: FREELANCE"));

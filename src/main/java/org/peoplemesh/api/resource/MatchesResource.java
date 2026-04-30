@@ -1,7 +1,6 @@
 package org.peoplemesh.api.resource;
 
 import io.quarkus.security.Authenticated;
-import io.smallrye.common.annotation.Blocking;
 import jakarta.inject.Inject;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -31,7 +30,6 @@ import java.util.UUID;
 @Path("/api/v1/matches")
 @Produces(MediaType.APPLICATION_JSON)
 @Authenticated
-@Blocking
 public class MatchesResource {
 
     @Inject

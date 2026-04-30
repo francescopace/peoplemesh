@@ -1,7 +1,6 @@
 package org.peoplemesh.api.resource;
 
 import io.quarkus.security.identity.SecurityIdentity;
-import io.smallrye.common.annotation.Blocking;
 import jakarta.annotation.security.PermitAll;
 import jakarta.inject.Inject;
 import jakarta.validation.constraints.Pattern;
@@ -28,7 +27,6 @@ import java.net.URI;
 @Path("/api/v1/auth")
 @PermitAll
 @Produces(MediaType.APPLICATION_JSON)
-@Blocking
 public class OAuthLoginResource {
 
     @Context
