@@ -70,6 +70,11 @@ Open-source governance and legal documents:
 - [SECURITY.md](SECURITY.md)
 - [SUPPORT.md](SUPPORT.md)
 
+Medium articles (friend links, no paywall):
+
+- [Part 1: We Are Dehumanizing Our Companies. AI Doesn't Have To.](https://medium.com/@francesco.pace/we-are-dehumanizing-our-companies-ai-doesnt-have-to-2aeee4d4cac2?sk=b51ed4e0a0332dd395fbdea8485d7cba)
+- [Part 2: How to Build a Semantic Discovery Layer for Your Company](https://medium.com/@francesco.pace/how-to-build-a-semantic-discovery-layer-for-your-company-8ffb1f9ac011?sk=31f9e79d1b73d46b196b4ad9b3e3c969)
+
 ## License
 
 Apache License 2.0.
