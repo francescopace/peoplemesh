@@ -30,7 +30,7 @@ test-frontend:
 
 test-integration:
 	@echo "Running integration tests..."
-	@$(MVN) $(MVN_FLAGS) verify -DskipTests=true -DskipITs=false -Djacoco.haltOnFailure=false; rc=$$?; \
+	@$(MVN) $(MVN_FLAGS) clean verify -DskipTests=true -DskipITs=false -Djacoco.haltOnFailure=false; rc=$$?; \
 	docker ps -q --filter label=org.testcontainers=true | xargs -r docker rm -f > /dev/null 2>&1; \
 	exit $$rc
 
