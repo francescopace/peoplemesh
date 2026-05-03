@@ -3,10 +3,12 @@ package org.peoplemesh.security;
 import io.quarkus.security.identity.IdentityProviderManager;
 import io.quarkus.security.identity.SecurityIdentity;
 import io.quarkus.security.identity.request.AuthenticationRequest;
+import io.quarkus.vertx.http.runtime.security.ChallengeData;
 import io.quarkus.vertx.http.runtime.security.HttpCredentialTransport;
 import io.smallrye.mutiny.Uni;
 import io.vertx.core.http.Cookie;
 import io.vertx.core.http.HttpServerRequest;
+import io.vertx.core.http.HttpMethod;
 import io.vertx.ext.web.RoutingContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -104,6 +106,23 @@ class PmSessionAuthenticationMechanismTest {
     }
 
     @Test
+    void authenticate_mcpRootPath_validCookie_delegatesToIdentityProvider() {
+        when(routingContext.normalizedPath()).thenReturn("/mcp");
+        Cookie cookie = mock(Cookie.class);
+        when(cookie.getValue()).thenReturn("cookie");
+        when(httpRequest.getCookie(SessionService.COOKIE_NAME)).thenReturn(cookie);
+
+        SecurityIdentity expectedIdentity = mock(SecurityIdentity.class);
+        when(identityProviderManager.authenticate(any(PmSessionAuthenticationRequest.class)))
+                .thenReturn(Uni.createFrom().item(expectedIdentity));
+
+        SecurityIdentity result = mechanism.authenticate(routingContext, identityProviderManager)
+                .await().indefinitely();
+
+        assertSame(expectedIdentity, result);
+    }
+
+    @Test
     void authenticate_nullPath_returnsNull() {
         when(routingContext.normalizedPath()).thenReturn(null);
 
@@ -114,7 +133,31 @@ class PmSessionAuthenticationMechanismTest {
     }
 
     @Test
-    void getChallenge_returnsNullOptional() {
+    void getChallenge_mcpPath_returnsRedirectToMcpLogin() {
+        when(routingContext.normalizedPath()).thenReturn("/mcp");
+        when(httpRequest.method()).thenReturn(HttpMethod.GET);
+
+        ChallengeData challengeData = mechanism.getChallenge(routingContext).await().indefinitely();
+
+        assertNotNull(challengeData);
+        assertEquals(302, challengeData.status);
+    }
+
+    @Test
+    void getChallenge_mcpNonGet_returnsBearerChallenge() {
+        when(routingContext.normalizedPath()).thenReturn("/mcp");
+        when(httpRequest.method()).thenReturn(HttpMethod.POST);
+
+        ChallengeData challengeData = mechanism.getChallenge(routingContext).await().indefinitely();
+
+        assertNotNull(challengeData);
+        assertEquals(401, challengeData.status);
+    }
+
+    @Test
+    void getChallenge_nonMcpPath_returnsNullOptional() {
+        when(routingContext.normalizedPath()).thenReturn("/api/v1/me");
+
         assertNull(mechanism.getChallenge(routingContext).await().indefinitely());
     }
 
@@ -122,7 +165,8 @@ class PmSessionAuthenticationMechanismTest {
     void getCredentialTypes_containsPmSessionRequest() {
         Set<Class<? extends AuthenticationRequest>> types = mechanism.getCredentialTypes();
         assertTrue(types.contains(PmSessionAuthenticationRequest.class));
-        assertEquals(1, types.size());
+        assertTrue(types.contains(PmBearerAuthenticationRequest.class));
+        assertEquals(2, types.size());
     }
 
     @Test

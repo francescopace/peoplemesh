@@ -10,9 +10,9 @@ import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.peoplemesh.domain.dto.MeshMatchResult;
 import org.peoplemesh.domain.dto.ProfileSchema;
-import org.peoplemesh.domain.dto.SearchQuery;
+import org.peoplemesh.domain.dto.SearchRequest;
+import org.peoplemesh.domain.dto.SearchResponse;
 import org.peoplemesh.domain.exception.ForbiddenBusinessException;
-import org.peoplemesh.domain.exception.NotFoundBusinessException;
 import org.peoplemesh.service.CurrentUserService;
 import org.peoplemesh.service.MatchesService;
 import org.peoplemesh.service.ProfileService;
@@ -73,52 +73,51 @@ class McpReadToolsTest {
         assertTrue(result.text().contains("access denied"));
     }
 
-    // === match ===
+    // === matchPrompt ===
 
     @Test
-    void match_blankProfileJson_returnsError() {
-        TextContent result = mcpReadTools.match(null, null, null);
-        assertTrue(result.text().contains("parsedQueryJson is required"));
+    void matchPrompt_blankQuery_returnsError() {
+        TextContent result = mcpReadTools.matchPrompt(null, null, null);
+        assertTrue(result.text().contains("query is required"));
     }
 
     @Test
-    void match_oversized_returnsError() {
-        TextContent result = mcpReadTools.match(
-                "x".repeat(McpToolHelper.DEFAULT_MAX_PAYLOAD_SIZE + 1), null, null);
-        assertTrue(result.text().contains("exceeds maximum size"));
+    void matchPrompt_oversized_returnsError() {
+        TextContent result = mcpReadTools.matchPrompt("x".repeat(501), null, null);
+        assertTrue(result.text().contains("exceeds maximum length"));
     }
 
     @Test
-    void match_valid_returnsJson() throws Exception {
+    void matchPrompt_valid_returnsJson() {
         UUID userId = UUID.randomUUID();
         when(currentUserService.resolveUserId()).thenReturn(userId);
-        MeshMatchResult one = sampleMatch();
-        when(matchesService.matchFromSchema(eq(userId), any(SearchQuery.class), eq("JOB"), eq("IT"), isNull(), isNull()))
-                .thenReturn(List.of(one));
+        SearchRequest request = new SearchRequest("java engineer");
+        when(matchesService.matchFromPrompt(eq(userId), eq(request), eq("JOB"), eq("IT"), isNull()))
+                .thenReturn(new SearchResponse(null, List.of()));
 
-        String json = "{\"keywords\":[\"java\"],\"embedding_text\":\"java engineer\"}";
-        TextContent result = mcpReadTools.match(json, "JOB", "IT");
+        TextContent result = mcpReadTools.matchPrompt("java engineer", "JOB", "IT");
 
-        assertTrue(result.text().contains(one.title()));
-        verify(matchesService).matchFromSchema(eq(userId), any(SearchQuery.class), eq("JOB"), eq("IT"), isNull(), isNull());
+        assertTrue(result.text().contains("\"results\""));
+        verify(matchesService).matchFromPrompt(eq(userId), eq(request), eq("JOB"), eq("IT"), isNull());
     }
 
     @Test
-    void match_securityException_returnsError() {
+    void matchPrompt_securityException_returnsError() {
         when(currentUserService.resolveUserId()).thenThrow(new SecurityException("denied"));
 
-        TextContent result = mcpReadTools.match("{\"keywords\":[\"x\"],\"embedding_text\":\"x\"}", null, null);
+        TextContent result = mcpReadTools.matchPrompt("java engineer", null, null);
         assertTrue(result.text().contains("access denied"));
     }
 
     @Test
-    void match_businessException_returnsPublicDetail() {
+    void matchPrompt_businessException_returnsPublicDetail() {
         UUID userId = UUID.randomUUID();
+        SearchRequest request = new SearchRequest("java engineer");
         when(currentUserService.resolveUserId()).thenReturn(userId);
-        when(matchesService.matchFromSchema(eq(userId), any(SearchQuery.class), isNull(), isNull(), isNull(), isNull()))
+        when(matchesService.matchFromPrompt(eq(userId), eq(request), isNull(), isNull(), isNull()))
                 .thenThrow(new ForbiddenBusinessException("not allowed"));
 
-        TextContent result = mcpReadTools.match("{\"keywords\":[\"x\"]}", null, null);
+        TextContent result = mcpReadTools.matchPrompt("java engineer", null, null);
         assertTrue(result.text().contains("not allowed"));
     }
 
@@ -164,61 +163,6 @@ class McpReadToolsTest {
         when(currentUserService.resolveUserId()).thenThrow(new SecurityException("x"));
         TextContent result = mcpReadTools.matchMe(null, null);
         assertTrue(result.text().contains("access denied"));
-    }
-
-    // === matchNode ===
-
-    @Test
-    void matchNode_blankId_returnsError() {
-        TextContent result = mcpReadTools.matchNode("  ", null, null);
-        assertTrue(result.text().contains("nodeId is required"));
-    }
-
-    @Test
-    void matchNode_invalidUuid_returnsError() {
-        TextContent result = mcpReadTools.matchNode("not-a-uuid", null, null);
-        assertTrue(result.text().contains("Invalid nodeId"));
-    }
-
-    @Test
-    void matchNode_notFound_returnsMessage() {
-        UUID nodeUuid = UUID.randomUUID();
-        UUID userId = UUID.randomUUID();
-        when(currentUserService.resolveUserId()).thenReturn(userId);
-        when(matchesService.matchFromNode(userId, nodeUuid, null, null))
-                .thenThrow(new NotFoundBusinessException("Node not found or has no embedding"));
-        TextContent result = mcpReadTools.matchNode(nodeUuid.toString(), null, null);
-        assertTrue(result.text().contains("Node not found or has no embedding"));
-    }
-
-    @Test
-    void matchNode_valid_returnsJson() {
-        UUID userId = UUID.randomUUID();
-        UUID nodeUuid = UUID.randomUUID();
-        when(currentUserService.resolveUserId()).thenReturn(userId);
-        MeshMatchResult one = sampleMatch();
-        when(matchesService.matchFromNode(eq(userId), eq(nodeUuid), isNull(), isNull()))
-                .thenReturn(List.of(one));
-        TextContent result = mcpReadTools.matchNode(nodeUuid.toString(), null, null);
-        assertTrue(result.text().contains(one.title()));
-    }
-
-    @Test
-    void matchNode_securityException_returnsAccessDenied() {
-        when(currentUserService.resolveUserId()).thenThrow(new SecurityException("x"));
-        TextContent result = mcpReadTools.matchNode(UUID.randomUUID().toString(), null, null);
-        assertTrue(result.text().contains("access denied"));
-    }
-
-    @Test
-    void matchNode_unexpectedException_returnsGenericError() {
-        UUID userId = UUID.randomUUID();
-        UUID nodeId = UUID.randomUUID();
-        when(currentUserService.resolveUserId()).thenReturn(userId);
-        when(matchesService.matchFromNode(userId, nodeId, null, null)).thenThrow(new RuntimeException("boom"));
-
-        TextContent result = mcpReadTools.matchNode(nodeId.toString(), null, null);
-        assertTrue(result.text().contains("Failed to match from node"));
     }
 
     private static MeshMatchResult sampleMatch() {

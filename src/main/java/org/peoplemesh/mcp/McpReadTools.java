@@ -6,7 +6,8 @@ import io.quarkiverse.mcp.server.Tool;
 import io.quarkus.security.Authenticated;
 import org.peoplemesh.domain.exception.BusinessException;
 import org.peoplemesh.domain.dto.MeshMatchResult;
-import org.peoplemesh.domain.dto.SearchQuery;
+import org.peoplemesh.domain.dto.SearchRequest;
+import org.peoplemesh.domain.dto.SearchResponse;
 import org.peoplemesh.service.MatchesService;
 import org.peoplemesh.service.CurrentUserService;
 import org.peoplemesh.service.ProfileService;
@@ -19,7 +20,7 @@ import java.util.UUID;
 public class McpReadTools {
 
     private static final Logger LOG = Logger.getLogger(McpReadTools.class);
-    private static final int MAX_PAYLOAD_SIZE = 64 * 1024;
+    private static final int MAX_QUERY_LENGTH = 500;
 
     @Inject
     CurrentUserService currentUserService;
@@ -31,7 +32,7 @@ public class McpReadTools {
     ObjectMapper objectMapper;
 
     @Tool(name = "peoplemesh_get_my_profile",
-          description = "Retrieve your current PeopleMesh profile including professional, personal, and interest data.")
+          description = "Retrieve the authenticated user's PeopleMesh profile as JSON. Use this when profile data is explicitly needed. Treat missing fields as unknown and do not infer facts that are not present in the profile.")
     @Authenticated
     @SuppressWarnings("null")
     public TextContent getMyProfile() {
@@ -56,37 +57,39 @@ public class McpReadTools {
         }
     }
 
-    @Tool(name = "peoplemesh_match",
-          description = "Find matches using a search query payload. Provide a JSON SearchQuery payload. Optionally filter by type (PEOPLE, JOB, COMMUNITY, EVENT, PROJECT, INTEREST_GROUP) and country (ISO code).")
+    @Tool(name = "peoplemesh_match_prompt",
+          description = "Search PeopleMesh from a natural-language query using the server-side query parser and ranking logic. Provide the user's request verbatim in query. Do not rewrite, broaden, relax, or reinterpret the criteria unless the user explicitly asks. Never set country automatically from locale, profile, session, or prior context; leave it empty unless the user explicitly requested a country or location filter. Use type only when the user clearly requested a result category such as PEOPLE, JOB, COMMUNITY, EVENT, PROJECT, or INTEREST_GROUP. Returns JSON with both the parsedQuery and the ranked results.")
     @Authenticated
-    public TextContent match(String parsedQueryJson, String type, String country) {
+    public TextContent matchPrompt(String query, String type, String country) {
         try {
-            if (parsedQueryJson == null || parsedQueryJson.isBlank()) {
-                return new TextContent("Error: parsedQueryJson is required.");
+            if (query == null || query.isBlank()) {
+                return new TextContent("Error: query is required.");
             }
-            if (parsedQueryJson.length() > MAX_PAYLOAD_SIZE) {
-                return new TextContent("Error: profile payload exceeds maximum size.");
+            if (query.length() > MAX_QUERY_LENGTH) {
+                return new TextContent("Error: query exceeds maximum length.");
             }
-            SearchQuery parsedQuery = McpToolHelper.parsePayload(
-                    parsedQueryJson, SearchQuery.class, MAX_PAYLOAD_SIZE, objectMapper);
             UUID userId = currentUserService.resolveUserId();
-            List<MeshMatchResult> results = matchesService.matchFromSchema(userId, parsedQuery, type, country, null, null);
-            String json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(results);
+            SearchResponse response = matchesService.matchFromPrompt(
+                    userId,
+                    new SearchRequest(query.trim()),
+                    type,
+                    country,
+                    null
+            );
+            String json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(response);
             return new TextContent(json);
         } catch (SecurityException e) {
             return new TextContent("Error: access denied.");
-        } catch (IllegalArgumentException e) {
-            return new TextContent("Error: invalid parsed query payload.");
         } catch (BusinessException e) {
             return new TextContent("Error: " + e.publicDetail());
         } catch (Exception e) {
-            LOG.errorf(e, "Error running match from parsed query");
-            return McpToolHelper.error("match from parsed query");
+            LOG.errorf(e, "Error running match from prompt");
+            return McpToolHelper.error("match from prompt");
         }
     }
 
     @Tool(name = "peoplemesh_match_me",
-          description = "Find matches based on your own profile. Optionally filter by type (PEOPLE, JOB, COMMUNITY, EVENT, PROJECT, INTEREST_GROUP) and country (ISO code).")
+          description = "Find matches using the authenticated user's existing PeopleMesh profile as the source. Use this for requests like 'match my profile' or 'find opportunities for me'. Do not use it as a substitute for a new natural-language search request. Apply optional type and country filters only when the user explicitly requested them.")
     @Authenticated
     public TextContent matchMe(String type, String country) {
         try {
@@ -101,34 +104,6 @@ public class McpReadTools {
         } catch (Exception e) {
             LOG.errorf(e, "Error finding matches for your profile");
             return McpToolHelper.error("find matches for your profile");
-        }
-    }
-
-    @Tool(name = "peoplemesh_match_node",
-          description = "Find matches based on a specific node's profile. Provide the nodeId (UUID). Optionally filter by type and country.")
-    @Authenticated
-    public TextContent matchNode(String nodeId, String type, String country) {
-        try {
-            if (nodeId == null || nodeId.isBlank()) {
-                return new TextContent("Error: nodeId is required.");
-            }
-            UUID id;
-            try {
-                id = UUID.fromString(nodeId.trim());
-            } catch (IllegalArgumentException e) {
-                return new TextContent("Error: Invalid nodeId format.");
-            }
-            UUID userId = currentUserService.resolveUserId();
-            List<MeshMatchResult> results = matchesService.matchFromNode(userId, id, type, country);
-            String json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(results);
-            return new TextContent(json);
-        } catch (SecurityException e) {
-            return new TextContent("Error: access denied.");
-        } catch (BusinessException e) {
-            return new TextContent("Error: " + e.publicDetail());
-        } catch (Exception e) {
-            LOG.errorf(e, "Error matching from node");
-            return McpToolHelper.error("match from node");
         }
     }
 }

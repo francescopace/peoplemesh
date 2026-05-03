@@ -87,6 +87,22 @@ class MatchesServiceTest {
     }
 
     @Test
+    void matchFromPrompt_withFilters_delegatesToSearchService() {
+        UUID userId = UUID.randomUUID();
+        SearchRequest request = new SearchRequest("java developer");
+        SearchResponse expected = new SearchResponse(null, List.of());
+        when(nodeRepository.findPublishedUserNode(userId)).thenReturn(Optional.empty());
+        when(searchService.search(userId, "java developer", null, "PEOPLE", "IT", 10, null,
+                SearchService.MatchContext.empty())).thenReturn(expected);
+
+        SearchResponse result = service.matchFromPrompt(userId, request, "PEOPLE", "IT", 10);
+
+        assertEquals(expected, result);
+        verify(searchService).search(userId, "java developer", null, "PEOPLE", "IT", 10, null,
+                SearchService.MatchContext.empty());
+    }
+
+    @Test
     void matchMyProfile_delegatesToSearchServiceWithProfileQuery() {
         UUID userId = UUID.randomUUID();
         MeshNode myNode = new MeshNode();

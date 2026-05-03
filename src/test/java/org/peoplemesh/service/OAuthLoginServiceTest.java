@@ -64,7 +64,7 @@ class OAuthLoginServiceTest {
     @Test
     void login_success_returnsRedirect() {
         when(tokenExchangeService.isProviderEnabled("google")).thenReturn(true);
-        when(sessionService.signOAuthState("google", "")).thenReturn("state");
+        when(sessionService.signOAuthState("google", "", null)).thenReturn("state");
         when(tokenExchangeService.buildAuthorizeUri("google", "http://localhost/cb", "state"))
                 .thenReturn(URI.create("https://example/auth"));
 
@@ -76,20 +76,34 @@ class OAuthLoginServiceTest {
     @Test
     void login_profileImportIntent_preservesIntentInState() {
         when(tokenExchangeService.isProviderEnabled("github")).thenReturn(true);
-        when(sessionService.signOAuthState("github", "profile_import")).thenReturn("import-state");
+        when(sessionService.signOAuthState("github", "profile_import", null)).thenReturn("import-state");
         when(tokenExchangeService.buildAuthorizeUri("github", "http://localhost/cb", "import-state"))
                 .thenReturn(URI.create("https://example/import-auth"));
 
         OAuthLoginService.LoginOutcome outcome = service.login("github", "profile_import", "http://localhost/cb");
 
         assertTrue(outcome.isRedirect());
-        verify(sessionService).signOAuthState("github", "profile_import");
+        verify(sessionService).signOAuthState("github", "profile_import", null);
+    }
+
+    @Test
+    void login_mcpIntent_preservesIntentInStateForLoginProviders() {
+        when(tokenExchangeService.isProviderEnabled("google")).thenReturn(true);
+        when(tokenExchangeService.isLoginEnabled("google")).thenReturn(true);
+        when(sessionService.signOAuthState("google", "mcp_auth", null)).thenReturn("mcp-state");
+        when(tokenExchangeService.buildAuthorizeUri("google", "http://localhost/cb", "mcp-state"))
+                .thenReturn(URI.create("https://example/mcp-auth"));
+
+        OAuthLoginService.LoginOutcome outcome = service.login("google", "mcp_auth", "http://localhost/cb");
+
+        assertTrue(outcome.isRedirect());
+        verify(sessionService).signOAuthState("google", "mcp_auth", null);
     }
 
     @Test
     void login_authorizeUriMissing_returnsError() {
         when(tokenExchangeService.isProviderEnabled("google")).thenReturn(true);
-        when(sessionService.signOAuthState("google", "")).thenReturn("state");
+        when(sessionService.signOAuthState("google", "", null)).thenReturn("state");
         when(tokenExchangeService.buildAuthorizeUri("google", "http://localhost/cb", "state")).thenReturn(null);
 
         OAuthLoginService.LoginOutcome outcome = service.login("google", "", "http://localhost/cb");
@@ -108,7 +122,7 @@ class OAuthLoginServiceTest {
 
     @Test
     void callback_importIntent_errorReturnsImportHtml() {
-        SessionService.OAuthStatePayload payload = new SessionService.OAuthStatePayload("profile_import");
+        SessionService.OAuthStatePayload payload = new SessionService.OAuthStatePayload("profile_import", null);
         when(sessionService.verifyOAuthState("s", "google")).thenReturn(payload);
 
         OAuthLoginService.CallbackOutcome outcome = service.callback(
@@ -122,7 +136,7 @@ class OAuthLoginServiceTest {
 
     @Test
     void callback_errorWithoutImport_returnsBadRequest() {
-        SessionService.OAuthStatePayload payload = new SessionService.OAuthStatePayload("");
+        SessionService.OAuthStatePayload payload = new SessionService.OAuthStatePayload("", null);
         when(sessionService.verifyOAuthState("state", "google")).thenReturn(payload);
 
         OAuthLoginService.CallbackOutcome outcome = service.callback(
@@ -145,7 +159,7 @@ class OAuthLoginServiceTest {
 
     @Test
     void callback_importIntent_invalidOrigin_returnsInternalServerError() {
-        SessionService.OAuthStatePayload payload = new SessionService.OAuthStatePayload("profile_import");
+        SessionService.OAuthStatePayload payload = new SessionService.OAuthStatePayload("profile_import", null);
         when(sessionService.verifyOAuthState("state", "google")).thenReturn(payload);
 
         OAuthLoginService.CallbackOutcome outcome = service.callback(
@@ -170,7 +184,7 @@ class OAuthLoginServiceTest {
 
     @Test
     void callback_successfulLogin_returnsSessionCookie() {
-        SessionService.OAuthStatePayload payload = new SessionService.OAuthStatePayload("");
+        SessionService.OAuthStatePayload payload = new SessionService.OAuthStatePayload("", null);
         OidcSubject subject = new OidcSubject(
                 "sub", "Name", "Given", "Family", "email@test.com", null, null, null, null, null);
         OAuthCallbackService.LoginResult loginResult = new OAuthCallbackService.LoginResult(UUID.randomUUID(), "Name", false);
@@ -185,11 +199,36 @@ class OAuthLoginServiceTest {
 
         assertTrue(outcome.isSessionRedirect());
         assertEquals("cookie", outcome.sessionCookieValue());
+        assertNull(outcome.sessionRedirectUri());
+    }
+
+    @Test
+    void callback_successfulMcpLogin_returnsSessionCookieAndMcpRedirect() {
+        SessionService.OAuthStatePayload payload = new SessionService.OAuthStatePayload("mcp_auth", null);
+        OidcSubject subject = new OidcSubject(
+                "sub", "Name", "Given", "Family", "email@test.com", null, null, null, null, null);
+        OAuthCallbackService.LoginResult loginResult = new OAuthCallbackService.LoginResult(UUID.randomUUID(), "Name", false);
+
+        when(sessionService.verifyOAuthState("state", "google")).thenReturn(payload);
+        when(tokenExchangeService.exchangeAndResolveSubject("google", "code", "https://api.peoplemesh.test/api/v1/auth/callback/google"))
+                .thenReturn(subject);
+        when(oAuthCallbackService.handleLogin("google", subject)).thenReturn(loginResult);
+        when(sessionService.encodeSession(loginResult.userId(), "google", "Name")).thenReturn("cookie");
+
+        OAuthLoginService.CallbackOutcome outcome = service.callback(
+                "google", "code", "state", null,
+                "https://api.peoplemesh.test/api/v1/auth/callback/google",
+                "https://api.peoplemesh.test");
+
+        assertTrue(outcome.isSessionRedirect());
+        assertEquals("cookie", outcome.sessionCookieValue());
+        assertNotNull(outcome.sessionRedirectUri());
+        assertEquals("https://api.peoplemesh.test/api/v1/auth/mcp/complete", outcome.sessionRedirectUri().toString());
     }
 
     @Test
     void callback_tokenExchangeFailure_returnsBadGateway() {
-        SessionService.OAuthStatePayload payload = new SessionService.OAuthStatePayload("");
+        SessionService.OAuthStatePayload payload = new SessionService.OAuthStatePayload("", null);
         when(sessionService.verifyOAuthState("state", "google")).thenReturn(payload);
         when(tokenExchangeService.exchangeAndResolveSubject("google", "code", "cb"))
                 .thenThrow(new IllegalStateException("provider down"));
@@ -204,7 +243,7 @@ class OAuthLoginServiceTest {
 
     @Test
     void callback_subjectMissing_returnsBadGateway() {
-        SessionService.OAuthStatePayload payload = new SessionService.OAuthStatePayload("");
+        SessionService.OAuthStatePayload payload = new SessionService.OAuthStatePayload("", null);
         when(sessionService.verifyOAuthState("state", "google")).thenReturn(payload);
         when(tokenExchangeService.exchangeAndResolveSubject("google", "code", "cb")).thenReturn(null);
 
@@ -218,7 +257,7 @@ class OAuthLoginServiceTest {
 
     @Test
     void callback_importSuccess_returnsHtml() throws Exception {
-        SessionService.OAuthStatePayload payload = new SessionService.OAuthStatePayload("profile_import");
+        SessionService.OAuthStatePayload payload = new SessionService.OAuthStatePayload("profile_import", null);
         when(sessionService.verifyOAuthState("state", "github")).thenReturn(payload);
 
         OAuthLoginService.CallbackOutcome outcome = service.callback(
@@ -234,7 +273,7 @@ class OAuthLoginServiceTest {
 
     @Test
     void finalizeImportCallback_success_returnsImportedPayload() {
-        SessionService.OAuthStatePayload payload = new SessionService.OAuthStatePayload("profile_import");
+        SessionService.OAuthStatePayload payload = new SessionService.OAuthStatePayload("profile_import", null);
         ProfileSchema schema = mock(ProfileSchema.class);
         when(sessionService.verifyOAuthState("state", "github")).thenReturn(payload);
         when(oAuthCallbackService.handleImport("github", "code", "cb")).thenReturn(schema);
@@ -250,7 +289,7 @@ class OAuthLoginServiceTest {
 
     @Test
     void finalizeImportCallback_success_nonGithubProviderUsesProviderSource() {
-        SessionService.OAuthStatePayload payload = new SessionService.OAuthStatePayload("profile_import");
+        SessionService.OAuthStatePayload payload = new SessionService.OAuthStatePayload("profile_import", null);
         ProfileSchema schema = mock(ProfileSchema.class);
         when(sessionService.verifyOAuthState("state", "google")).thenReturn(payload);
         when(oAuthCallbackService.handleImport("google", "code", "cb")).thenReturn(schema);
@@ -287,7 +326,7 @@ class OAuthLoginServiceTest {
 
     @Test
     void finalizeImportCallback_invalidIntent_returnsBadRequest() {
-        SessionService.OAuthStatePayload payload = new SessionService.OAuthStatePayload("");
+        SessionService.OAuthStatePayload payload = new SessionService.OAuthStatePayload("", null);
         when(sessionService.verifyOAuthState("state", "github")).thenReturn(payload);
 
         OAuthLoginService.ImportFinalizeOutcome outcome = service.finalizeImportCallback(
@@ -299,7 +338,7 @@ class OAuthLoginServiceTest {
 
     @Test
     void finalizeImportCallback_importFailure_returnsBadGateway() {
-        SessionService.OAuthStatePayload payload = new SessionService.OAuthStatePayload("profile_import");
+        SessionService.OAuthStatePayload payload = new SessionService.OAuthStatePayload("profile_import", null);
         when(sessionService.verifyOAuthState("state", "github")).thenReturn(payload);
         when(oAuthCallbackService.handleImport("github", "code", "cb"))
                 .thenThrow(new RuntimeException("import failed"));

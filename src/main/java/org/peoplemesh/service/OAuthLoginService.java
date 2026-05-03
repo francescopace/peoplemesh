@@ -16,7 +16,9 @@ import java.util.List;
 public class OAuthLoginService {
 
     private static final Logger LOG = Logger.getLogger(OAuthLoginService.class);
-    private static final String INTENT_PROFILE_IMPORT = "profile_import";
+    public static final String INTENT_PROFILE_IMPORT = "profile_import";
+    public static final String INTENT_MCP_AUTH = "mcp_auth";
+    public static final String INTENT_MCP_OAUTH = "mcp_oauth";
     private static final List<String> PROVIDER_ORDER = List.of("google", "microsoft", "github");
 
     @Inject
@@ -27,6 +29,9 @@ public class OAuthLoginService {
 
     @Inject
     OAuthCallbackService oAuthCallbackService;
+
+    @Inject
+    McpOAuthService mcpOAuthService;
 
     public AuthProvidersDto providers() {
         List<String> loginProviders = PROVIDER_ORDER.stream()
@@ -40,12 +45,16 @@ public class OAuthLoginService {
     }
 
     public LoginOutcome login(String provider, String intent, String callbackUri) {
+        return login(provider, intent, callbackUri, null);
+    }
+
+    public LoginOutcome login(String provider, String intent, String callbackUri, String context) {
         if (!tokenExchangeService.isProviderEnabled(provider)) {
             return LoginOutcome.error(501, "Not Implemented",
                     "OAuth login is not configured for provider: " + provider);
         }
         String normalizedIntent = normalizeIntent(provider, intent);
-        String state = sessionService.signOAuthState(provider, normalizedIntent);
+        String state = sessionService.signOAuthState(provider, normalizedIntent, context);
         URI authorize = tokenExchangeService.buildAuthorizeUri(provider, callbackUri, state);
         if (authorize == null) {
             return LoginOutcome.error(501, "Not Implemented",
@@ -108,7 +117,8 @@ public class OAuthLoginService {
 
         OAuthCallbackService.LoginResult result = oAuthCallbackService.handleLogin(provider, subject);
         String cookieValue = sessionService.encodeSession(result.userId(), provider, result.displayName());
-        return CallbackOutcome.sessionRedirect(cookieValue);
+        URI sessionRedirectUri = resolveSessionRedirect(statePayload, callbackUri, result.userId(), provider, result.displayName());
+        return CallbackOutcome.sessionRedirect(cookieValue, sessionRedirectUri);
     }
 
     private CallbackOutcome handleImportRedirectCallback(
@@ -192,7 +202,46 @@ public class OAuthLoginService {
         if (INTENT_PROFILE_IMPORT.equals(intent) && tokenExchangeService.isProviderEnabled(provider)) {
             return INTENT_PROFILE_IMPORT;
         }
+        if (INTENT_MCP_AUTH.equals(intent) && tokenExchangeService.isLoginEnabled(provider)) {
+            return INTENT_MCP_AUTH;
+        }
+        if (INTENT_MCP_OAUTH.equals(intent) && tokenExchangeService.isLoginEnabled(provider)) {
+            return INTENT_MCP_OAUTH;
+        }
         return "";
+    }
+
+    private URI resolveSessionRedirect(
+            SessionService.OAuthStatePayload statePayload,
+            String callbackUri,
+            java.util.UUID userId,
+            String provider,
+            String displayName
+    ) {
+        if (INTENT_MCP_AUTH.equals(statePayload.intent())) {
+            return buildMcpCompleteUri(callbackUri);
+        }
+        if (INTENT_MCP_OAUTH.equals(statePayload.intent())) {
+            String requestId = statePayload.context();
+            if (requestId == null || requestId.isBlank()) {
+                LOG.warn("Missing OAuth authorization request context for MCP OAuth intent");
+                return null;
+            }
+            return mcpOAuthService.completeAuthorization(requestId, userId, provider, displayName)
+                    .map(URI::create)
+                    .orElse(null);
+        }
+        return null;
+    }
+
+    private URI buildMcpCompleteUri(String callbackUri) {
+        try {
+            URI callback = URI.create(callbackUri).normalize();
+            return callback.resolve("/api/v1/auth/mcp/complete");
+        } catch (IllegalArgumentException e) {
+            LOG.warnf("Invalid callback URI for MCP completion redirect: %s", callbackUri);
+            return null;
+        }
     }
 
     public record LoginOutcome(URI redirectUri, ErrorResponse error) {
@@ -211,19 +260,20 @@ public class OAuthLoginService {
 
     public record CallbackOutcome(
             String sessionCookieValue,
+            URI sessionRedirectUri,
             URI importRedirectUri,
             ErrorResponse error
     ) {
-        public static CallbackOutcome sessionRedirect(String sessionCookieValue) {
-            return new CallbackOutcome(sessionCookieValue, null, null);
+        public static CallbackOutcome sessionRedirect(String sessionCookieValue, URI sessionRedirectUri) {
+            return new CallbackOutcome(sessionCookieValue, sessionRedirectUri, null, null);
         }
 
         public static CallbackOutcome importRedirect(URI importRedirectUri) {
-            return new CallbackOutcome(null, importRedirectUri, null);
+            return new CallbackOutcome(null, null, importRedirectUri, null);
         }
 
         public static CallbackOutcome error(int status, String title, String detail) {
-            return new CallbackOutcome(null, null, new ErrorResponse(status, title, detail));
+            return new CallbackOutcome(null, null, null, new ErrorResponse(status, title, detail));
         }
 
         public boolean isSessionRedirect() {
