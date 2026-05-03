@@ -12,12 +12,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.peoplemesh.api.error.ProblemDetail;
 import org.peoplemesh.config.AppConfig;
 import org.peoplemesh.domain.dto.AuthIdentityResponse;
+import org.peoplemesh.domain.dto.AuthProvidersDto;
 import org.peoplemesh.service.AuthIdentityService;
 import org.peoplemesh.domain.dto.ProfileSchema;
 import org.peoplemesh.service.OAuthLoginService;
 import org.peoplemesh.service.SessionService;
 
 import java.net.URI;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -56,26 +58,27 @@ class OAuthLoginResourceTest {
     @Test
     void login_whenServiceReturnsRedirect_returnsTemporaryRedirect() {
         when(uriInfo.getBaseUri()).thenReturn(URI.create("https://api.peoplemesh.test/"));
-        when(oAuthLoginService.login(eq("google"), eq("profile_import"), anyString()))
+        when(oAuthLoginService.login(eq("google"), eq("profile_import"), anyString(), eq(null)))
                 .thenReturn(OAuthLoginService.LoginOutcome.redirect(URI.create("https://oauth.example/authorize")));
 
-        Response response = resource.login("google", "profile_import");
+        Response response = resource.login("google", "profile_import", null);
 
         assertEquals(307, response.getStatus());
         assertEquals("https://oauth.example/authorize", response.getLocation().toString());
         verify(oAuthLoginService).login(
                 eq("google"),
                 eq("profile_import"),
-                eq("https://api.peoplemesh.test/api/v1/auth/callback/google"));
+                eq("https://api.peoplemesh.test/api/v1/auth/callback/google"),
+                eq(null));
     }
 
     @Test
     void login_whenServiceReturnsError_returnsProblemDetail() {
         when(uriInfo.getBaseUri()).thenReturn(URI.create("https://api.peoplemesh.test/"));
-        when(oAuthLoginService.login(eq("github"), eq(""), anyString()))
+        when(oAuthLoginService.login(eq("github"), eq(""), anyString(), eq(null)))
                 .thenReturn(OAuthLoginService.LoginOutcome.error(501, "Not Implemented", "Provider not configured"));
 
-        Response response = resource.login("github", "");
+        Response response = resource.login("github", "", null);
 
         assertEquals(501, response.getStatus());
         ProblemDetail detail = assertInstanceOf(ProblemDetail.class, response.getEntity());
@@ -109,7 +112,7 @@ class OAuthLoginResourceTest {
         when(sessionService.sessionMaxAgeSeconds()).thenReturn(3600);
         when(oAuthLoginService.callback(eq("google"), eq("code"), eq("state"), eq(null),
                 eq("https://api.peoplemesh.test/api/v1/auth/callback/google"), eq("https://api.peoplemesh.test")))
-                .thenReturn(OAuthLoginService.CallbackOutcome.sessionRedirect("signed-cookie"));
+                .thenReturn(OAuthLoginService.CallbackOutcome.sessionRedirect("signed-cookie", null));
 
         Response response = resource.callback("google", "code", "state", null, null);
 
@@ -120,6 +123,29 @@ class OAuthLoginResourceTest {
         assertEquals("signed-cookie", cookie.getValue());
         assertEquals(3600, cookie.getMaxAge());
         assertTrue(cookie.isSecure());
+    }
+
+    @Test
+    void callback_whenMcpSessionRedirect_usesProvidedRedirectUri() {
+        when(uriInfo.getBaseUri()).thenReturn(URI.create("https://api.peoplemesh.test/"));
+        when(uriInfo.getRequestUri()).thenReturn(URI.create("https://api.peoplemesh.test/api/v1/auth/callback/google"));
+        when(appConfig.frontend()).thenReturn(frontendConfig);
+        when(frontendConfig.origin()).thenReturn(Optional.empty());
+        when(sessionService.sessionMaxAgeSeconds()).thenReturn(3600);
+        when(oAuthLoginService.callback(eq("google"), eq("code"), eq("state"), eq(null),
+                eq("https://api.peoplemesh.test/api/v1/auth/callback/google"), eq("https://api.peoplemesh.test")))
+                .thenReturn(OAuthLoginService.CallbackOutcome.sessionRedirect(
+                        "signed-cookie",
+                        URI.create("https://api.peoplemesh.test/api/v1/auth/mcp/complete")
+                ));
+
+        Response response = resource.callback("google", "code", "state", null, null);
+
+        assertEquals(307, response.getStatus());
+        assertEquals("https://api.peoplemesh.test/api/v1/auth/mcp/complete", response.getLocation().toString());
+        NewCookie cookie = response.getCookies().get(SessionService.COOKIE_NAME);
+        assertNotNull(cookie);
+        assertEquals("signed-cookie", cookie.getValue());
     }
 
     @Test
@@ -213,5 +239,53 @@ class OAuthLoginResourceTest {
         Response response = resource.getIdentity();
 
         assertEquals(204, response.getStatus());
+    }
+
+    @Test
+    void mcpLogin_whenSingleProvider_redirectsDirectlyToProviderLoginWithMcpIntent() {
+        when(uriInfo.getBaseUri()).thenReturn(URI.create("https://api.peoplemesh.test/"));
+        when(oAuthLoginService.providers()).thenReturn(new AuthProvidersDto(List.of("google"), List.of()));
+
+        Response response = resource.mcpLogin();
+
+        assertEquals(307, response.getStatus());
+        assertEquals(
+                "https://api.peoplemesh.test/api/v1/auth/login/google?intent=mcp_auth",
+                response.getLocation().toString()
+        );
+    }
+
+    @Test
+    void mcpLogin_whenMultipleProviders_returnsChooserHtml() {
+        when(uriInfo.getBaseUri()).thenReturn(URI.create("https://api.peoplemesh.test/"));
+        when(oAuthLoginService.providers()).thenReturn(new AuthProvidersDto(List.of("google", "microsoft"), List.of()));
+
+        Response response = resource.mcpLogin();
+
+        assertEquals(200, response.getStatus());
+        String html = assertInstanceOf(String.class, response.getEntity());
+        assertTrue(html.contains("Authenticate PeopleMesh for MCP"));
+        assertTrue(html.contains("/api/v1/auth/login/google?intent=mcp_auth"));
+        assertTrue(html.contains("/api/v1/auth/login/microsoft?intent=mcp_auth"));
+    }
+
+    @Test
+    void mcpLogin_whenNoProviders_returnsUnavailablePage() {
+        when(oAuthLoginService.providers()).thenReturn(new AuthProvidersDto(List.of(), List.of("github")));
+
+        Response response = resource.mcpLogin();
+
+        assertEquals(503, response.getStatus());
+        String html = assertInstanceOf(String.class, response.getEntity());
+        assertTrue(html.contains("Authentication unavailable"));
+    }
+
+    @Test
+    void mcpComplete_returnsConfirmationHtml() {
+        Response response = resource.mcpComplete();
+
+        assertEquals(200, response.getStatus());
+        String html = assertInstanceOf(String.class, response.getEntity());
+        assertTrue(html.contains("Authentication complete"));
     }
 }

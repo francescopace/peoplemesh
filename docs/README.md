@@ -17,6 +17,7 @@ This is the canonical index for technical documentation under `docs/`.
 - Build and run the container: [`how-to/build-and-run-container.md`](how-to/build-and-run-container.md)
 - Run full stack with Docker Compose: [`how-to/run-compose-stack.md`](how-to/run-compose-stack.md)
 - Configure OIDC: [`how-to/configure-oidc.md`](how-to/configure-oidc.md)
+- Connect Claude Desktop to MCP: [`how-to/connect-claude-desktop-mcp.md`](how-to/connect-claude-desktop-mcp.md)
 - Deploy on OpenShift with Helm: [`how-to/deploy-openshift-helm.md`](how-to/deploy-openshift-helm.md)
 - Import global skills dictionary CSV: [`how-to/import-global-skills-csv.md`](how-to/import-global-skills-csv.md)
 - Run jobs ingest safely: [`how-to/run-jobs-ingest.md`](how-to/run-jobs-ingest.md)

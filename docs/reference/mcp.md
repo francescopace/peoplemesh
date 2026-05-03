@@ -24,6 +24,23 @@ This reference follows PeopleMesh's security- and GDPR-first posture by design (
 All MCP tools require authentication.
 Unauthenticated calls are rejected by HTTP authorization rules.
 
+For browser-mediated MCP clients, PeopleMesh exposes an OAuth login bootstrap endpoint:
+
+- `GET /api/v1/auth/mcp/login`
+
+If multiple login providers are configured, this endpoint renders a provider chooser.
+After successful sign-in, the flow completes at:
+
+- `GET /api/v1/auth/mcp/complete`
+
+For OAuth 2.1 MCP clients, PeopleMesh also exposes:
+
+- `GET /.well-known/oauth-protected-resource/mcp`
+- `GET /.well-known/oauth-authorization-server`
+- `POST /oauth/register` (dynamic client registration)
+- `GET /oauth/authorize`
+- `POST /oauth/token`
+
 ## Available tools
 
 All tools are read-only and use the `peoplemesh_` prefix.

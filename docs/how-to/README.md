@@ -7,6 +7,7 @@ Use this page to find task-oriented procedures quickly.
 - Build and run the container: [`build-and-run-container.md`](build-and-run-container.md)
 - Run full stack with Docker Compose: [`run-compose-stack.md`](run-compose-stack.md)
 - Configure OIDC: [`configure-oidc.md`](configure-oidc.md)
+- Connect Claude Desktop to MCP: [`connect-claude-desktop-mcp.md`](connect-claude-desktop-mcp.md)
 - Deploy on OpenShift with Helm: [`deploy-openshift-helm.md`](deploy-openshift-helm.md)
 
 ## Data and Imports

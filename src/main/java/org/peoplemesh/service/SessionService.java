@@ -94,12 +94,22 @@ public class SessionService {
 
     private static final long STATE_TTL_SECONDS = 600;
 
-    public record OAuthStatePayload(String intent) {}
+    public record OAuthStatePayload(String intent, String context) {}
 
     public String signOAuthState(String provider, String intent) {
+        return signOAuthState(provider, intent, null);
+    }
+
+    public String signOAuthState(String provider, String intent, String context) {
         long exp = Instant.now().getEpochSecond() + STATE_TTL_SECONDS;
         String nonce = UUID.randomUUID().toString();
+        String normalizedContext = normalizeDisplayName(context);
         String raw = provider + "|" + intent + "|" + nonce + "|" + exp;
+        if (normalizedContext != null) {
+            String encodedContext = Base64.getUrlEncoder().withoutPadding()
+                    .encodeToString(normalizedContext.getBytes(StandardCharsets.UTF_8));
+            raw = raw + "|" + encodedContext;
+        }
         String enc = Base64.getUrlEncoder().withoutPadding()
                 .encodeToString(raw.getBytes(StandardCharsets.UTF_8));
         return enc + "." + oauthHmacSign(enc);
@@ -115,12 +125,16 @@ public class SessionService {
         }
         try {
             String raw = new String(Base64.getUrlDecoder().decode(enc), StandardCharsets.UTF_8);
-            String[] f = raw.split("\\|", 4);
-            if (f.length != 4) return null;
+            String[] f = raw.split("\\|", 5);
+            if (f.length < 4 || f.length > 5) return null;
             if (!expectedProvider.equals(f[0])) return null;
             long exp = Long.parseLong(f[3]);
             if (Instant.now().getEpochSecond() > exp) return null;
-            return new OAuthStatePayload(f[1]);
+            String context = null;
+            if (f.length == 5 && f[4] != null && !f[4].isBlank()) {
+                context = decodeDisplayName(f[4]).orElse(null);
+            }
+            return new OAuthStatePayload(f[1], context);
         } catch (Exception e) {
             return null;
         }

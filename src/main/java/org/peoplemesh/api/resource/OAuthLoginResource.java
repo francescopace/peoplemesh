@@ -18,11 +18,13 @@ import jakarta.ws.rs.core.UriBuilder;
 import jakarta.ws.rs.core.UriInfo;
 import org.peoplemesh.api.error.ProblemDetail;
 import org.peoplemesh.config.AppConfig;
+import org.peoplemesh.domain.dto.AuthProvidersDto;
 import org.peoplemesh.service.AuthIdentityService;
 import org.peoplemesh.service.OAuthLoginService;
 import org.peoplemesh.service.SessionService;
 
 import java.net.URI;
+import java.util.List;
 
 @Path("/api/v1/auth")
 @PermitAll
@@ -52,8 +54,9 @@ public class OAuthLoginResource {
     public Response login(@PathParam("provider")
                           @Pattern(regexp = "^[a-zA-Z0-9_-]+$", message = "provider contains invalid characters")
                           String provider,
-                          @jakarta.ws.rs.QueryParam("intent") @Size(max = 50) String intent) {
-        OAuthLoginService.LoginOutcome outcome = oAuthLoginService.login(provider, intent, callbackUri(provider));
+                          @jakarta.ws.rs.QueryParam("intent") @Size(max = 50) String intent,
+                          @jakarta.ws.rs.QueryParam("ctx") @Size(max = 200) String context) {
+        OAuthLoginService.LoginOutcome outcome = oAuthLoginService.login(provider, intent, callbackUri(provider), context);
         if (outcome.isRedirect()) {
             return Response.temporaryRedirect(outcome.redirectUri()).build();
         }
@@ -85,7 +88,9 @@ public class OAuthLoginResource {
         }
         if (outcome.isSessionRedirect()) {
             NewCookie sessionCookie = buildSessionCookie(outcome.sessionCookieValue(), isSecure());
-            URI after = UriBuilder.fromUri(uriInfo.getBaseUri()).path("/").fragment("/search").build();
+            URI after = outcome.sessionRedirectUri() != null
+                    ? outcome.sessionRedirectUri()
+                    : UriBuilder.fromUri(uriInfo.getBaseUri()).path("/").fragment("/search").build();
             return Response.temporaryRedirect(after).cookie(sessionCookie).build();
         }
         OAuthLoginService.ErrorResponse response = outcome.error();
@@ -129,6 +134,30 @@ public class OAuthLoginResource {
     }
 
     @GET
+    @Path("/mcp/login")
+    @Produces(MediaType.TEXT_HTML)
+    public Response mcpLogin() {
+        AuthProvidersDto providers = oAuthLoginService.providers();
+        List<String> loginProviders = providers.loginProviders();
+        if (loginProviders == null || loginProviders.isEmpty()) {
+            return Response.status(503)
+                    .entity(renderMcpAuthUnavailablePage())
+                    .build();
+        }
+        if (loginProviders.size() == 1) {
+            return Response.temporaryRedirect(mcpProviderLoginUri(loginProviders.getFirst())).build();
+        }
+        return Response.ok(renderMcpProviderChooser(loginProviders)).build();
+    }
+
+    @GET
+    @Path("/mcp/complete")
+    @Produces(MediaType.TEXT_HTML)
+    public Response mcpComplete() {
+        return Response.ok(renderMcpCompletePage()).build();
+    }
+
+    @GET
     @Path("/identity")
     public Response getIdentity() {
         return authIdentityService.resolveCurrentIdentity(identity)
@@ -142,6 +171,14 @@ public class OAuthLoginResource {
                 .path(provider)
                 .build()
                 .toString();
+    }
+
+    private URI mcpProviderLoginUri(String provider) {
+        return UriBuilder.fromUri(uriInfo.getBaseUri())
+                .path("api/v1/auth/login")
+                .path(provider)
+                .queryParam("intent", OAuthLoginService.INTENT_MCP_AUTH)
+                .build();
     }
 
     private String resolveOrigin() {
@@ -197,5 +234,101 @@ public class OAuthLoginResource {
                 .secure(secure)
                 .sameSite(NewCookie.SameSite.LAX)
                 .build();
+    }
+
+    private String renderMcpProviderChooser(List<String> loginProviders) {
+        String options = loginProviders.stream()
+                .map(provider -> "<li><a href=\"" + mcpProviderLoginUri(provider) + "\">Continue with "
+                        + escapeHtml(labelForProvider(provider)) + "</a></li>")
+                .reduce("", String::concat);
+        return """
+                <!doctype html>
+                <html lang="en">
+                <head>
+                  <meta charset="utf-8" />
+                  <meta name="viewport" content="width=device-width, initial-scale=1" />
+                  <title>PeopleMesh MCP Authentication</title>
+                  <style>
+                    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 2rem; line-height: 1.5; }
+                    .card { max-width: 560px; border: 1px solid #ddd; border-radius: 12px; padding: 1.25rem; }
+                    ul { padding-left: 1.2rem; }
+                    a { color: #0b57d0; text-decoration: none; font-weight: 600; }
+                    a:hover { text-decoration: underline; }
+                    .muted { color: #555; }
+                  </style>
+                </head>
+                <body>
+                  <div class="card">
+                    <h1>Authenticate PeopleMesh for MCP</h1>
+                    <p>Select your login provider to continue.</p>
+                    <ul>
+                """ + options + """
+                    </ul>
+                    <p class="muted">After sign-in, return to Claude Desktop.</p>
+                  </div>
+                </body>
+                </html>
+                """;
+    }
+
+    private String renderMcpCompletePage() {
+        return """
+                <!doctype html>
+                <html lang="en">
+                <head>
+                  <meta charset="utf-8" />
+                  <meta name="viewport" content="width=device-width, initial-scale=1" />
+                  <title>PeopleMesh MCP Authentication Complete</title>
+                  <style>
+                    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 2rem; line-height: 1.5; }
+                    .card { max-width: 560px; border: 1px solid #ddd; border-radius: 12px; padding: 1.25rem; }
+                  </style>
+                </head>
+                <body>
+                  <div class="card">
+                    <h1>Authentication complete</h1>
+                    <p>You can close this window and continue in Claude Desktop.</p>
+                  </div>
+                </body>
+                </html>
+                """;
+    }
+
+    private String renderMcpAuthUnavailablePage() {
+        return """
+                <!doctype html>
+                <html lang="en">
+                <head>
+                  <meta charset="utf-8" />
+                  <meta name="viewport" content="width=device-width, initial-scale=1" />
+                  <title>PeopleMesh MCP Authentication Unavailable</title>
+                </head>
+                <body>
+                  <h1>Authentication unavailable</h1>
+                  <p>No login provider is configured. Configure at least one login provider and retry.</p>
+                </body>
+                </html>
+                """;
+    }
+
+    private static String labelForProvider(String provider) {
+        return switch (provider) {
+            case "google" -> "Google";
+            case "microsoft" -> "Microsoft";
+            case "github" -> "GitHub";
+            default -> provider;
+        };
+    }
+
+    private static String escapeHtml(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;");
     }
 }
