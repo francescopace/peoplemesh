@@ -27,6 +27,7 @@ PeopleMesh provides one search surface: describe what you need in natural langua
 - Manage skill catalogs and self-assessments
 - Discover relevant communities, projects, and initiatives
 - Access PeopleMesh from the web app, API integrations, ChatGPT/Claude via MCP, or any AI agent that supports MCP
+- Use MCP search through a prompt-based tool so query parsing stays server-side and consistent with the web experience
 
 ## How It Works
 

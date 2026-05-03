@@ -66,9 +66,8 @@ When Claude prompts for authentication:
 After connection succeeds, Claude should list the PeopleMesh tools:
 
 - `peoplemesh_get_my_profile`
-- `peoplemesh_match`
+- `peoplemesh_match_prompt`
 - `peoplemesh_match_me`
-- `peoplemesh_match_node`
 
 ## Verification
 

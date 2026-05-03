@@ -38,7 +38,7 @@ The core platform is already usable and production-ready for single-organization
 
 ### APIs and Integrations
 - REST API (`/api/v1`) for auth, profile, matching, nodes, skills, system, and maintenance flows.
-- MCP endpoint with read tools already available (`peoplemesh_get_my_profile`, `peoplemesh_match`, `peoplemesh_match_me`, `peoplemesh_match_node`).
+- MCP endpoint with read tools already available (`peoplemesh_get_my_profile`, `peoplemesh_match_prompt`, `peoplemesh_match_me`).
 - Maintenance ingest APIs for users and nodes, with idempotent external ingestion patterns.
 
 ### Trust, Security, and Compliance

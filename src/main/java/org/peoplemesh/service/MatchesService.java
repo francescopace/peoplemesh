@@ -55,8 +55,17 @@ public class MatchesService {
     }
 
     public SearchResponse matchFromPrompt(UUID userId, SearchRequest request, Integer limit) {
+        return matchFromPrompt(userId, request, null, null, limit);
+    }
+
+    public SearchResponse matchFromPrompt(
+            UUID userId,
+            SearchRequest request,
+            String type,
+            String country,
+            Integer limit) {
         SearchService.MatchContext context = resolveMatchContext(userId);
-        return searchService.search(userId, request.query(), null, null, null, limit, null, context);
+        return searchService.search(userId, request.query(), null, type, country, limit, null, context);
     }
 
     public List<MeshMatchResult> matchMyProfile(UUID userId, String type, String country) {

@@ -49,9 +49,50 @@ MCP handlers delegate to service-layer use cases and do not access repositories 
 | Tool | Purpose |
 |------|---------|
 | `peoplemesh_get_my_profile` | Returns the authenticated user's profile as `ProfileSchema` JSON |
-| `peoplemesh_match` | Returns matches from a `SearchQuery` JSON input (optional filters: `type`, `country`) |
+| `peoplemesh_match_prompt` | Returns parsed query metadata and ranked results from a natural-language prompt (optional filters: `type`, `country`) |
 | `peoplemesh_match_me` | Returns matches from the authenticated user's stored embedding |
-| `peoplemesh_match_node` | Returns matches from a specific node embedding (`nodeId` + optional filters) |
+
+## `peoplemesh_match_prompt` contract
+
+`peoplemesh_match_prompt` expects the original natural-language user request in `query`.
+
+Do:
+
+- Pass the user's request verbatim instead of pre-parsing it client-side.
+- Use `type=PEOPLE` only when the user explicitly wants people or candidates.
+- Leave `country` empty unless the user explicitly asked for a country or location constraint.
+- Let PeopleMesh interpret the prompt with its server-side parser and ranking logic.
+
+Do not:
+
+- Invent country filters from locale, user profile, session, or prior context.
+- Rewrite or relax the user's criteria before calling the tool.
+- Convert the prompt into your own JSON schema first.
+
+### Example
+
+Example tool call for a people search:
+
+```json
+{
+  "query": "Find a Java developer with Kubernetes experience who speaks English",
+  "type": "PEOPLE",
+  "country": ""
+}
+```
+
+The response is a `SearchResponse` JSON object with:
+
+- `parsedQuery`: the backend-generated `SearchQuery`
+- `results`: ranked matches
+
+This means MCP clients do not need to know the internal `SearchQuery` schema for normal search flows.
+
+### Relationship to REST
+
+- MCP search uses `peoplemesh_match_prompt` and keeps query parsing server-side.
+- Structured `SearchQuery` requests are still available on the REST API at `POST /api/v1/matches`.
+- Use the structured REST endpoint only for first-party clients or advanced integrations that intentionally manage `SearchQuery` directly.
 
 ## Out of scope (by design)
 
