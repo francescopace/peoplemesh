@@ -20,6 +20,7 @@ Quarkus application keys use dotted lowercase format (for example `peoplemesh.sk
 - Confirm exact defaults in:
   - `src/main/resources/application.properties`
   - `src/main/resources/application-dev.properties`
+  - `src/main/resources/application-dev-openai.properties`
 
 ## Required in Production
 
@@ -65,17 +66,27 @@ In production mode, Granite via Ollama is used by default.
 | `LLM_MODEL` | `granite4:3b` | Granite chat model used for query parsing and CV extraction prompts in production |
 | `EMBEDDING_MODEL` | `granite-embedding:30m` | Granite embedding model used for vector generation in production |
 | `OPENAI_API_KEY` | — | Optional OpenAI API key when explicitly switching provider/model |
+| `EMBEDDING_DIMENSION` | `384` | Target embedding size used by `peoplemesh.embedding.dimension`; keep it aligned with the pgvector column dimension |
 
 Dev model defaults are configured in `application-dev.properties`:
 
 - Chat model: `granite4:3b`
 - Embedding model: `granite-embedding:30m`
 
+OpenAI dev defaults are configured in `application-dev-openai.properties`:
+
+- Standalone local-dev profile with the same local runtime defaults as `dev`
+- Run with `OPENAI_API_KEY=... mvn quarkus:dev -Dquarkus.profile=dev-openai`
+- Chat model: `gpt-5.4-nano`
+- Embedding model: `text-embedding-3-small`
+- Embedding dimension: `384`
+
 ## CV Import
 
 | Key | Default | Description |
 |-----|---------|-------------|
 | `peoplemesh.cv-import.provider` | `docling` | CV import strategy. Supported values: `docling`, `langchain4j-pdf` |
+| `peoplemesh.embedding.dimension` | `384` | Expected embedding vector dimension used for validation and OpenAI embedding down-projection |
 | `quarkus.docling.timeout` | `60s` | Timeout for Docling requests |
 | `peoplemesh.cv-import.max-file-size` | `5242880` | Maximum CV upload size in bytes (5 MB) |
 
@@ -224,3 +235,4 @@ For exact defaults and profile-specific overrides, refer to:
 
 - `src/main/resources/application.properties`
 - `src/main/resources/application-dev.properties`
+- `src/main/resources/application-dev-openai.properties`

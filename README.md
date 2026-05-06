@@ -60,6 +60,14 @@ DevServices auto-starts PostgreSQL (pgvector) and Docling.
 CV import defaults to the `docling` strategy and can be switched with `peoplemesh.cv-import.provider`.
 Ensure Ollama is available locally for LLM inference and embeddings.
 
+To run the OpenAI-only dev profile instead:
+
+```bash
+OPENAI_API_KEY=... mvn quarkus:dev -Dquarkus.profile=dev-openai
+```
+
+This standalone local-dev profile disables Docling DevServices, switches CV import to `langchain4j-pdf`, uses OpenAI for chat and embeddings, and keeps `peoplemesh.embedding.dimension` aligned with the pgvector schema.
+
 ## Documentation
 
 Technical documentation is organized in [`docs/README.md`](docs/README.md).

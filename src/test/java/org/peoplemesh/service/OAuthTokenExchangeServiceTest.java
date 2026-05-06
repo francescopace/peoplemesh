@@ -555,6 +555,7 @@ class OAuthTokenExchangeServiceTest {
             @Override public SearchConfig search() { return null; }
             @Override public RetentionConfig retention() { return null; }
             @Override public CvImportConfig cvImport() { return null; }
+            @Override public EmbeddingConfig embedding() { return null; }
             @Override public NotificationConfig notification() { return null; }
             @Override public ClusteringConfig clustering() { return null; }
             @Override public MaintenanceConfig maintenance() { return null; }

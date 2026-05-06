@@ -31,7 +31,7 @@ class EmbeddingServiceTest {
     @BeforeEach
     void setUp() throws Exception {
         service = new EmbeddingService();
-        Field field = EmbeddingService.class.getDeclaredField("embeddingModel");
+        Field field = EmbeddingService.class.getDeclaredField("resolvedEmbeddingModel");
         field.setAccessible(true);
         field.set(service, embeddingModel);
     }

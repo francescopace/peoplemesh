@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import random
 import re
 import sys
@@ -20,7 +21,7 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from time import perf_counter, sleep
-from typing import Any
+from typing import Any, Callable
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -29,6 +30,15 @@ RANDOMUSER_URL = "https://randomuser.me/api/"
 UUID_NS = uuid.UUID("0b651c55-f445-4dcf-86e1-806cf2f59b1b")
 TARGET_MESH_VECTOR_DIM = 384
 OLLAMA_EMBEDDING_MODEL = "granite-embedding:30m"
+OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
+OPENAI_BASE_URL = "https://api.openai.com/v1"
+
+EMBEDDING_PROVIDER_DEFAULT_PROFILE = {
+    "ollama": "dev",
+    "openai": "dev-openai",
+}
+EMBEDDING_PROMPT_LIMITS: list[int | None] = [None, 3000, 2000, 1400, 1000, 700, 500, 350]
+RETRYABLE_HTTP_STATUS = {429, 500, 502, 503, 504}
 
 SO_SURVEY_CSV = Path(__file__).parent / "stack-overflow-survey/survey_results_public.csv"
 
@@ -301,13 +311,24 @@ def fetch_json(url: str, timeout_seconds: int = 30) -> dict[str, Any]:
     return json.loads(body)
 
 
-def post_json(url: str, payload: dict[str, Any], timeout_seconds: int = 120) -> dict[str, Any]:
+def post_json(
+    url: str,
+    payload: dict[str, Any],
+    timeout_seconds: int = 120,
+    headers: dict[str, str] | None = None,
+) -> dict[str, Any]:
     body = json.dumps(payload).encode("utf-8")
+    request_headers = {
+        "User-Agent": "peoplemesh-public-ingest/1.0",
+        "Content-Type": "application/json",
+    }
+    if headers:
+        request_headers.update(headers)
     req = Request(
         url,
         data=body,
         method="POST",
-        headers={"User-Agent": "peoplemesh-public-ingest/1.0", "Content-Type": "application/json"},
+        headers=request_headers,
     )
     with urlopen(req, timeout=timeout_seconds) as resp:
         charset = resp.headers.get_content_charset() or "utf-8"
@@ -789,65 +810,30 @@ def format_embedding_vector(values: list[float]) -> str:
     return "[" + ",".join(f"{float(v):.8f}" for v in values) + "]"
 
 
-def generate_embeddings_with_ollama(
+def should_retry_status(status_code: int) -> bool:
+    return status_code in RETRYABLE_HTTP_STATUS
+
+
+def validate_embedding_vector(vector: Any, model_name: str) -> str | None:
+    if not isinstance(vector, list) or not vector:
+        return None
+    if len(vector) != TARGET_MESH_VECTOR_DIM:
+        raise ValueError(
+            f"Embedding dimension mismatch for model '{model_name}': "
+            f"expected {TARGET_MESH_VECTOR_DIM}, got {len(vector)}"
+        )
+    return format_embedding_vector(vector)
+
+
+EmbedRecordFn = Callable[[str, str, str, list[str], dict[str, Any], str | None], str | None]
+
+
+def apply_embeddings(
     users: list[dict[str, Any]],
     groups: list[dict[str, Any]],
     jobs: list[dict[str, Any]],
-    ollama_base_url: str,
+    embed_record: EmbedRecordFn,
 ) -> None:
-    endpoint = ollama_base_url.rstrip("/") + "/api/embeddings"
-
-    # Keep fallback shortening aligned with Java EmbeddingService.
-    prompt_limits: list[int | None] = [None, 3000, 2000, 1400, 1000, 700, 500, 350]
-
-    def should_retry_status(status_code: int) -> bool:
-        return status_code in {429, 500, 502, 503, 504}
-
-    def embed_record(
-        node_type: str,
-        title: str,
-        description: str,
-        tags: list[str],
-        structured_data: dict[str, Any],
-        country: str | None,
-    ) -> str | None:
-        for limit in prompt_limits:
-            prompt = build_embedding_text(
-                node_type=node_type,
-                title=title,
-                description=description,
-                tags=tags,
-                structured_data=structured_data,
-                country=country,
-                max_chars=limit,
-            )
-            payload = {"model": OLLAMA_EMBEDDING_MODEL, "prompt": prompt}
-
-            for attempt in range(3):
-                try:
-                    response = post_json(endpoint, payload, timeout_seconds=120)
-                    vector = response.get("embedding")
-                    if isinstance(vector, list) and vector:
-                        if len(vector) != TARGET_MESH_VECTOR_DIM:
-                            raise ValueError(
-                                f"Embedding dimension mismatch for model '{OLLAMA_EMBEDDING_MODEL}': "
-                                f"expected {TARGET_MESH_VECTOR_DIM}, got {len(vector)}"
-                            )
-                        return format_embedding_vector(vector)
-                    break
-                except HTTPError as exc:
-                    if should_retry_status(exc.code) and attempt < 2:
-                        sleep(0.25 * (2**attempt))
-                        continue
-                    break
-                except URLError:
-                    if attempt < 2:
-                        sleep(0.25 * (2**attempt))
-                        continue
-                    break
-
-        return None
-
     for u in users:
         u["embedding"] = embed_record("USER", u["title"], u["description"], u["tags"], u["structured_data"], u.get("country"))
     for g in groups:
@@ -864,11 +850,126 @@ def generate_embeddings_with_ollama(
         j["embedding"] = embed_record("JOB", j["title"], j["description"], j["skills_required"], sd, j.get("country"))
 
 
-def write_seed_users_sql(path: Path, users: list[dict[str, Any]]) -> None:
+def generate_embeddings_with_ollama(
+    users: list[dict[str, Any]],
+    groups: list[dict[str, Any]],
+    jobs: list[dict[str, Any]],
+    ollama_base_url: str,
+) -> None:
+    endpoint = ollama_base_url.rstrip("/") + "/api/embeddings"
+
+    def embed_record(
+        node_type: str,
+        title: str,
+        description: str,
+        tags: list[str],
+        structured_data: dict[str, Any],
+        country: str | None,
+    ) -> str | None:
+        for limit in EMBEDDING_PROMPT_LIMITS:
+            prompt = build_embedding_text(
+                node_type=node_type,
+                title=title,
+                description=description,
+                tags=tags,
+                structured_data=structured_data,
+                country=country,
+                max_chars=limit,
+            )
+            payload = {"model": OLLAMA_EMBEDDING_MODEL, "prompt": prompt}
+
+            for attempt in range(3):
+                try:
+                    response = post_json(endpoint, payload, timeout_seconds=120)
+                    vector = validate_embedding_vector(response.get("embedding"), OLLAMA_EMBEDDING_MODEL)
+                    if vector:
+                        return vector
+                    break
+                except HTTPError as exc:
+                    if should_retry_status(exc.code) and attempt < 2:
+                        sleep(0.25 * (2**attempt))
+                        continue
+                    break
+                except URLError:
+                    if attempt < 2:
+                        sleep(0.25 * (2**attempt))
+                        continue
+                    break
+
+        return None
+
+    apply_embeddings(users, groups, jobs, embed_record)
+
+
+def generate_embeddings_with_openai(
+    users: list[dict[str, Any]],
+    groups: list[dict[str, Any]],
+    jobs: list[dict[str, Any]],
+    openai_base_url: str,
+    openai_api_key: str,
+    model_name: str,
+) -> None:
+    endpoint = openai_base_url.rstrip("/") + "/embeddings"
+    headers = {"Authorization": f"Bearer {openai_api_key}"}
+
+    def embed_record(
+        node_type: str,
+        title: str,
+        description: str,
+        tags: list[str],
+        structured_data: dict[str, Any],
+        country: str | None,
+    ) -> str | None:
+        for limit in EMBEDDING_PROMPT_LIMITS:
+            prompt = build_embedding_text(
+                node_type=node_type,
+                title=title,
+                description=description,
+                tags=tags,
+                structured_data=structured_data,
+                country=country,
+                max_chars=limit,
+            )
+            payload = {
+                "model": model_name,
+                "input": prompt,
+                "dimensions": TARGET_MESH_VECTOR_DIM,
+            }
+
+            for attempt in range(3):
+                try:
+                    response = post_json(endpoint, payload, timeout_seconds=120, headers=headers)
+                    data = response.get("data")
+                    vector = data[0].get("embedding") if isinstance(data, list) and data else None
+                    formatted = validate_embedding_vector(vector, model_name)
+                    if formatted:
+                        return formatted
+                    break
+                except HTTPError as exc:
+                    if should_retry_status(exc.code) and attempt < 2:
+                        sleep(0.25 * (2**attempt))
+                        continue
+                    break
+                except URLError:
+                    if attempt < 2:
+                        sleep(0.25 * (2**attempt))
+                        continue
+                    break
+
+        return None
+
+    apply_embeddings(users, groups, jobs, embed_record)
+
+
+def flyway_location_comment(profile_name: str) -> str:
+    return f"-- Loaded via %{profile_name} Flyway location: classpath:db/{profile_name}"
+
+
+def write_seed_users_sql(path: Path, users: list[dict[str, Any]], profile_name: str) -> None:
     header = textwrap.dedent(
         f"""\
         -- Dev-only repeatable seed data for quick matching tests.
-        -- Loaded via %dev Flyway location: classpath:db/dev
+        {flyway_location_comment(profile_name)}
         -- Source: randomuser.me + Stack Overflow Developer Survey 2025
 
         INSERT INTO mesh.mesh_node (id, node_type, title, description, searchable, created_at, updated_at)
@@ -918,11 +1019,11 @@ def write_seed_users_sql(path: Path, users: list[dict[str, Any]]) -> None:
     path.write_text(header + "\n" + body + consent_sql, encoding="utf-8")
 
 
-def write_seed_groups_sql(path: Path, groups: list[dict[str, Any]]) -> None:
+def write_seed_groups_sql(path: Path, groups: list[dict[str, Any]], profile_name: str) -> None:
     header = textwrap.dedent(
         f"""\
         -- Dev-only repeatable seed data for quick matching tests.
-        -- Loaded via %dev Flyway location: classpath:db/dev
+        {flyway_location_comment(profile_name)}
         -- Source: Stack Overflow survey + job tags derived communities/events
 
         INSERT INTO mesh.mesh_node (id, node_type, title, description, searchable, created_at, updated_at)
@@ -953,11 +1054,11 @@ def write_seed_groups_sql(path: Path, groups: list[dict[str, Any]]) -> None:
     path.write_text(header + "\n" + body, encoding="utf-8")
 
 
-def write_seed_jobs_sql(path: Path, jobs: list[dict[str, Any]]) -> None:
+def write_seed_jobs_sql(path: Path, jobs: list[dict[str, Any]], profile_name: str) -> None:
     header = textwrap.dedent(
         f"""\
         -- Dev-only repeatable seed data for quick matching tests.
-        -- Loaded via %dev Flyway location: classpath:db/dev
+        {flyway_location_comment(profile_name)}
         -- Source: Stack Overflow Developer Survey 2025
 
         INSERT INTO mesh.mesh_node (id, node_type, title, description, searchable, created_at, updated_at)
@@ -1025,11 +1126,11 @@ def collect_skill_catalog() -> list[str]:
     return items
 
 
-def write_seed_skill_catalog_sql(path: Path, skills: list[str]) -> None:
+def write_seed_skill_catalog_sql(path: Path, skills: list[str], profile_name: str) -> None:
     header = textwrap.dedent(
-        """\
+        f"""\
         -- Dev-only repeatable SO skill dictionary seed.
-        -- Loaded via %dev Flyway location: classpath:db/dev
+        {flyway_location_comment(profile_name)}
         -- Source: Stack Overflow Developer Survey 2025
 
         DELETE FROM skills.skill_definition;
@@ -1054,7 +1155,7 @@ def write_seed_skill_catalog_sql(path: Path, skills: list[str]) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Generate public-source company data focused by company type and write dev seed SQL files."
+        description="Generate public-source company data focused by company type and write local dev seed SQL files."
     )
     parser.add_argument("--workspace", default=".", help="PeopleMesh workspace root")
     parser.add_argument(
@@ -1067,7 +1168,30 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--users", type=int, default=500, help="Number of users to generate (dev default: 500)")
     parser.add_argument("--jobs", type=int, default=50, help="Number of internal job postings to generate (dev default: 50)")
     parser.add_argument("--groups", type=int, default=100, help="Number of internal groups/events to generate (dev default: 100)")
+    parser.add_argument(
+        "--embedding-provider",
+        choices=sorted(EMBEDDING_PROVIDER_DEFAULT_PROFILE.keys()),
+        default="ollama",
+        help="Embedding backend used for generated vectors (default: ollama)",
+    )
     parser.add_argument("--ollama-base-url", default="http://localhost:11434", help="Ollama base URL")
+    parser.add_argument("--openai-base-url", default=OPENAI_BASE_URL, help="OpenAI-compatible embeddings base URL")
+    parser.add_argument(
+        "--openai-api-key",
+        default="",
+        help="OpenAI API key (defaults to OPENAI_API_KEY environment variable)",
+    )
+    parser.add_argument(
+        "--openai-embedding-model",
+        default=OPENAI_EMBEDDING_MODEL,
+        help=f"OpenAI embedding model (default: {OPENAI_EMBEDDING_MODEL})",
+    )
+    parser.add_argument(
+        "--output-profile",
+        choices=sorted(set(EMBEDDING_PROVIDER_DEFAULT_PROFILE.values())),
+        default=None,
+        help="Seed profile/output directory under src/main/resources/db (default: inferred from --embedding-provider)",
+    )
     parser.add_argument("--seed", type=int, default=42, help="Random seed for deterministic enrichment")
     return parser.parse_args()
 
@@ -1099,6 +1223,8 @@ def main() -> int:
     run_start = perf_counter()
     args = parse_args()
     workspace = resolve_workspace(args.workspace)
+    output_profile = args.output_profile or EMBEDDING_PROVIDER_DEFAULT_PROFILE[args.embedding_provider]
+    openai_api_key = args.openai_api_key.strip() or os.environ.get("OPENAI_API_KEY", "").strip()
 
     csv.field_size_limit(sys.maxsize)
     rng = random.Random(args.seed)
@@ -1133,41 +1259,59 @@ def main() -> int:
     build_seconds = perf_counter() - phase_start
     print(f"[2/5] Build completed: {len(skill_catalog)} skill definitions.")
 
-    print("[3/5] Generating embeddings with Ollama...")
+    print(f"[3/5] Generating embeddings with {args.embedding_provider}...")
     phase_start = perf_counter()
-    generate_embeddings_with_ollama(
-        users=users,
-        groups=groups,
-        jobs=jobs,
-        ollama_base_url=args.ollama_base_url,
-    )
+    embedding_model_name: str
+    if args.embedding_provider == "openai":
+        if not openai_api_key:
+            print("[error] OPENAI_API_KEY is required when --embedding-provider openai.", file=sys.stderr)
+            return 2
+        generate_embeddings_with_openai(
+            users=users,
+            groups=groups,
+            jobs=jobs,
+            openai_base_url=args.openai_base_url,
+            openai_api_key=openai_api_key,
+            model_name=args.openai_embedding_model,
+        )
+        embedding_model_name = args.openai_embedding_model
+    else:
+        generate_embeddings_with_ollama(
+            users=users,
+            groups=groups,
+            jobs=jobs,
+            ollama_base_url=args.ollama_base_url,
+        )
+        embedding_model_name = OLLAMA_EMBEDDING_MODEL
     embedding_seconds = perf_counter() - phase_start
     print(f"[3/5] Embeddings completed in {fmt_seconds(embedding_seconds)}.")
 
-    db_dev = workspace / "src/main/resources/db/dev"
-    if not db_dev.exists():
+    db_root = workspace / "src/main/resources/db"
+    if not db_root.exists():
         print(
-            f"[error] Workspace seems incorrect: '{db_dev}' does not exist. "
+            f"[error] Workspace seems incorrect: '{db_root}' does not exist. "
             "Run from repo root or pass --workspace /path/to/peoplemesh.",
             file=sys.stderr,
         )
         return 2
+    db_output = db_root / output_profile
+    db_output.mkdir(parents=True, exist_ok=True)
 
-    print("[4/5] Writing dev seed SQL files...")
+    print(f"[4/5] Writing {output_profile} seed SQL files...")
     phase_start = perf_counter()
     write_users_start = perf_counter()
-    write_seed_users_sql(db_dev / "R__dev_seed_users.sql", users)
+    write_seed_users_sql(db_output / "R__dev_seed_users.sql", users, output_profile)
     write_users_seconds = perf_counter() - write_users_start
     write_groups_start = perf_counter()
-    write_seed_groups_sql(db_dev / "R__dev_seed_groups.sql", groups)
+    write_seed_groups_sql(db_output / "R__dev_seed_groups.sql", groups, output_profile)
     write_groups_seconds = perf_counter() - write_groups_start
     write_jobs_start = perf_counter()
-    write_seed_jobs_sql(db_dev / "R__dev_seed_jobs.sql", jobs)
+    write_seed_jobs_sql(db_output / "R__dev_seed_jobs.sql", jobs, output_profile)
     write_jobs_seconds = perf_counter() - write_jobs_start
 
     print("[5/5] Writing global skills dictionary SQL...")
     write_catalog_start = perf_counter()
-    write_seed_skill_catalog_sql(db_dev / "R__dev_seed_skill_catalog_so.sql", skill_catalog)
+    write_seed_skill_catalog_sql(db_output / "R__dev_seed_skill_catalog_so.sql", skill_catalog, output_profile)
     write_catalog_seconds = perf_counter() - write_catalog_start
     write_seconds = perf_counter() - phase_start
     print("[done] SQL generation completed.")
@@ -1186,7 +1330,11 @@ def main() -> int:
     print(f"- users: {len(users)}")
     print(f"- groups/events: {len(groups)}")
     print(f"- jobs: {len(jobs)}")
-    print(f"- ollama_model: {OLLAMA_EMBEDDING_MODEL}")
+    print(f"- embedding_provider: {args.embedding_provider}")
+    print(f"- embedding_model: {embedding_model_name}")
+    print(f"- embedding_dimension: {TARGET_MESH_VECTOR_DIM}")
+    print(f"- output_profile: {output_profile}")
+    print(f"- output_dir: {db_output.relative_to(workspace)}")
     print("- timings:")
     print(f"  - total: {fmt_seconds(total_seconds)}")
     print(f"  - load_datasets: {fmt_seconds(download_seconds)}")
