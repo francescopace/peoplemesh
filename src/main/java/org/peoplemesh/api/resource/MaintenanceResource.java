@@ -56,13 +56,6 @@ public class MaintenanceResource {
     HttpHeaders httpHeaders;
 
     @POST
-    @Path("/purge-consent-tokens")
-    public Response purgeConsentTokens(@HeaderParam("X-Maintenance-Key") @Size(max = 256) String key) {
-        assertAuthorized(key);
-        return Response.ok(maintenanceService.purgeConsentTokens()).build();
-    }
-
-    @POST
     @Path("/enforce-retention")
     public Response enforceRetention(@HeaderParam("X-Maintenance-Key") @Size(max = 256) String key) {
         assertAuthorized(key);

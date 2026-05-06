@@ -54,7 +54,6 @@ docker run --rm \
   -e EMBEDDING_MODEL='granite-embedding:30m' \
   -e CV_IMPORT_PROVIDER='docling' \
   -e DOCLING_BASE_URL='http://host.docker.internal:5001' \
-  -e CONSENT_TOKEN_SECRET='replace-with-32-plus-bytes' \
   -e SESSION_SECRET='replace-with-32-plus-bytes' \
   -e OAUTH_STATE_SECRET='replace-with-32-plus-bytes' \
   -e MAINTENANCE_API_KEY='replace-with-strong-shared-key' \
@@ -76,7 +75,6 @@ These are required for a non-dev container run:
 - `OPENAI_API_KEY`
 - `OPENAI_BASE_URL`
 - `CV_IMPORT_PROVIDER`
-- `CONSENT_TOKEN_SECRET`
 - `SESSION_SECRET`
 - `OAUTH_STATE_SECRET`
 - `MAINTENANCE_API_KEY`
@@ -99,7 +97,6 @@ docker run --rm \
   -e DB_USER='peoplemesh' \
   -e DB_PASSWORD='change-me' \
   -e OPENAI_API_KEY='sk-...' \
-  -e CONSENT_TOKEN_SECRET='replace-with-32-plus-bytes' \
   -e SESSION_SECRET='replace-with-32-plus-bytes' \
   -e OAUTH_STATE_SECRET='replace-with-32-plus-bytes' \
   -e MAINTENANCE_API_KEY='replace-with-strong-shared-key' \

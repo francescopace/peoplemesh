@@ -42,7 +42,7 @@ PeopleMesh is built with security and privacy controls as first-class product co
 
 - Granular consent management by scope with user-controlled revoke/re-grant flows
 - GDPR rights support in product flows (data export, account deletion, processing restriction)
-- Configurable retention enforcement and consent-token lifecycle maintenance
+- Configurable retention enforcement
 - Pseudonymized audit trails (hashed identifiers, no profile content in logs)
 - Protected maintenance surfaces (`X-Maintenance-Key` and optional CIDR allowlists)
 

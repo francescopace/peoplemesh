@@ -101,21 +101,6 @@ class MaintenanceResourceTest {
     }
 
     @Test
-    void purgeConsentTokens_validKey_returnsResult() {
-        when(config.maintenance()).thenReturn(maintenanceConfig);
-        when(maintenanceConfig.apiKey()).thenReturn(Optional.of("valid-key"));
-        when(maintenanceConfig.allowedCidrs()).thenReturn(Optional.empty());
-        Map<String, Object> result = Map.of("action", "purge-consent-tokens", "purged", 3);
-        when(maintenanceService.purgeConsentTokens()).thenReturn(result);
-
-        Response response = resource.purgeConsentTokens("valid-key");
-
-        assertEquals(200, response.getStatus());
-        assertSame(result, response.getEntity());
-        verify(maintenanceService).purgeConsentTokens();
-    }
-
-    @Test
     void enforceRetention_validKey_returnsResult() {
         when(config.maintenance()).thenReturn(maintenanceConfig);
         when(maintenanceConfig.apiKey()).thenReturn(Optional.of("valid-key"));

@@ -23,7 +23,6 @@ This is the canonical index for technical documentation under `docs/`.
 - Run jobs ingest safely: [`how-to/run-jobs-ingest.md`](how-to/run-jobs-ingest.md)
 - Regenerate node embeddings: [`how-to/regenerate-node-embeddings.md`](how-to/regenerate-node-embeddings.md)
 - Export Micrometer metrics to Grafana/Prometheus: [`how-to/export-metrics-grafana.md`](how-to/export-metrics-grafana.md)
-- Purge consent tokens: [`how-to/purge-consent-tokens.md`](how-to/purge-consent-tokens.md)
 - Enforce data retention: [`how-to/enforce-retention.md`](how-to/enforce-retention.md)
 - Configure community auto-clustering: [`how-to/configure-community-auto-clustering.md`](how-to/configure-community-auto-clustering.md)
 - Generate synthetic data for development and demos: [`how-to/generate-synthetic-data.md`](how-to/generate-synthetic-data.md)

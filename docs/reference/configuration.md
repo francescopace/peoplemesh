@@ -29,7 +29,6 @@ Quarkus application keys use dotted lowercase format (for example `peoplemesh.sk
 | `DB_USER` | PostgreSQL username |
 | `DB_PASSWORD` | PostgreSQL password |
 | `OPENAI_API_KEY` | OpenAI API key |
-| `CONSENT_TOKEN_SECRET` | HMAC-SHA256 signing key for consent tokens (minimum 32 bytes) |
 | `SESSION_SECRET` | HMAC-SHA256 key for signed session cookies |
 | `OAUTH_STATE_SECRET` | HMAC-SHA256 key for OAuth state parameters |
 | `MAINTENANCE_API_KEY` | Shared secret for maintenance endpoints (`X-Maintenance-Key`) |
@@ -112,7 +111,6 @@ This keeps the `dev` profile active while switching to the OpenAI defaults from 
 | `peoplemesh.maintenance.api-key` | — | Shared secret expected in `X-Maintenance-Key` |
 | `peoplemesh.maintenance.allowed-cidrs` | — | IP/CIDR allowlist for maintenance callers |
 | `peoplemesh.problems.base-uri` | `about:blank` | Base URI used in Problem Details payloads |
-| `peoplemesh.consent-token.secret` | — | HMAC signing key for consent tokens |
 | `peoplemesh.session.secret` | — | HMAC signing key for session cookies |
 | `peoplemesh.oauth.state-secret` | — | HMAC signing key for OAuth state values |
 | `peoplemesh.frontend.enabled` | `false` | Enable serving static frontend resources from backend |
@@ -229,11 +227,10 @@ When not set, legal pages display generic text (e.g. "the Operator").
 
 Exposed publicly via `GET /api/v1/info` (no authentication required).
 
-## Session, Consent, and Error Contracts
+## Session and Error Contracts
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `peoplemesh.consent-token.ttl-seconds` | `300` | Consent token time-to-live in seconds |
 | `PROBLEMS_BASE_URI` | `about:blank` | Base URI for RFC 9457-style Problem Details responses |
 
 ## Source of truth

@@ -7,7 +7,7 @@ import java.security.MessageDigest;
 import java.util.HexFormat;
 
 /**
- * Shared HMAC-SHA256 signer used for session cookies, consent tokens, and OAuth state.
+ * Shared HMAC-SHA256 signer used for session cookies and OAuth state.
  */
 public final class HmacSigner {
 

@@ -28,8 +28,6 @@ class MaintenanceServiceTest {
     @Mock
     AppConfig config;
     @Mock
-    JdbcConsentTokenStore consentTokenStore;
-    @Mock
     GdprService gdprService;
     @Mock
     ClusteringScheduler clusteringScheduler;
@@ -38,12 +36,6 @@ class MaintenanceServiceTest {
 
     @InjectMocks
     MaintenanceService service;
-
-    @Test
-    void purgeConsentTokens_returnsSummary() {
-        when(consentTokenStore.purgeExpired()).thenReturn(3);
-        assertEquals(3, service.purgeConsentTokens().get("purged"));
-    }
 
     @Test
     void enforceRetention_usesConfiguredMonths() {

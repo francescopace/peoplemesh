@@ -254,7 +254,6 @@ The maintenance key header is validated at API boundary (`max 256` chars).
 |--------|------|------------|-------------|
 | POST | `/api/v1/maintenance/ingest/nodes` | Body: `NodesIngestRequestDto` (JSON, validated) | Non-user node batch upsert (idempotent on `node_type` + `source` + `external_id`) |
 | POST | `/api/v1/maintenance/ingest/users` | Body: `UsersIngestRequestDto` (JSON, validated) | User batch upsert (idempotent on `external_id`) |
-| POST | `/api/v1/maintenance/purge-consent-tokens` | Header: `X-Maintenance-Key` | Remove expired consent tokens |
 | POST | `/api/v1/maintenance/enforce-retention` | Header: `X-Maintenance-Key` | Hard-delete inactive users past retention window |
 | POST | `/api/v1/maintenance/run-clustering` | Header: `X-Maintenance-Key` | Auto-discover communities (k-means) |
 | POST | `/api/v1/maintenance/regenerate-embeddings` | `?nodeType`, `?onlyMissing` (default true), `?batchSize` (1..1000, default 1). Returns 202 | Start async node embedding regeneration job |

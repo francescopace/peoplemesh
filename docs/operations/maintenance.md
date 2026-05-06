@@ -30,7 +30,6 @@ Endpoint contracts (paths, payload shapes, and parameter constraints) are mainta
 |------|-------------|---------------|----------------------|-------------------|
 | Nodes ingest | `./pmc ingest-nodes --file /path/to/nodes.json` | `POST /api/v1/maintenance/ingest/nodes` | Every 15-60 minutes | [`run-jobs-ingest.md#procedure`](../how-to/run-jobs-ingest.md#procedure) |
 | Users ingest | `./pmc ingest-users --file /path/to/users.json` | `POST /api/v1/maintenance/ingest/users` | Daily / on-demand | [`run-jobs-ingest.md#procedure`](../how-to/run-jobs-ingest.md#procedure) |
-| Purge consent tokens | `./pmc purge-consent-tokens` | `POST /api/v1/maintenance/purge-consent-tokens` | Hourly | [`purge-consent-tokens.md#procedure`](../how-to/purge-consent-tokens.md#procedure) |
 | Enforce retention | `./pmc enforce-retention` | `POST /api/v1/maintenance/enforce-retention` | Daily | [`enforce-retention.md#procedure`](../how-to/enforce-retention.md#procedure) |
 | Community auto-clustering | `./pmc run-clustering` | `POST /api/v1/maintenance/run-clustering` | Weekly | [`configure-community-auto-clustering.md#procedure`](../how-to/configure-community-auto-clustering.md#procedure) |
 | Regenerate embeddings (all, by type, or only missing) | `./pmc regenerate-embeddings ...` | `POST /api/v1/maintenance/regenerate-embeddings` + `GET /api/v1/maintenance/regenerate-embeddings/{jobId}` | On demand / after import pipelines or embedding-model changes | [`regenerate-node-embeddings.md#procedure`](../how-to/regenerate-node-embeddings.md#procedure) |

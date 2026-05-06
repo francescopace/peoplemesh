@@ -27,7 +27,6 @@ Run operational maintenance tasks for PeopleMesh
   -V, --version                             Print version information and exit
 
 Commands:
-  purge-consent-tokens   Remove expired consent tokens
   enforce-retention      Delete inactive profiles outside retention policy
   run-clustering         Rebuild automatic community clustering
   ingest-nodes           Import or update non-user nodes from a JSON payload
@@ -561,7 +560,6 @@ main() {
   fi
 
   case "${command}" in
-    purge-consent-tokens) post_request "/api/v1/maintenance/purge-consent-tokens" ;;
     enforce-retention) post_request "/api/v1/maintenance/enforce-retention" ;;
     run-clustering) post_request "/api/v1/maintenance/run-clustering" ;;
     ingest-nodes) command_ingest_nodes "$@" ;;

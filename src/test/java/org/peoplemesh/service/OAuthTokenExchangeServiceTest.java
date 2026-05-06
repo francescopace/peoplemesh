@@ -547,7 +547,6 @@ class OAuthTokenExchangeServiceTest {
         };
         return new AppConfig() {
             @Override public ProblemsConfig problems() { return null; }
-            @Override public ConsentTokenConfig consentToken() { return null; }
             @Override public SessionConfig session() { return null; }
             @Override public OAuthConfig oauth() { return null; }
             @Override public OidcProviders oidc() { return providers; }

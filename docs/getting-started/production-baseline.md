@@ -12,7 +12,7 @@ This guide lists the minimum security configuration required before any non-dev 
 Before exposing PeopleMesh in staging or production, explicitly configure:
 
 - OIDC provider credentials (`OIDC_<PROVIDER>_CLIENT_ID`, `OIDC_<PROVIDER>_CLIENT_SECRET`)
-- Core secrets (`SESSION_SECRET`, `OAUTH_STATE_SECRET`, `CONSENT_TOKEN_SECRET`)
+- Core secrets (`SESSION_SECRET`, `OAUTH_STATE_SECRET`)
 - Maintenance protection (`MAINTENANCE_API_KEY`, optional `MAINTENANCE_ALLOWED_CIDRS`)
 - Frontend origin restrictions (`CORS_ORIGINS`)
 

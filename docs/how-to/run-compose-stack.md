@@ -34,7 +34,6 @@ If you are reading docs outside the repository checkout, use:
 Create a `.env` file in the repository root:
 
 ```bash
-CONSENT_TOKEN_SECRET=replace-with-32-plus-bytes
 SESSION_SECRET=replace-with-32-plus-bytes
 OAUTH_STATE_SECRET=replace-with-32-plus-bytes
 MAINTENANCE_API_KEY=replace-with-strong-shared-key

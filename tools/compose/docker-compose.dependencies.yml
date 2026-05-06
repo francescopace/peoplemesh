@@ -20,7 +20,6 @@ services:
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-granite-embedding:30m}
       CV_IMPORT_PROVIDER: ${CV_IMPORT_PROVIDER:-docling}
       DOCLING_BASE_URL: http://docling:5001
-      CONSENT_TOKEN_SECRET: ${CONSENT_TOKEN_SECRET:-replace-with-32-plus-bytes}
       SESSION_SECRET: ${SESSION_SECRET:-replace-with-32-plus-bytes}
       OAUTH_STATE_SECRET: ${OAUTH_STATE_SECRET:-replace-with-32-plus-bytes}
       MAINTENANCE_API_KEY: ${MAINTENANCE_API_KEY:-replace-with-strong-shared-key}

@@ -7,7 +7,6 @@ import io.smallrye.config.WithDefault;
 public interface AppConfig {
 
     ProblemsConfig problems();
-    ConsentTokenConfig consentToken();
     SessionConfig session();
     OAuthConfig oauth();
     OidcProviders oidc();
@@ -50,13 +49,6 @@ public interface AppConfig {
     interface EmbeddingConfig {
         @WithDefault("384")
         int dimension();
-    }
-
-    interface ConsentTokenConfig {
-        String secret();
-
-        @WithDefault("300")
-        int ttlSeconds();
     }
 
     interface SessionConfig {

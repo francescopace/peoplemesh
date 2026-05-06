@@ -74,7 +74,7 @@ class CsrfHeaderFilterTest {
 
     @Test
     void filter_maintenancePath_doesNotAbort() {
-        stubPathAndMethod("/api/v1/maintenance/purge-consent-tokens", "POST");
+        stubPathAndMethod("/api/v1/maintenance/enforce-retention", "POST");
         filter.filter(request);
         verify(request, never()).abortWith(any());
     }

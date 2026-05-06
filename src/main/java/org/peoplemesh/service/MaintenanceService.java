@@ -21,9 +21,6 @@ public class MaintenanceService {
     AppConfig config;
 
     @Inject
-    JdbcConsentTokenStore consentTokenStore;
-
-    @Inject
     GdprService gdprService;
 
     @Inject
@@ -31,12 +28,6 @@ public class MaintenanceService {
 
     @Inject
     NodeEmbeddingMaintenanceService nodeEmbeddingMaintenanceService;
-
-    public Map<String, Object> purgeConsentTokens() {
-        int purged = consentTokenStore.purgeExpired();
-        LOG.infof("Maintenance: purged %d expired consent tokens", purged);
-        return Map.of("action", "purge-consent-tokens", "purged", purged);
-    }
 
     public Map<String, Object> enforceRetention() {
         int deleted = gdprService.enforceRetention(config.retention().inactiveMonths());

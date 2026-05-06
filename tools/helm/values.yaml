@@ -156,7 +156,6 @@ secret:
     DB_USER: peoplemesh
     DB_PASSWORD: change-me
     OPENAI_API_KEY: ollama
-    CONSENT_TOKEN_SECRET: replace-with-32-plus-bytes
     SESSION_SECRET: replace-with-32-plus-bytes
     OAUTH_STATE_SECRET: replace-with-32-plus-bytes
     MAINTENANCE_API_KEY: replace-with-strong-shared-key
