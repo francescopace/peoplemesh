@@ -179,7 +179,7 @@ oc exec -n peoplemesh statefulset/peoplemesh-ollama -- ollama pull granite-embed
 - 401/403 on maintenance endpoints: verify `MAINTENANCE_API_KEY` and caller IP allowlist (`MAINTENANCE_ALLOWED_CIDRS`) if configured
 - OIDC providers missing: verify at least one provider pair is set (`OIDC_GOOGLE_*` or `OIDC_MICROSOFT_*`)
 - CV import errors: verify `DOCLING_BASE_URL` connectivity from the PeopleMesh pod
-- AI/matching errors: verify `OLLAMA_BASE_URL` connectivity and model availability
+- AI/matching errors: verify `OPENAI_BASE_URL` connectivity and model availability
 
 ## Related docs
 

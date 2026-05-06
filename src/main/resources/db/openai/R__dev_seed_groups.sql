@@ -1,5 +1,5 @@
 -- Dev-only repeatable seed data for quick matching tests.
--- Loaded via %dev-openai Flyway location: classpath:db/dev-openai
+-- Loaded via DEV_SEED_PROFILE=openai Flyway location: classpath:db/openai
 -- Source: Stack Overflow survey + job tags derived communities/events
 
 INSERT INTO mesh.mesh_node (id, node_type, title, description, searchable, created_at, updated_at)

@@ -28,7 +28,7 @@ All generated data is scoped to a single company name and filtered by industry p
 - The SO survey CSV in `tools/data/stack-overflow-survey/`
 - One embedding backend:
   - [Ollama](https://ollama.com) running locally for the default `dev` profile seeds
-  - `OPENAI_API_KEY` exported for `dev-openai` profile seeds
+  - `OPENAI_API_KEY` exported for OpenAI-backed seed generation
 
 ### Download the survey data
 
@@ -61,17 +61,18 @@ From the repo root:
 python3 tools/data/create_fake_data.py
 ```
 
-This command uses defaults: `--company-type it`, `--company-name "Acme Corp"`, 500 users, 50 jobs, 100 groups, `--embedding-provider ollama`, and `--output-profile dev`.
+This command uses defaults: `--company-type it`, `--company-name "Acme Corp"`, 500 users, 50 jobs, 100 groups, `--embedding-provider ollama`, and `--output-profile granite`.
 
-The script writes SQL files into `src/main/resources/db/dev/` which Flyway picks up automatically when running with the `dev` profile.
+The script writes SQL files into `src/main/resources/db/granite/` which Flyway picks up automatically when running with the `dev` profile and default `DEV_SEED_PROFILE=granite`.
 
-To generate OpenAI-backed seed data for the `dev-openai` profile instead:
+To generate OpenAI-backed seed data for the `openai` seed set instead:
 
 ```bash
 OPENAI_API_KEY=... python3 tools/data/create_fake_data.py --embedding-provider openai
 ```
 
-With `--embedding-provider openai`, the script writes SQL files into `src/main/resources/db/dev-openai/` by default.
+With `--embedding-provider openai`, the script writes SQL files into `src/main/resources/db/openai/` by default.
+To load that seed set in the unified `dev` profile, run with `DEV_SEED_PROFILE=openai`.
 
 ### Options
 
@@ -87,7 +88,7 @@ With `--embedding-provider openai`, the script writes SQL files into `src/main/r
 | `--openai-base-url` | `https://api.openai.com/v1` | OpenAI-compatible embeddings endpoint |
 | `--openai-api-key` | `OPENAI_API_KEY` env | OpenAI API key when `--embedding-provider openai` |
 | `--openai-embedding-model` | `text-embedding-3-small` | OpenAI embedding model used when `--embedding-provider openai` |
-| `--output-profile` | inferred from provider | Output directory/profile. Defaults to `dev` for Ollama and `dev-openai` for OpenAI |
+| `--output-profile` | inferred from provider | Output directory/profile. Defaults to `granite` for Ollama and `openai` for OpenAI |
 | `--seed` | `42` | Random seed for deterministic output |
 | `--workspace` | `.` | Repo root (auto-detected via `pom.xml`) |
 
@@ -130,7 +131,7 @@ python3 tools/data/create_fake_data.py \
   --ollama-base-url http://localhost:1
 ```
 
-Generate `dev-openai` seeds with OpenAI embeddings:
+Generate `openai` seeds with OpenAI embeddings:
 
 ```bash
 OPENAI_API_KEY=... python3 tools/data/create_fake_data.py \
@@ -150,8 +151,8 @@ Fields that the SO survey does not cover (hobbies, sports, causes, personality) 
 
 ## Verification
 
-- Generated SQL files exist in `src/main/resources/db/dev/` or `src/main/resources/db/dev-openai/`, depending on `--output-profile`.
-- Running the app in `dev` or `dev-openai` profile applies the matching generated migrations.
+- Generated SQL files exist in `src/main/resources/db/granite/` or `src/main/resources/db/openai/`, depending on `--output-profile`.
+- Running the app in the `dev` profile applies the selected seed set based on `DEV_SEED_PROFILE`.
 - Seeded users/jobs/groups are visible via local API/UI after startup.
 
 ## Troubleshooting

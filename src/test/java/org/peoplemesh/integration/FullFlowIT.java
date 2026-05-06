@@ -1,5 +1,6 @@
 package org.peoplemesh.integration;
 
+import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
@@ -8,10 +9,13 @@ import org.peoplemesh.domain.enums.NodeType;
 import org.peoplemesh.domain.model.MeshNode;
 import org.peoplemesh.domain.model.UserIdentity;
 import org.peoplemesh.repository.NodeRepository;
+import org.peoplemesh.service.EmbeddingService;
 import org.peoplemesh.service.SessionService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.UUID;
@@ -20,6 +24,8 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.when;
 
 /**
  * Integration test that validates the REST API endpoints are wired correctly.
@@ -37,6 +43,17 @@ class FullFlowIT {
 
     @Inject
     NodeRepository nodeRepository;
+
+    @InjectMock
+    EmbeddingService embeddingService;
+
+    @BeforeEach
+    void setUpEmbeddingService() {
+        when(embeddingService.generateEmbeddings(anyList())).thenAnswer(invocation -> {
+            List<?> texts = invocation.getArgument(0);
+            return new ArrayList<>(Collections.nCopies(texts.size(), null));
+        });
+    }
 
     @Test
     void healthEndpoint_returns200AndUpStatus() {

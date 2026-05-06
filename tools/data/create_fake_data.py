@@ -34,8 +34,8 @@ OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
 OPENAI_BASE_URL = "https://api.openai.com/v1"
 
 EMBEDDING_PROVIDER_DEFAULT_PROFILE = {
-    "ollama": "dev",
-    "openai": "dev-openai",
+    "ollama": "granite",
+    "openai": "openai",
 }
 EMBEDDING_PROMPT_LIMITS: list[int | None] = [None, 3000, 2000, 1400, 1000, 700, 500, 350]
 RETRYABLE_HTTP_STATUS = {429, 500, 502, 503, 504}
@@ -962,7 +962,7 @@ def generate_embeddings_with_openai(
 
 
 def flyway_location_comment(profile_name: str) -> str:
-    return f"-- Loaded via %{profile_name} Flyway location: classpath:db/{profile_name}"
+    return f"-- Loaded via DEV_SEED_PROFILE={profile_name} Flyway location: classpath:db/{profile_name}"
 
 
 def write_seed_users_sql(path: Path, users: list[dict[str, Any]], profile_name: str) -> None:

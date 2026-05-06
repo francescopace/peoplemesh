@@ -135,8 +135,12 @@ config:
     CORS_ORIGINS: https://peoplemesh.example.com
     PEOPLEMESH_FRONTEND_ENABLED: "true"
     PEOPLEMESH_FRONTEND_DIR: /deployments/src/main/web
+    CV_IMPORT_PROVIDER: docling
     DOCLING_BASE_URL: http://docling:5001
-    OLLAMA_BASE_URL: http://ollama:11434
+    OPENAI_BASE_URL: http://ollama:11434/v1
+    QUARKUS_LANGCHAIN4J_OPENAI_TIMEOUT: 60s
+    LLM_MODEL: granite4:3b
+    EMBEDDING_MODEL: granite-embedding:30m
     ORGANIZATION_NAME: ""
     ORGANIZATION_CONTACT_EMAIL: ""
     ORGANIZATION_DPO_NAME: ""
@@ -151,6 +155,7 @@ secret:
     DB_URL: jdbc:postgresql://postgresql:5432/peoplemesh
     DB_USER: peoplemesh
     DB_PASSWORD: change-me
+    OPENAI_API_KEY: ollama
     CONSENT_TOKEN_SECRET: replace-with-32-plus-bytes
     SESSION_SECRET: replace-with-32-plus-bytes
     OAUTH_STATE_SECRET: replace-with-32-plus-bytes

@@ -1,5 +1,5 @@
 -- Dev-only repeatable SO skill dictionary seed.
--- Loaded via %dev-openai Flyway location: classpath:db/dev-openai
+-- Loaded via DEV_SEED_PROFILE=granite Flyway location: classpath:db/granite
 -- Source: Stack Overflow Developer Survey 2025
 
 DELETE FROM skills.skill_definition;

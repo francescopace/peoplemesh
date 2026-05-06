@@ -9,7 +9,6 @@ import org.peoplemesh.domain.dto.ProfileSchema;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
-import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -33,7 +32,6 @@ class LangChain4jPdfCvImportProviderTest {
         UUID userId = UUID.randomUUID();
         InputStream is = new ByteArrayInputStream("pdf".getBytes());
         ProfileSchema schema = mock(ProfileSchema.class);
-        langChain4jPdfCvImportProvider.chatModelProvider = Optional.of("openai");
         when(cvLlmProfileStructuringService.extractProfileFromPdf(any(), eq("resume.pdf"))).thenReturn(schema);
 
         ProfileSchema result = langChain4jPdfCvImportProvider.extractProfile(is, "resume.pdf", userId);
@@ -42,10 +40,11 @@ class LangChain4jPdfCvImportProviderTest {
     }
 
     @Test
-    void extractProfile_withOllama_throwsClearError() {
+    void extractProfile_propagatesUnderlyingFailure() {
         UUID userId = UUID.randomUUID();
         InputStream is = new ByteArrayInputStream("pdf".getBytes());
-        langChain4jPdfCvImportProvider.chatModelProvider = Optional.of("ollama");
+        when(cvLlmProfileStructuringService.extractProfileFromPdf(any(), eq("resume.pdf")))
+                .thenThrow(new IllegalStateException("PDF extraction failed"));
 
         assertThrows(IllegalStateException.class,
                 () -> langChain4jPdfCvImportProvider.extractProfile(is, "resume.pdf", userId));

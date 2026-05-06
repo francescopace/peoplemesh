@@ -39,6 +39,7 @@ SESSION_SECRET=replace-with-32-plus-bytes
 OAUTH_STATE_SECRET=replace-with-32-plus-bytes
 MAINTENANCE_API_KEY=replace-with-strong-shared-key
 CORS_ORIGINS=http://localhost:8080
+OPENAI_API_KEY=ollama
 OIDC_GOOGLE_CLIENT_ID=...
 OIDC_GOOGLE_CLIENT_SECRET=...
 # or:
@@ -50,6 +51,11 @@ Optional overrides:
 
 - `PEOPLEMESH_IMAGE` (default: `frapax/peoplemesh:main`)
 - `DOCLING_IMAGE` (default: `ghcr.io/docling-project/docling-serve:v1.16.1`)
+- `OPENAI_BASE_URL` (default: `http://ollama:11434/v1`)
+- `QUARKUS_LANGCHAIN4J_OPENAI_TIMEOUT` (default: `60s`)
+- `LLM_MODEL` (default: `granite4:3b`)
+- `EMBEDDING_MODEL` (default: `granite-embedding:30m`)
+- `CV_IMPORT_PROVIDER` (default: `docling`)
 - `PEOPLEMESH_FRONTEND_ENABLED` (default: `true`)
 
 ### 2) Start the stack
@@ -95,7 +101,7 @@ docker compose -f tools/compose/docker-compose.dependencies.yml down -v
 - If app startup fails, check logs: `docker compose -f tools/compose/docker-compose.dependencies.yml logs peoplemesh`
 - If OIDC providers are empty, verify provider env vars in `.env`
 - If CV import fails, check Docling logs: `docker compose -f tools/compose/docker-compose.dependencies.yml logs docling`
-- If AI features fail, ensure Ollama models are pulled and ready
+- If AI features fail, verify `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `QUARKUS_LANGCHAIN4J_OPENAI_TIMEOUT`, and that the Ollama models are pulled and ready
 
 ## Related docs
 

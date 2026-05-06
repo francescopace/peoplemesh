@@ -1,5 +1,5 @@
 -- Dev-only repeatable seed data for quick matching tests.
--- Loaded via %dev Flyway location: classpath:db/dev
+-- Loaded via %granite Flyway location: classpath:db/granite
 -- Source: Stack Overflow Developer Survey 2025
 
 INSERT INTO mesh.mesh_node (id, node_type, title, description, searchable, created_at, updated_at)

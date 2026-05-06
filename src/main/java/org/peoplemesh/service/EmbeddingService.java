@@ -5,11 +5,9 @@ import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.model.embedding.EmbeddingModel;
 import dev.langchain4j.model.openai.OpenAiEmbeddingModel;
 import dev.langchain4j.model.output.Response;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 import io.micrometer.core.annotation.Timed;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.enterprise.inject.Instance;
-import jakarta.inject.Inject;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -21,9 +19,6 @@ public class EmbeddingService {
 
     @ConfigProperty(name = "peoplemesh.embedding.dimension", defaultValue = "384")
     int targetVectorDimension = 384;
-
-    @ConfigProperty(name = "quarkus.langchain4j.embedding-model.provider", defaultValue = "ollama")
-    String embeddingProvider = "ollama";
 
     @ConfigProperty(name = "quarkus.langchain4j.openai.api-key")
     Optional<String> openAiApiKey;
@@ -51,9 +46,6 @@ public class EmbeddingService {
 
     @ConfigProperty(name = "quarkus.langchain4j.openai.embedding-model.user")
     Optional<String> openAiUser;
-
-    @Inject
-    Instance<EmbeddingModel> embeddingModelInstance;
 
     private volatile EmbeddingModel resolvedEmbeddingModel;
 
@@ -128,23 +120,10 @@ public class EmbeddingService {
 
         synchronized (this) {
             if (resolvedEmbeddingModel == null) {
-                resolvedEmbeddingModel = createEmbeddingModel();
+                resolvedEmbeddingModel = createOpenAiEmbeddingModel();
             }
             return resolvedEmbeddingModel;
         }
-    }
-
-    private EmbeddingModel createEmbeddingModel() {
-        if ("openai".equalsIgnoreCase(embeddingProvider)) {
-            return createOpenAiEmbeddingModel();
-        }
-        if (embeddingModelInstance.isUnsatisfied()) {
-            throw new IllegalStateException("No embedding model bean matched the active provider: " + embeddingProvider);
-        }
-        if (embeddingModelInstance.isAmbiguous()) {
-            throw new IllegalStateException("Multiple embedding model beans matched the active provider: " + embeddingProvider);
-        }
-        return embeddingModelInstance.get();
     }
 
     private EmbeddingModel createOpenAiEmbeddingModel() {

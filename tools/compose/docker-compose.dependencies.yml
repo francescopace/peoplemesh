@@ -13,7 +13,12 @@ services:
       DB_URL: jdbc:postgresql://postgres:5432/peoplemesh
       DB_USER: peoplemesh
       DB_PASSWORD: change-me
-      OLLAMA_BASE_URL: http://ollama:11434
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-ollama}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-http://ollama:11434/v1}
+      QUARKUS_LANGCHAIN4J_OPENAI_TIMEOUT: ${QUARKUS_LANGCHAIN4J_OPENAI_TIMEOUT:-60s}
+      LLM_MODEL: ${LLM_MODEL:-granite4:3b}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-granite-embedding:30m}
+      CV_IMPORT_PROVIDER: ${CV_IMPORT_PROVIDER:-docling}
       DOCLING_BASE_URL: http://docling:5001
       CONSENT_TOKEN_SECRET: ${CONSENT_TOKEN_SECRET:-replace-with-32-plus-bytes}
       SESSION_SECRET: ${SESSION_SECRET:-replace-with-32-plus-bytes}
@@ -51,7 +56,7 @@ services:
       - peoplemesh-postgres-data:/var/lib/postgresql/data
 
   ollama:
-    image: ollama/ollama:latest
+    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
     container_name: peoplemesh-ollama
     restart: unless-stopped
     ports:

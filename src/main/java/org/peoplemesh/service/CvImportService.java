@@ -56,7 +56,7 @@ public class CvImportService {
         if (cvImportProviderInstance.isUnsatisfied()) {
             throw new IllegalStateException(
                     "No CV import provider matched the current peoplemesh.cv-import.provider. "
-                            + "Supported values: docling, langchain4j-pdf"
+                            + "Supported values: docling, openai"
             );
         }
         if (cvImportProviderInstance.isAmbiguous()) {

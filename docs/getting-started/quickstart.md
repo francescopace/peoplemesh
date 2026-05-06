@@ -29,7 +29,8 @@ In dev mode, DevServices auto-starts:
 - PostgreSQL with pgvector
 - Docling service
 
-Ollama is expected to be available locally for dev LLM/embedding flows.
+LLM and embedding calls use the OpenAI integration in LangChain4j.
+The default `dev` profile points it at local `Ollama` through `http://localhost:11434/v1`.
 
 ## Verification
 
@@ -64,5 +65,5 @@ For full endpoint details, see [`../reference/api.md`](../reference/api.md).
 ## Troubleshooting
 
 - If startup fails on database initialization, ensure Docker is running.
-- If AI-dependent flows fail in dev mode, verify local Ollama availability.
+- If AI-dependent flows fail in dev mode, verify local Ollama availability and the configured model names.
 - If OAuth login is unavailable, check provider credentials in configuration.

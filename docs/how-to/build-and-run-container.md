@@ -17,7 +17,7 @@ Running with explicit production-style settings helps detect configuration and i
 - Docker running locally
 - Reachable PostgreSQL instance
 - Reachable Docling service
-- Reachable Ollama service
+- Reachable OpenAI-compatible LLM endpoint (for example Ollama)
 - At least one configured OIDC provider
 
 ## Procedure
@@ -47,7 +47,12 @@ docker run --rm \
   -e DB_URL='jdbc:postgresql://host.docker.internal:5432/peoplemesh' \
   -e DB_USER='peoplemesh' \
   -e DB_PASSWORD='change-me' \
-  -e OLLAMA_BASE_URL='http://host.docker.internal:11434' \
+  -e OPENAI_API_KEY='ollama' \
+  -e OPENAI_BASE_URL='http://host.docker.internal:11434/v1' \
+  -e QUARKUS_LANGCHAIN4J_OPENAI_TIMEOUT='60s' \
+  -e LLM_MODEL='granite4:3b' \
+  -e EMBEDDING_MODEL='granite-embedding:30m' \
+  -e CV_IMPORT_PROVIDER='docling' \
   -e DOCLING_BASE_URL='http://host.docker.internal:5001' \
   -e CONSENT_TOKEN_SECRET='replace-with-32-plus-bytes' \
   -e SESSION_SECRET='replace-with-32-plus-bytes' \
@@ -69,6 +74,8 @@ These are required for a non-dev container run:
 - `DB_USER`
 - `DB_PASSWORD`
 - `OPENAI_API_KEY`
+- `OPENAI_BASE_URL`
+- `CV_IMPORT_PROVIDER`
 - `CONSENT_TOKEN_SECRET`
 - `SESSION_SECRET`
 - `OAUTH_STATE_SECRET`
@@ -115,6 +122,8 @@ For the full list, see [`../reference/configuration.md`](../reference/configurat
 ## Troubleshooting
 
 - Connection refused on startup: verify `DB_URL` and network reachability from the container.
+- AI endpoint failures: verify `OPENAI_BASE_URL`, `OPENAI_API_KEY`, and that the configured model names exist on the target backend.
+- Slow AI responses with Ollama-compatible backends: raise `QUARKUS_LANGCHAIN4J_OPENAI_TIMEOUT` if needed.
 - Login providers missing: verify OIDC client ID/secret environment variables.
 - Maintenance endpoints always forbidden: verify `MAINTENANCE_API_KEY` and `X-Maintenance-Key` header usage.
 - CV import failures: verify `DOCLING_BASE_URL` is reachable from inside the container.

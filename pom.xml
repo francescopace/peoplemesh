@@ -120,12 +120,7 @@
             <artifactId>quarkus-scheduler</artifactId>
         </dependency>
 
-        <!-- AI / LangChain4j -->
-        <dependency>
-            <groupId>io.quarkiverse.langchain4j</groupId>
-            <artifactId>quarkus-langchain4j-ollama</artifactId>
-        </dependency>
-        
+        <!-- LangChain4j -->
         <dependency>
             <groupId>io.quarkiverse.langchain4j</groupId>
             <artifactId>quarkus-langchain4j-openai</artifactId>

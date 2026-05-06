@@ -31,7 +31,6 @@ class EmbeddingServiceOpenAiModelTest {
         @Override
         public Map<String, String> getConfigOverrides() {
             return Map.of(
-                    "quarkus.langchain4j.embedding-model.provider", "openai",
                     "quarkus.langchain4j.openai.api-key", "test-key",
                     "quarkus.langchain4j.openai.embedding-model.enabled", "true",
                     "quarkus.langchain4j.openai.embedding-model.model-name", "text-embedding-3-small",

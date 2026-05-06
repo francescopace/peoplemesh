@@ -20,7 +20,6 @@ Quarkus application keys use dotted lowercase format (for example `peoplemesh.sk
 - Confirm exact defaults in:
   - `src/main/resources/application.properties`
   - `src/main/resources/application-dev.properties`
-  - `src/main/resources/application-dev-openai.properties`
 
 ## Required in Production
 
@@ -57,42 +56,50 @@ Import-only provider: `GITHUB`.
 
 ## AI Providers
 
-In dev mode, Ollama is used locally by default.
-In production mode, Granite via Ollama is used by default.
+PeopleMesh uses LangChain4j with an OpenAI-compatible backend for chat and embeddings.
+The base configuration targets the OpenAI API.
+The local `dev` profile overrides that base runtime to point to a local Ollama endpoint through its OpenAI-compatible API.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OLLAMA_BASE_URL` | `http://ollama:11434` | Ollama base URL used in production profile |
-| `LLM_MODEL` | `granite4:3b` | Granite chat model used for query parsing and CV extraction prompts in production |
-| `EMBEDDING_MODEL` | `granite-embedding:30m` | Granite embedding model used for vector generation in production |
-| `OPENAI_API_KEY` | — | Optional OpenAI API key when explicitly switching provider/model |
+| `OPENAI_API_KEY` | — | API key for the OpenAI-compatible backend |
+| `OPENAI_BASE_URL` | `https://api.openai.com/v1` | Base URL for the OpenAI-compatible backend |
+| `LLM_MODEL` | `gpt-5.4-nano` | Chat model used for query parsing, CV structuring, and clustering prompts |
+| `EMBEDDING_MODEL` | `text-embedding-3-small` | Embedding model used for vector generation |
 | `EMBEDDING_DIMENSION` | `384` | Target embedding size used by `peoplemesh.embedding.dimension`; keep it aligned with the pgvector column dimension |
 
 Dev model defaults are configured in `application-dev.properties`:
 
+- API key: `ollama`
+- Backend: `http://localhost:11434/v1`
 - Chat model: `granite4:3b`
 - Embedding model: `granite-embedding:30m`
 
-OpenAI dev defaults are configured in `application-dev-openai.properties`:
+OpenAI-oriented dev runtime can be activated on top of `application-dev.properties` with environment variables:
 
-- Standalone local-dev profile with the same local runtime defaults as `dev`
-- Run with `OPENAI_API_KEY=... mvn quarkus:dev -Dquarkus.profile=dev-openai`
-- Chat model: `gpt-5.4-nano`
-- Embedding model: `text-embedding-3-small`
-- Embedding dimension: `384`
+- `OPENAI_API_KEY=...`
+- `CV_IMPORT_PROVIDER=openai`
+- `DOCLING_DEVSERVICES_ENABLED=false`
+- `DOCLING_BASE_URL=http://localhost:5001`
+- `DEV_SEED_PROFILE=openai`
+- Optional `OPENAI_BASE_URL`, `LLM_MODEL`, and `EMBEDDING_MODEL`
+
+This keeps the `dev` profile active while switching to the OpenAI defaults from `application.properties`.
 
 ## CV Import
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `peoplemesh.cv-import.provider` | `docling` | CV import strategy. Supported values: `docling`, `langchain4j-pdf` |
+| `peoplemesh.cv-import.provider` | `openai` | CV import strategy. Supported values: `docling`, `openai` |
 | `peoplemesh.embedding.dimension` | `384` | Expected embedding vector dimension used for validation and OpenAI embedding down-projection |
 | `quarkus.docling.timeout` | `60s` | Timeout for Docling requests |
 | `peoplemesh.cv-import.max-file-size` | `5242880` | Maximum CV upload size in bytes (5 MB) |
+| `DEV_SEED_PROFILE` | `granite` in `application-dev.properties` | Seed directory loaded by Flyway in the dev profile, for example `granite` or `openai` |
+| `DOCLING_DEVSERVICES_ENABLED` | `true` in `application-dev.properties` | Enable or disable Docling DevServices in the dev profile |
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DOCLING_BASE_URL` | `http://docling:5001` (prod profile) | Canonical Docling service base URL used when `peoplemesh.cv-import.provider=docling` |
+| `DOCLING_BASE_URL` | deployment-specific | Canonical Docling service base URL used when `peoplemesh.cv-import.provider=docling` or when Docling DevServices are disabled and the extension still needs bootstrap configuration |
 
 ## Security and Operations
 
@@ -235,4 +242,3 @@ For exact defaults and profile-specific overrides, refer to:
 
 - `src/main/resources/application.properties`
 - `src/main/resources/application-dev.properties`
-- `src/main/resources/application-dev-openai.properties`

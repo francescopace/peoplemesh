@@ -69,7 +69,7 @@ class CvImportServiceTest {
         when(cvImportProviderInstance.isUnsatisfied()).thenReturn(false);
         when(cvImportProviderInstance.isAmbiguous()).thenReturn(false);
         when(cvImportProviderInstance.get()).thenReturn(cvImportProvider);
-        when(cvImportProvider.key()).thenReturn("langchain4j-pdf");
+        when(cvImportProvider.key()).thenReturn("openai");
         when(cvImportProvider.extractProfile(any(), eq("file.pdf"), eq(userId)))
                 .thenThrow(new IllegalStateException("provider failed"));
 

@@ -57,16 +57,21 @@ make start
 Requirements: Java 25+, Maven 3.9+, Docker.
 
 DevServices auto-starts PostgreSQL (pgvector) and Docling.
-CV import defaults to the `docling` strategy and can be switched with `peoplemesh.cv-import.provider`.
-Ensure Ollama is available locally for LLM inference and embeddings.
+The base runtime configuration targets OpenAI through LangChain4j.
+The local `dev` profile is environment-driven: by default it uses a local `Ollama` endpoint through its OpenAI-compatible API and keeps `Docling` enabled for CV import.
 
-To run the OpenAI-only dev profile instead:
+To run the same `dev` profile with OpenAI-backed seeds and PDF import:
 
 ```bash
-OPENAI_API_KEY=... mvn quarkus:dev -Dquarkus.profile=dev-openai
+OPENAI_API_KEY=... \
+CV_IMPORT_PROVIDER=openai \
+DOCLING_DEVSERVICES_ENABLED=false \
+DOCLING_BASE_URL=http://localhost:5001 \
+DEV_SEED_PROFILE=openai \
+mvn quarkus:dev
 ```
 
-This standalone local-dev profile disables Docling DevServices, switches CV import to `langchain4j-pdf`, uses OpenAI for chat and embeddings, and keeps `peoplemesh.embedding.dimension` aligned with the pgvector schema.
+This keeps the `dev` profile active, switches CV import to `openai`, loads the `openai` seed set, disables Docling DevServices, and provides the Docling base URL explicitly for extension bootstrap.
 
 ## Documentation
 
