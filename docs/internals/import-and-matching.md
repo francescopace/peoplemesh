@@ -30,17 +30,19 @@ PeopleMesh supports two user-initiated import paths that prefill profile data be
 ### CV Import Flow
 
 1. User uploads a CV to `POST /api/v1/me/cv-import`.
-2. Backend sends document content to Docling for parsing.
-3. Parsed content is structured into profile fields via LLM extraction.
-4. Backend returns an import preview payload.
-5. User selects fields and confirms through `POST /api/v1/me/import-apply`.
-6. Only confirmed fields are persisted.
+2. Backend routes the upload to the configured CV import provider.
+3. The provider either parses the document via Docling first, or sends the PDF directly to the chat model when PDF input is supported.
+4. Extracted signals are structured into profile fields via LLM extraction.
+5. Backend returns an import preview payload.
+6. User selects fields and confirms through `POST /api/v1/me/import-apply`.
+7. Only confirmed fields are persisted.
 
 Notes:
 
 - CV import is explicit and user-driven (not an automatic background process).
 - Original uploaded files are not persisted as profile data.
-- Provider/model behavior depends on environment configuration.
+- The active CV import strategy depends on `peoplemesh.cv-import.provider`.
+- Direct PDF import requires a PDF-capable chat model provider.
 
 ### GitHub Import Flow
 

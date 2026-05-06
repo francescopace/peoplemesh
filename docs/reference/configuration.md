@@ -71,16 +71,17 @@ Dev model defaults are configured in `application-dev.properties`:
 - Chat model: `granite4:3b`
 - Embedding model: `granite-embedding:30m`
 
-## Docling / CV Import
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DOCLING_BASE_URL` | `http://docling:5001` (prod profile) | Canonical Docling service base URL used for CV extraction |
+## CV Import
 
 | Key | Default | Description |
 |-----|---------|-------------|
+| `peoplemesh.cv-import.provider` | `docling` | CV import strategy. Supported values: `docling`, `langchain4j-pdf` |
 | `quarkus.docling.timeout` | `60s` | Timeout for Docling requests |
 | `peoplemesh.cv-import.max-file-size` | `5242880` | Maximum CV upload size in bytes (5 MB) |
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DOCLING_BASE_URL` | `http://docling:5001` (prod profile) | Canonical Docling service base URL used when `peoplemesh.cv-import.provider=docling` |
 
 ## Security and Operations
 

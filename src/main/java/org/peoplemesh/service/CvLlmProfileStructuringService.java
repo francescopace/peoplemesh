@@ -4,7 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import dev.langchain4j.data.message.PdfFileContent;
 import dev.langchain4j.data.message.SystemMessage;
+import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.ChatModel;
 import io.micrometer.core.annotation.Timed;
@@ -16,7 +18,10 @@ import org.peoplemesh.util.ProfileSchemaNormalization;
 import org.peoplemesh.util.ProfileSchemaSanitizer;
 import org.peoplemesh.util.StringUtils;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.time.Instant;
+import java.util.Base64;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
@@ -27,7 +32,7 @@ public class CvLlmProfileStructuringService {
     private static final Logger LOG = Logger.getLogger(CvLlmProfileStructuringService.class);
 
     private static final String SYSTEM_PROMPT = """
-            You are an expert HR assistant. Parse the candidate CV (Markdown/text) and output ONE valid JSON object.
+            You are an expert HR assistant. Parse the candidate CV (Markdown/text or attached PDF) and output ONE valid JSON object.
             The JSON MUST match this exact structure and key names:
             {
               "profile_version": "1.0",
@@ -92,8 +97,8 @@ public class CvLlmProfileStructuringService {
             }
             Rules:
             - Output ONLY raw JSON, no markdown fences.
-            - Never return {} if CV has meaningful text.
-            - Use evidence from CV text only. Do not infer facts that are not explicitly supported by the CV.
+            - Never return {} if CV has meaningful text or attached PDF content.
+            - Use evidence from the CV text or attached PDF only. Do not infer facts that are not explicitly supported by the CV.
             - Prefer precision over recall: if uncertain, omit and use null.
             - If a field is unknown, use null (not empty strings).
             - "roles" must contain exactly ONE string and it must be a real job title from EXPERIENCE.
@@ -152,12 +157,46 @@ public class CvLlmProfileStructuringService {
         LOG.infof("Profile structuring LLM started: chars=%d words=%d", cvChars, cvWords);
 
         String extractionTimestamp = Instant.now().toString();
+        return extractProfileFromMessage(UserMessage.from(
+                "Extraction UTC timestamp: " + extractionTimestamp + "\nCV Content:\n" + cvContent
+        ));
+    }
+
+    @Timed(
+            value = "peoplemesh.llm.inference",
+            description = "LLM inference latency",
+            percentiles = {0.95},
+            histogram = true
+    )
+    public ProfileSchema extractProfileFromPdf(InputStream pdfContent, String fileName) {
+        if (pdfContent == null) {
+            throw new IllegalArgumentException("CV PDF content is required");
+        }
+        try {
+            byte[] pdfBytes = pdfContent.readAllBytes();
+            if (pdfBytes.length == 0) {
+                throw new IllegalStateException("Uploaded CV PDF is empty");
+            }
+
+            LOG.infof("Profile structuring LLM started: pdfBytes=%d hasFilename=%s",
+                    pdfBytes.length,
+                    fileName != null && !fileName.isBlank());
+
+            String extractionTimestamp = Instant.now().toString();
+            UserMessage userMessage = UserMessage.from(
+                    PdfFileContent.from(Base64.getEncoder().encodeToString(pdfBytes), "application/pdf"),
+                    TextContent.from(buildPdfInstruction(extractionTimestamp, fileName))
+            );
+            return extractProfileFromMessage(userMessage);
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to read CV PDF content", e);
+        }
+    }
+
+    private ProfileSchema extractProfileFromMessage(UserMessage userMessage) {
         String content;
         try {
-            content = runChat(
-                    SYSTEM_PROMPT,
-                    "Extraction UTC timestamp: " + extractionTimestamp + "\nCV Content:\n" + cvContent
-            );
+            content = runChat(SYSTEM_PROMPT, userMessage);
         } catch (Exception e) {
             LOG.errorf(e, "LLM call failed for CV extraction");
             throw new IllegalStateException("LLM call failed for CV extraction", e);
@@ -172,11 +211,22 @@ public class CvLlmProfileStructuringService {
         return parsed;
     }
 
-    private String runChat(String systemPrompt, String userPrompt) {
+    private String runChat(String systemPrompt, UserMessage userMessage) {
         return chatModel.chat(
                 SystemMessage.from(systemPrompt),
-                UserMessage.from(userPrompt)
+                userMessage
         ).aiMessage().text();
+    }
+
+    private static String buildPdfInstruction(String extractionTimestamp, String fileName) {
+        StringBuilder prompt = new StringBuilder()
+                .append("Extraction UTC timestamp: ").append(extractionTimestamp).append('\n');
+        if (fileName != null && !fileName.isBlank()) {
+            prompt.append("Attached CV filename: ").append(fileName.trim()).append('\n');
+        }
+        prompt.append("Read the attached CV PDF and extract the profile using the required JSON schema. ")
+                .append("Use evidence from the attached PDF only.");
+        return prompt.toString();
     }
 
     private ProfileSchema parseProfileSchema(String content) {

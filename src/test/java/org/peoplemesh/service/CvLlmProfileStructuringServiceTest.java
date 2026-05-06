@@ -2,21 +2,26 @@ package org.peoplemesh.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.PdfFileContent;
+import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.peoplemesh.domain.dto.ProfileSchema;
 
+import java.io.ByteArrayInputStream;
 import java.lang.reflect.Method;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -216,6 +221,34 @@ class CvLlmProfileStructuringServiceTest {
 
         ProfileSchema result = structuring.extractProfile(null);
         assertNotNull(result);
+    }
+
+    @Test
+    void extractProfileFromPdf_buildsPdfUserMessageAndReturnsSchema() {
+        String json = """
+                {
+                  "profile_version": "1.0",
+                  "professional": {
+                    "roles": ["Backend Engineer"],
+                    "seniority": "SENIOR"
+                  }
+                }
+                """;
+        mockChatResponse(json);
+
+        ProfileSchema result = structuring.extractProfileFromPdf(
+                new ByteArrayInputStream("%PDF-1.7 fake".getBytes()),
+                "resume.pdf"
+        );
+
+        assertNotNull(result);
+
+        ArgumentCaptor<UserMessage> userMessageCaptor = ArgumentCaptor.forClass(UserMessage.class);
+        verify(chatModel).chat(any(), userMessageCaptor.capture());
+        UserMessage userMessage = userMessageCaptor.getValue();
+        assertNotNull(userMessage);
+        assertEquals(2, userMessage.contents().size());
+        assertTrue(userMessage.contents().stream().anyMatch(PdfFileContent.class::isInstance));
     }
 
     @Test

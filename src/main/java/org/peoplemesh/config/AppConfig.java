@@ -41,6 +41,9 @@ public interface AppConfig {
     interface CvImportConfig {
         @WithDefault("5242880")
         long maxFileSize();
+
+        @WithDefault("docling")
+        String provider();
     }
 
     interface ConsentTokenConfig {
