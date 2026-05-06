@@ -325,7 +325,7 @@ jobs:
         run: mvn --batch-mode --no-transfer-progress -DskipTests clean package
 
       - name: Build and push multi-arch image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: src/main/docker/Dockerfile.jvm
