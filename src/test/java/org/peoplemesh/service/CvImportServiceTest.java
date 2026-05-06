@@ -1,5 +1,6 @@
 package org.peoplemesh.service;
 
+import jakarta.enterprise.inject.Instance;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -9,22 +10,21 @@ import org.peoplemesh.domain.dto.ProfileSchema;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
-import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class CvImportServiceTest {
 
     @Mock
-    DoclingCvParser doclingCvParser;
+    Instance<CvImportProvider> cvImportProviderInstance;
 
     @Mock
-    CvLlmProfileStructuringService cvLlmProfileStructuringService;
+    CvImportProvider cvImportProvider;
 
     @InjectMocks
     CvImportService cvImportService;
@@ -33,9 +33,13 @@ class CvImportServiceTest {
     void parseCv_success_returnsResult() {
         UUID userId = UUID.randomUUID();
         InputStream is = new ByteArrayInputStream("cv content".getBytes());
-        when(doclingCvParser.parseToMarkdown(any(), eq("resume.pdf"))).thenReturn(Optional.of("# Markdown CV"));
         ProfileSchema schema = mock(ProfileSchema.class);
-        when(cvLlmProfileStructuringService.extractProfile("# Markdown CV")).thenReturn(schema);
+        when(cvImportProviderInstance.isUnsatisfied()).thenReturn(false);
+        when(cvImportProviderInstance.isAmbiguous()).thenReturn(false);
+        when(cvImportProviderInstance.get()).thenReturn(cvImportProvider);
+        when(cvImportProvider.key()).thenReturn("docling");
+        when(cvImportProvider.source()).thenReturn("cv_docling_llm");
+        when(cvImportProvider.extractProfile(any(), eq("resume.pdf"), eq(userId))).thenReturn(schema);
 
         CvImportService.CvImportResult result = cvImportService.parseCv(is, "resume.pdf", 1024, userId);
 
@@ -44,36 +48,55 @@ class CvImportServiceTest {
     }
 
     @Test
-    void parseCv_parseReturnsEmpty_throwsIllegalState() {
+    void parseCv_providerReturnsNull_throwsIllegalState() {
         UUID userId = UUID.randomUUID();
         InputStream is = new ByteArrayInputStream("data".getBytes());
-        when(doclingCvParser.parseToMarkdown(any(), anyString())).thenReturn(Optional.empty());
+        when(cvImportProviderInstance.isUnsatisfied()).thenReturn(false);
+        when(cvImportProviderInstance.isAmbiguous()).thenReturn(false);
+        when(cvImportProviderInstance.get()).thenReturn(cvImportProvider);
+        when(cvImportProvider.key()).thenReturn("docling");
+        when(cvImportProvider.extractProfile(any(), eq("file.pdf"), eq(userId))).thenReturn(null);
 
         IllegalStateException ex = assertThrows(IllegalStateException.class,
                 () -> cvImportService.parseCv(is, "file.pdf", 100, userId));
-        assertTrue(ex.getMessage().contains("parse"));
+        assertTrue(ex.getMessage().contains("null schema"));
     }
 
     @Test
-    void parseCv_structuringReturnsEmpty_throwsIllegalState() {
+    void parseCv_providerThrows_throwsIllegalState() {
         UUID userId = UUID.randomUUID();
         InputStream is = new ByteArrayInputStream("data".getBytes());
-        when(doclingCvParser.parseToMarkdown(any(), anyString())).thenReturn(Optional.of("markdown"));
-        when(cvLlmProfileStructuringService.extractProfile("markdown"))
-                .thenThrow(new IllegalStateException("Failed to extract profile from CV"));
+        when(cvImportProviderInstance.isUnsatisfied()).thenReturn(false);
+        when(cvImportProviderInstance.isAmbiguous()).thenReturn(false);
+        when(cvImportProviderInstance.get()).thenReturn(cvImportProvider);
+        when(cvImportProvider.key()).thenReturn("langchain4j-pdf");
+        when(cvImportProvider.extractProfile(any(), eq("file.pdf"), eq(userId)))
+                .thenThrow(new IllegalStateException("provider failed"));
 
         assertThrows(IllegalStateException.class,
                 () -> cvImportService.parseCv(is, "file.pdf", 100, userId));
     }
 
     @Test
-    void parseCv_structuringReturnsNull_throwsIllegalState() {
+    void parseCv_noMatchingProvider_throwsClearIllegalState() {
         UUID userId = UUID.randomUUID();
         InputStream is = new ByteArrayInputStream("data".getBytes());
-        when(doclingCvParser.parseToMarkdown(any(), anyString())).thenReturn(Optional.of("markdown"));
-        when(cvLlmProfileStructuringService.extractProfile("markdown")).thenReturn(null);
+        when(cvImportProviderInstance.isUnsatisfied()).thenReturn(true);
 
-        assertThrows(IllegalStateException.class,
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
                 () -> cvImportService.parseCv(is, "file.pdf", 100, userId));
+        assertTrue(ex.getMessage().contains("Supported values"));
+    }
+
+    @Test
+    void parseCv_ambiguousProvider_throwsClearIllegalState() {
+        UUID userId = UUID.randomUUID();
+        InputStream is = new ByteArrayInputStream("data".getBytes());
+        when(cvImportProviderInstance.isUnsatisfied()).thenReturn(false);
+        when(cvImportProviderInstance.isAmbiguous()).thenReturn(true);
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> cvImportService.parseCv(is, "file.pdf", 100, userId));
+        assertTrue(ex.getMessage().contains("Multiple"));
     }
 }

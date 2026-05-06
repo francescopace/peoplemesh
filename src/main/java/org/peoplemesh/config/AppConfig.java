@@ -15,6 +15,7 @@ public interface AppConfig {
     SearchConfig search();
     RetentionConfig retention();
     CvImportConfig cvImport();
+    EmbeddingConfig embedding();
     NotificationConfig notification();
     ClusteringConfig clustering();
     MaintenanceConfig maintenance();
@@ -41,6 +42,14 @@ public interface AppConfig {
     interface CvImportConfig {
         @WithDefault("5242880")
         long maxFileSize();
+
+        @WithDefault("docling")
+        String provider();
+    }
+
+    interface EmbeddingConfig {
+        @WithDefault("384")
+        int dimension();
     }
 
     interface ConsentTokenConfig {

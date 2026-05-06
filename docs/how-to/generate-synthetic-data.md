@@ -25,8 +25,10 @@ All generated data is scoped to a single company name and filtered by industry p
 ## Prerequisites
 
 - Python 3.11+
-- [Ollama](https://ollama.com) running locally (for embeddings)
 - The SO survey CSV in `tools/data/stack-overflow-survey/`
+- One embedding backend:
+  - [Ollama](https://ollama.com) running locally for the default `dev` profile seeds
+  - `OPENAI_API_KEY` exported for `dev-openai` profile seeds
 
 ### Download the survey data
 
@@ -43,7 +45,7 @@ If the direct link does not work, download manually from
 <https://survey.stackoverflow.co/2025/> (Methodology section, "Download" button)
 and place `survey_results_public.csv` inside `tools/data/stack-overflow-survey/`.
 
-### Pull the embedding model
+### Pull the Ollama embedding model
 
 ```bash
 ollama pull granite-embedding:30m
@@ -59,9 +61,17 @@ From the repo root:
 python3 tools/data/create_fake_data.py
 ```
 
-This command uses defaults: `--company-type it`, `--company-name "Acme Corp"`, 500 users, 50 jobs, and 100 groups.
+This command uses defaults: `--company-type it`, `--company-name "Acme Corp"`, 500 users, 50 jobs, 100 groups, `--embedding-provider ollama`, and `--output-profile dev`.
 
 The script writes SQL files into `src/main/resources/db/dev/` which Flyway picks up automatically when running with the `dev` profile.
+
+To generate OpenAI-backed seed data for the `dev-openai` profile instead:
+
+```bash
+OPENAI_API_KEY=... python3 tools/data/create_fake_data.py --embedding-provider openai
+```
+
+With `--embedding-provider openai`, the script writes SQL files into `src/main/resources/db/dev-openai/` by default.
 
 ### Options
 
@@ -72,7 +82,12 @@ The script writes SQL files into `src/main/resources/db/dev/` which Flyway picks
 | `--users` | `500` | Number of user profiles |
 | `--jobs` | `50` | Number of internal job postings |
 | `--groups` | `100` | Number of internal groups/events |
+| `--embedding-provider` | `ollama` | Embedding backend. Supported values: `ollama`, `openai` |
 | `--ollama-base-url` | `http://localhost:11434` | Ollama endpoint |
+| `--openai-base-url` | `https://api.openai.com/v1` | OpenAI-compatible embeddings endpoint |
+| `--openai-api-key` | `OPENAI_API_KEY` env | OpenAI API key when `--embedding-provider openai` |
+| `--openai-embedding-model` | `text-embedding-3-small` | OpenAI embedding model used when `--embedding-provider openai` |
+| `--output-profile` | inferred from provider | Output directory/profile. Defaults to `dev` for Ollama and `dev-openai` for OpenAI |
 | `--seed` | `42` | Random seed for deterministic output |
 | `--workspace` | `.` | Repo root (auto-detected via `pom.xml`) |
 
@@ -115,6 +130,15 @@ python3 tools/data/create_fake_data.py \
   --ollama-base-url http://localhost:1
 ```
 
+Generate `dev-openai` seeds with OpenAI embeddings:
+
+```bash
+OPENAI_API_KEY=... python3 tools/data/create_fake_data.py \
+  --embedding-provider openai \
+  --company-type it \
+  --company-name "Acme OpenAI Demo"
+```
+
 ## Data sources
 
 | Source | What it provides | License |
@@ -126,12 +150,13 @@ Fields that the SO survey does not cover (hobbies, sports, causes, personality) 
 
 ## Verification
 
-- Generated SQL files exist in `src/main/resources/db/dev/`.
-- Running the app in `dev` profile applies generated migrations.
+- Generated SQL files exist in `src/main/resources/db/dev/` or `src/main/resources/db/dev-openai/`, depending on `--output-profile`.
+- Running the app in `dev` or `dev-openai` profile applies the matching generated migrations.
 - Seeded users/jobs/groups are visible via local API/UI after startup.
 
 ## Troubleshooting
 
 - `survey_results_public.csv` not found: download it into `tools/data/stack-overflow-survey/`.
-- Embedding generation errors: verify Ollama is running and reachable at `--ollama-base-url`.
+- Embedding generation errors with Ollama: verify it is running and reachable at `--ollama-base-url`.
+- Embedding generation errors with OpenAI: verify `OPENAI_API_KEY` is set and the selected model supports 384-dimension embeddings.
 - No output files generated: run from repository root or set `--workspace` explicitly.

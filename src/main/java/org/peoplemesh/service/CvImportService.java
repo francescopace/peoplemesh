@@ -1,6 +1,7 @@
 package org.peoplemesh.service;
 
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
 import org.peoplemesh.domain.dto.ProfileSchema;
@@ -16,13 +17,9 @@ import java.util.UUID;
 public class CvImportService {
 
     private static final Logger LOG = Logger.getLogger(CvImportService.class);
-    private static final String SOURCE_CV = "cv_docling_llm";
 
     @Inject
-    DoclingCvParser doclingCvParser;
-
-    @Inject
-    CvLlmProfileStructuringService cvLlmProfileStructuringService;
+    Instance<CvImportProvider> cvImportProviderInstance;
 
     public record CvImportResult(ProfileSchema schema, String source) {}
 
@@ -45,24 +42,26 @@ public class CvImportService {
 
     public CvImportResult parseCv(InputStream content, String fileName, long fileSize, UUID userId) {
         LOG.infof("CV import started: userId=%s size=%d", userId, fileSize);
+        CvImportProvider provider = resolveProvider();
+        LOG.infof("CV import provider selected: userId=%s provider=%s", userId, provider.key());
 
-        long parseStart = System.currentTimeMillis();
-        String markdown = doclingCvParser.parseToMarkdown(content, fileName)
-                .orElseThrow(() -> new IllegalStateException("Failed to parse document"));
-        long parseElapsed = System.currentTimeMillis() - parseStart;
-
-        LOG.infof("CV parse completed: userId=%s markdownSize=%d elapsedMs=%d",
-                userId, markdown.length(), parseElapsed);
-
-        long llmStart = System.currentTimeMillis();
-        ProfileSchema parsed = cvLlmProfileStructuringService.extractProfile(markdown);
-        long llmElapsed = System.currentTimeMillis() - llmStart;
+        ProfileSchema parsed = provider.extractProfile(content, fileName, userId);
         if (parsed == null) {
-            throw new IllegalStateException("CV LLM extraction returned null schema");
+            throw new IllegalStateException("CV import provider returned null schema");
         }
+        return new CvImportResult(parsed, provider.source());
+    }
 
-        LOG.infof("CV structuring completed: userId=%s elapsedMs=%d", userId, llmElapsed);
-
-        return new CvImportResult(parsed, SOURCE_CV);
+    private CvImportProvider resolveProvider() {
+        if (cvImportProviderInstance.isUnsatisfied()) {
+            throw new IllegalStateException(
+                    "No CV import provider matched the current peoplemesh.cv-import.provider. "
+                            + "Supported values: docling, langchain4j-pdf"
+            );
+        }
+        if (cvImportProviderInstance.isAmbiguous()) {
+            throw new IllegalStateException("Multiple CV import providers matched the current configuration");
+        }
+        return cvImportProviderInstance.get();
     }
 }
