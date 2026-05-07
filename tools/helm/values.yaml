@@ -136,7 +136,7 @@ config:
     PEOPLEMESH_FRONTEND_ENABLED: "true"
     PEOPLEMESH_FRONTEND_DIR: /deployments/src/main/web
     CV_IMPORT_PROVIDER: docling
-    DOCLING_BASE_URL: http://docling:5001
+    QUARKUS_DOCLING_BASE_URL: http://docling:5001
     OPENAI_BASE_URL: http://ollama:11434/v1
     QUARKUS_LANGCHAIN4J_OPENAI_TIMEOUT: 60s
     LLM_MODEL: granite4:3b
