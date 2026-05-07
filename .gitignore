@@ -47,7 +47,8 @@ __pycache__/
 
 # Data files
 tools/data/stack-overflow-survey/survey_results_public.csv
-tools/data/results/
+tools/data/json/
+tools/data/sql/
 
 # OpenShift
 values-openshift.yaml

@@ -1,6 +1,6 @@
 # Generate Synthetic Data
 
-Generate realistic development seed data for local environments and demos using the Stack Overflow Developer Survey 2025 as the backbone.
+Generate realistic synthetic SQL seeds or PMC ingest JSON payloads for local environments and demos using the Stack Overflow Developer Survey 2025 as the backbone.
 
 ## Why this matters
 
@@ -15,9 +15,9 @@ Using realistic and reproducible synthetic data improves local testing quality a
 
 | Output | Source | File |
 |--------|--------|------|
-| Users (profiles, skills, tools, education) | randomuser.me + SO survey | `R__dev_seed_users.sql` |
-| Internal job postings | SO survey roles + skills | `R__dev_seed_jobs.sql` |
-| Groups and communities | SO survey skills + tags | `R__dev_seed_groups.sql` |
+| Users (profiles, skills, tools, education) | randomuser.me + SO survey | `R__dev_seed_users.sql` or `users-001.json`, `users-002.json`, ... |
+| Internal job postings | SO survey roles + skills | `R__dev_seed_jobs.sql` or `nodes-001.json`, `nodes-002.json`, ... |
+| Groups and communities | SO survey skills + tags | `R__dev_seed_groups.sql` or `nodes-001.json`, `nodes-002.json`, ... |
 | Global skills dictionary seed (canonical names + aliases) | SO survey (all respondents) | `R__dev_seed_skill_catalog_so.sql` |
 
 All generated data is scoped to a single company name and filtered by industry profile, so profiles, jobs, and groups are consistent with each other.
@@ -26,9 +26,11 @@ All generated data is scoped to a single company name and filtered by industry p
 
 - Python 3.11+
 - The SO survey CSV in `tools/data/stack-overflow-survey/`
-- One embedding backend:
-  - [Ollama](https://ollama.com) running locally for the default `dev` profile seeds
-  - `OPENAI_API_KEY` exported for OpenAI-backed seed generation
+- One OpenAI-compatible embedding endpoint for SQL generation:
+  - [Ollama](https://ollama.com) running locally at the default `http://localhost:11434/v1`
+  - or the real OpenAI API with `OPENAI_API_KEY` and `--base-url https://api.openai.com/v1`
+
+JSON generation with `--json` does not require any embedding backend.
 
 ### Download the survey data
 
@@ -61,18 +63,27 @@ From the repo root:
 python3 tools/data/create_fake_data.py
 ```
 
-This command uses defaults: `--company-type it`, `--company-name "Acme Corp"`, 500 users, 50 jobs, 100 groups, `--embedding-provider ollama`, and `--output-profile granite`.
+This command uses defaults: `--company-type it`, `--company-name "Acme Corp"`, 500 users, 50 jobs, 100 groups, `--base-url http://localhost:11434/v1`, and `--embedding-model granite-embedding:30m`.
 
-The script writes SQL files into `src/main/resources/db/granite/` which Flyway picks up automatically when running with the `dev` profile and default `DEV_SEED_PROFILE=granite`.
+The script writes SQL files into `tools/data/sql/`. By default it targets Ollama's OpenAI-compatible endpoint at `http://localhost:11434/v1`.
+Both `tools/data/sql/` and `tools/data/json/` are ignored by git, so generated artifacts stay local unless you copy them elsewhere.
 
-To generate OpenAI-backed seed data for the `openai` seed set instead:
+To generate SQL using the real OpenAI embeddings API instead:
 
 ```bash
-OPENAI_API_KEY=... python3 tools/data/create_fake_data.py --embedding-provider openai
+OPENAI_API_KEY=... python3 tools/data/create_fake_data.py \
+  --base-url https://api.openai.com/v1 \
+  --embedding-model text-embedding-3-small
 ```
 
-With `--embedding-provider openai`, the script writes SQL files into `src/main/resources/db/openai/` by default.
-To load that seed set in the unified `dev` profile, run with `DEV_SEED_PROFILE=openai`.
+To generate `pmc`-compatible JSON payloads instead of SQL:
+
+```bash
+python3 tools/data/create_fake_data.py --json
+```
+
+With `--json`, the script skips embeddings and writes batch files under `tools/data/json/`.
+Each generated file stays within the current ingest limit of 100 records per request.
 
 ### Options
 
@@ -83,12 +94,10 @@ To load that seed set in the unified `dev` profile, run with `DEV_SEED_PROFILE=o
 | `--users` | `500` | Number of user profiles |
 | `--jobs` | `50` | Number of internal job postings |
 | `--groups` | `100` | Number of internal groups/events |
-| `--embedding-provider` | `ollama` | Embedding backend. Supported values: `ollama`, `openai` |
-| `--ollama-base-url` | `http://localhost:11434` | Ollama endpoint |
-| `--openai-base-url` | `https://api.openai.com/v1` | OpenAI-compatible embeddings endpoint |
-| `--openai-api-key` | `OPENAI_API_KEY` env | OpenAI API key when `--embedding-provider openai` |
-| `--openai-embedding-model` | `text-embedding-3-small` | OpenAI embedding model used when `--embedding-provider openai` |
-| `--output-profile` | inferred from provider | Output directory/profile. Defaults to `granite` for Ollama and `openai` for OpenAI |
+| `--base-url` | `http://localhost:11434/v1` | OpenAI-compatible embeddings endpoint |
+| `--api-key` | `OPENAI_API_KEY` env | API key for the embeddings endpoint when required |
+| `--embedding-model` | `granite-embedding:30m` | Embedding model |
+| `--json` | `false` | Write `pmc` ingest JSON payload batches and skip embeddings |
 | `--seed` | `42` | Random seed for deterministic output |
 | `--workspace` | `.` | Repo root (auto-detected via `pom.xml`) |
 
@@ -121,21 +130,22 @@ python3 tools/data/create_fake_data.py \
   --jobs 30
 ```
 
-Generate a small dataset without embeddings (Ollama not required, embeddings will be NULL):
+Generate `pmc`-compatible JSON batches without embeddings:
 
 ```bash
 python3 tools/data/create_fake_data.py \
+  --json \
   --users 50 \
   --jobs 10 \
-  --groups 20 \
-  --ollama-base-url http://localhost:1
+  --groups 20
 ```
 
-Generate `openai` seeds with OpenAI embeddings:
+Generate SQL with OpenAI embeddings:
 
 ```bash
 OPENAI_API_KEY=... python3 tools/data/create_fake_data.py \
-  --embedding-provider openai \
+  --base-url https://api.openai.com/v1 \
+  --embedding-model text-embedding-3-small \
   --company-type it \
   --company-name "Acme OpenAI Demo"
 ```
@@ -151,13 +161,14 @@ Fields that the SO survey does not cover (hobbies, sports, causes, personality) 
 
 ## Verification
 
-- Generated SQL files exist in `src/main/resources/db/granite/` or `src/main/resources/db/openai/`, depending on `--output-profile`.
-- Running the app in the `dev` profile applies the selected seed set based on `DEV_SEED_PROFILE`.
-- Seeded users/jobs/groups are visible via local API/UI after startup.
+- Generated SQL files exist in `tools/data/sql/`.
+- Generated JSON payload batches exist in `tools/data/json/` when using `--json`.
+- The generated SQL can be reviewed, loaded manually, or copied into a Flyway seed location if needed.
 
 ## Troubleshooting
 
 - `survey_results_public.csv` not found: download it into `tools/data/stack-overflow-survey/`.
-- Embedding generation errors with Ollama: verify it is running and reachable at `--ollama-base-url`.
-- Embedding generation errors with OpenAI: verify `OPENAI_API_KEY` is set and the selected model supports 384-dimension embeddings.
+- Embedding generation errors with a local endpoint: verify it is running and reachable at `--base-url` (default `http://localhost:11434/v1`).
+- Embedding generation errors with OpenAI: verify `OPENAI_API_KEY` is set, `--base-url https://api.openai.com/v1`, and the selected model supports 384-dimension embeddings.
+- `pmc ingest-users` / `pmc ingest-nodes` rejects large payloads: use the batch files produced by `--json` one by one.
 - No output files generated: run from repository root or set `--workspace` explicitly.

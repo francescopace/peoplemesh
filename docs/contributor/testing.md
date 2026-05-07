@@ -128,8 +128,9 @@ python tools/data/mymesh_quality_tuning.py tune-and-gate \
 ```
 
 Minimal workflow (reproducible):
-1. Refresh dev seeds and consents:
+1. Regenerate offline synthetic SQL artifacts if needed:
    - `python tools/data/create_fake_data.py --workspace /path/to/repo`
+   - output is written to `tools/data/sql/`; copy it into a Flyway seed location only if you want to test with refreshed data
 2. Recreate local DB:
    - `make clean start`
 3. Run tune with fixed seed:
