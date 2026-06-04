@@ -537,13 +537,23 @@ class OAuthTokenExchangeServiceTest {
         };
     }
 
+    private static AppConfig.KeycloakProviderCreds stubKeycloakCreds(String clientId, String clientSecret, String issuerUrl) {
+        return new AppConfig.KeycloakProviderCreds() {
+            @Override public String clientId() { return clientId; }
+            @Override public String clientSecret() { return clientSecret; }
+            @Override public String issuerUrl() { return issuerUrl; }
+        };
+    }
+
     private static AppConfig stubProviders(String enabledProvider, String id, String secret) {
         AppConfig.OidcProviderCreds enabled = stubCreds(id != null ? id : "", secret != null ? secret : "");
         AppConfig.OidcProviderCreds disabled = stubCreds("", "");
+        AppConfig.KeycloakProviderCreds keycloakDisabled = stubKeycloakCreds("", "", "");
         AppConfig.OidcProviders providers = new AppConfig.OidcProviders() {
             @Override public AppConfig.OidcProviderCreds google() { return "google".equals(enabledProvider) ? enabled : disabled; }
             @Override public AppConfig.OidcProviderCreds microsoft() { return "microsoft".equals(enabledProvider) ? enabled : disabled; }
             @Override public AppConfig.OidcProviderCreds github() { return "github".equals(enabledProvider) ? enabled : disabled; }
+            @Override public AppConfig.KeycloakProviderCreds keycloak() { return keycloakDisabled; }
         };
         return new AppConfig() {
             @Override public ProblemsConfig problems() { return null; }
