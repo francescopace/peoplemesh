@@ -176,7 +176,7 @@ jobs:
 
       - name: Upload coverage to Codecov
         if: hashFiles('target/site/jacoco/jacoco.xml') != ''
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           files: target/site/jacoco/jacoco.xml
           disable_search: true
@@ -187,7 +187,7 @@ jobs:
 
       - name: Upload frontend coverage to Codecov
         if: hashFiles('target/frontend-coverage/lcov.info') != ''
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           files: target/frontend-coverage/lcov.info
           disable_search: true
