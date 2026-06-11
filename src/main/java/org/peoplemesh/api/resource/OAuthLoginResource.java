@@ -126,10 +126,73 @@ public class OAuthLoginResource {
                 .build();
     }
 
+    @GET
+    @Path("/logout")
+    public Response logoutGet(@jakarta.ws.rs.CookieParam(SessionService.COOKIE_NAME) String sessionCookie) {
+        return performLogout(sessionCookie);
+    }
+
     @POST
     @Path("/logout")
-    public Response logout() {
+    public Response logoutPost(@jakarta.ws.rs.CookieParam(SessionService.COOKIE_NAME) String sessionCookie) {
+        return performLogout(sessionCookie);
+    }
+
+    private Response performLogout(String sessionCookie) {
         NewCookie clearCookie = buildClearCookie(isSecure());
+
+        // Determine which OAuth provider the user logged in with
+        String provider = "unknown";
+        if (sessionCookie != null && !sessionCookie.isBlank()) {
+            sessionService.decodeSession(sessionCookie)
+                    .ifPresent(session -> {
+                        // Provider is tracked in the session
+                    });
+            provider = sessionService.decodeSession(sessionCookie)
+                    .map(SessionService.PmSession::provider)
+                    .orElse("unknown");
+        }
+
+        String postLogoutRedirectUri = resolveOrigin();
+
+        // Build logout URL based on provider
+        String logoutUrl = switch (provider) {
+            case "keycloak" -> {
+                String issuer = appConfig.oidc().keycloak().issuerUrl();
+                String clientId = appConfig.oidc().keycloak().clientId();
+                if (issuer != null && !issuer.equals("none") && !issuer.isBlank()) {
+                    // Keycloak logout requires either id_token_hint or client_id
+                    // Since we don't store the id_token, we use client_id
+                    yield issuer + "/protocol/openid-connect/logout"
+                            + "?client_id=" + java.net.URLEncoder.encode(clientId, java.nio.charset.StandardCharsets.UTF_8)
+                            + "&post_logout_redirect_uri=" + java.net.URLEncoder.encode(postLogoutRedirectUri, java.nio.charset.StandardCharsets.UTF_8);
+                }
+                yield null;
+            }
+            case "microsoft" -> {
+                // Microsoft Azure AD logout endpoint
+                // https://learn.microsoft.com/en-us/entra/identity-platform/v2-protocols-oidc#send-a-sign-out-request
+                yield "https://login.microsoftonline.com/common/oauth2/v2.0/logout"
+                        + "?post_logout_redirect_uri=" + java.net.URLEncoder.encode(postLogoutRedirectUri, java.nio.charset.StandardCharsets.UTF_8);
+            }
+            case "google" -> {
+                // Google doesn't support single-app logout via OIDC
+                // Logging out would sign user out of ALL Google services (Gmail, etc.)
+                // Best practice: just clear local session
+                // Reference: https://developers.google.com/identity/protocols/oauth2/openid-connect#logout
+                yield null;
+            }
+            default -> null;
+        };
+
+        // If provider supports OIDC logout, redirect to provider logout endpoint
+        if (logoutUrl != null) {
+            return Response.seeOther(URI.create(logoutUrl))
+                    .cookie(clearCookie)
+                    .build();
+        }
+
+        // Fallback: just clear cookie (for Google or unknown providers)
         return Response.noContent().cookie(clearCookie).build();
     }
 

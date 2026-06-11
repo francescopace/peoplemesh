@@ -90,17 +90,11 @@ class AuthManager {
   async logout() {
     if (this._isLoggingOut) return;
     this._isLoggingOut = true;
-    try {
-      try {
-        await logoutSession();
-      } catch {
-        // Ignore errors on logout
-      }
-      this.setUser(null);
-      window.location.hash = "#/";
-    } finally {
-      this._isLoggingOut = false;
-    }
+    // Clear local session state before redirecting
+    this.setUser(null);
+    // Navigate to logout endpoint - backend will redirect to Keycloak logout
+    // which terminates SSO session and redirects back to app
+    window.location.href = "/api/v1/auth/logout";
   }
 }
 
