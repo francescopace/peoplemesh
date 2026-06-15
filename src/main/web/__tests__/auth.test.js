@@ -190,25 +190,42 @@ describe("AuthManager", () => {
     expect(hrefSetter).not.toHaveBeenCalled();
   });
 
-  it("logout clears user and redirects to root", async () => {
+  it("logout clears user and navigates to logout endpoint", async () => {
+    const hrefSetter = vi.fn();
+    delete window.location;
+    window.location = { href: "", hash: "#/search" };
+    Object.defineProperty(window.location, "href", {
+      set: hrefSetter,
+    });
+
     Auth.setUser({ id: "123" });
-    apiMock.post.mockResolvedValue({});
 
     await Auth.logout();
 
-    expect(apiMock.post).toHaveBeenCalledWith("/api/v1/auth/logout");
     expect(Auth.isAuthenticated()).toBe(false);
     expect(Auth.getUser()).toBeNull();
-    expect(window.location.hash).toBe("#/");
+    expect(hrefSetter).toHaveBeenCalledWith("/api/v1/auth/logout");
   });
 
-  it("logout handles API error gracefully", async () => {
+  it("logout prevents duplicate logout calls", async () => {
+    const hrefSetter = vi.fn();
+    delete window.location;
+    window.location = { href: "", hash: "#/search" };
+    Object.defineProperty(window.location, "href", {
+      set: hrefSetter,
+    });
+
     Auth.setUser({ id: "123" });
-    apiMock.post.mockRejectedValue(new Error("Network"));
 
-    await Auth.logout();
+    // Start first logout
+    const logout1 = Auth.logout();
+    // Try second logout immediately
+    const logout2 = Auth.logout();
 
-    expect(apiMock.post).toHaveBeenCalledWith("/api/v1/auth/logout");
-    expect(Auth.isAuthenticated()).toBe(false);
+    await Promise.all([logout1, logout2]);
+
+    // Should only navigate once
+    expect(hrefSetter).toHaveBeenCalledTimes(1);
+    expect(hrefSetter).toHaveBeenCalledWith("/api/v1/auth/logout");
   });
 });

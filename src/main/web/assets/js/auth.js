@@ -90,11 +90,17 @@ class AuthManager {
   async logout() {
     if (this._isLoggingOut) return;
     this._isLoggingOut = true;
-    // Clear local session state before redirecting
+
+    // Clear user state immediately
     this.setUser(null);
-    // Navigate to logout endpoint - backend will redirect to Keycloak logout
-    // which terminates SSO session and redirects back to app
+
+    // Navigate to logout endpoint (GET)
+    // Backend will redirect to OIDC provider logout (Keycloak/Microsoft)
+    // Provider will then redirect back to app root (/)
     window.location.href = "/api/v1/auth/logout";
+
+    // Note: _isLoggingOut flag will be reset when page navigates away
+    // No finally block needed since we're leaving the page
   }
 }
 
