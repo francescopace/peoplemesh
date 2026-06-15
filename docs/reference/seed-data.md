@@ -2,20 +2,67 @@
 
 ## Overview
 
-PeopleMesh supports optional synthetic seed data for testing and demo environments. Seed data is **disabled by default** for production safety and can be enabled via the `SEED_PROFILE` environment variable.
+PeopleMesh supports optional synthetic seed data for testing and demo environments. Seed data is **disabled by default** for production safety.
 
 ## How It Works
 
 **Flyway Configuration:**
 ```properties
-# In application.properties (default)
+# In application.properties (default - production safe)
 quarkus.flyway.locations=classpath:db/migration
 ```
 
-**Behavior:**
-- `QUARKUS_FLYWAY_LOCATIONS` **not set** (default): Only schema migrations load (empty database)
-- `QUARKUS_FLYWAY_LOCATIONS=classpath:db/migration,classpath:db/granite`: Loads schema + synthetic test data from `db/granite/`
-- `QUARKUS_FLYWAY_LOCATIONS=classpath:db/migration,classpath:db/openai`: Loads schema + synthetic test data from `db/openai/`
+This default loads **schema only** (no seed data).
+
+**IMPORTANT:** `quarkus.flyway.locations` is a **BUILD-TIME property** in Quarkus. The value is baked into the JAR during compilation and **cannot be changed at runtime** via environment variables.
+
+To include seed data, you must **rebuild the application** with the property override.
+
+## Building With Seed Data
+
+### Option 1: Maven Build-Time Override (Recommended)
+
+Override the property during the Maven build:
+
+```bash
+# Build with granite seed data
+mvn clean package -DskipTests \
+  -Dquarkus.flyway.locations=classpath:db/migration,classpath:db/granite
+
+# Or build with openai seed data
+mvn clean package -DskipTests \
+  -Dquarkus.flyway.locations=classpath:db/migration,classpath:db/openai
+```
+
+**For container builds**, modify your build script to include the `-D` flag:
+
+```bash
+# In build-and-push.sh or similar
+mvn clean package -DskipTests --batch-mode --no-transfer-progress \
+  -Dquarkus.flyway.locations=classpath:db/migration,classpath:db/granite
+```
+
+### Option 2: Modify application.properties
+
+For permanent seed data inclusion (not recommended for upstream), edit `src/main/resources/application.properties`:
+
+```properties
+# NOT recommended for upstream repository
+quarkus.flyway.locations=classpath:db/migration,classpath:db/granite
+```
+
+Then rebuild normally:
+```bash
+mvn clean package -DskipTests
+```
+
+**Note:** Option 1 is preferred because it keeps the upstream repository production-safe while allowing quickstart/demo builds to include seed data.
+
+## Seed Data Profiles
+
+**Available seed data sets:**
+- **`classpath:db/granite`**: Synthetic data generated with IBM Granite models
+- **`classpath:db/openai`**: Synthetic data generated with OpenAI models
 
 ## Seed Data Contents
 
@@ -27,36 +74,40 @@ Both profiles (`granite` and `openai`) contain:
 
 **Note:** The two profiles contain different randomly generated data sets. Choice between them is arbitrary - both are suitable for testing.
 
-## Deployment Configuration
+## Deployment
 
 ### **Demo/Test Environment (with seed data)**
 
-**Via Helm values:**
-```yaml
-config:
-  data:
-    QUARKUS_FLYWAY_LOCATIONS: "classpath:db/migration,classpath:db/granite"
-    # or use "classpath:db/migration,classpath:db/openai"
-```
+Deploy an image built with seed data (see "Building With Seed Data" above):
 
-**Via environment variable:**
 ```bash
-oc set env deployment/peoplemesh QUARKUS_FLYWAY_LOCATIONS="classpath:db/migration,classpath:db/granite"
+# Deploy container image that was built with seed data included
+helm install peoplemesh ./charts/peoplemesh \
+  --set image.repository=quay.io/myorg/peoplemesh \
+  --set image.tag=with-seed-data
 ```
 
-**Via deploy-to-openshift.sh:**
-The script automatically sets `QUARKUS_FLYWAY_LOCATIONS` to include granite seed data for convenience.
+The database will populate with ~500 synthetic users on first startup.
 
 ### **Production Environment (no seed data)**
 
-**Via Helm values:**
-```yaml
-config:
-  data:
-    QUARKUS_FLYWAY_LOCATIONS: "classpath:db/migration"  # or omit entirely (default)
+Deploy the default image (built without seed data override):
+
+```bash
+# Deploy container image built with default configuration
+helm install peoplemesh ./charts/peoplemesh \
+  --set image.repository=quay.io/myorg/peoplemesh \
+  --set image.tag=latest
 ```
 
 Database will start empty and populate via real user registrations.
+
+### **Image Tagging Strategy**
+
+Consider using distinct image tags to identify builds:
+- `latest` or `vX.Y.Z` - production builds (no seed data)
+- `demo` or `with-granite-seeds` - demo builds (includes seed data)
+- `vX.Y.Z-granite` - versioned demo builds
 
 ## Post-Deployment: Generate Embeddings
 
@@ -124,10 +175,13 @@ oc logs deployment/peoplemesh -n <namespace> | grep -i flyway
 
 Should show: `Successfully validated X migrations` where X > 3 (schema + seed files)
 
-**Verify QUARKUS_FLYWAY_LOCATIONS is set:**
-```bash
-oc set env deployment/peoplemesh -n <namespace> --list | grep QUARKUS_FLYWAY_LOCATIONS
-```
+**Verify the image was built with seed data:**
+
+The application startup logs will show which Flyway locations are active. If you only see migrations from `classpath:db/migration`, the image was built without seed data.
+
+**Solution:** Rebuild the image with the `-Dquarkus.flyway.locations` override (see "Building With Seed Data" above).
+
+**Note:** Setting `QUARKUS_FLYWAY_LOCATIONS` as an environment variable at runtime has **no effect** because this is a build-time property.
 
 ### Embeddings generation fails
 

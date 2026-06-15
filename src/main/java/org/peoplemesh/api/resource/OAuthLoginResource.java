@@ -24,6 +24,8 @@ import org.peoplemesh.service.OAuthLoginService;
 import org.peoplemesh.service.SessionService;
 
 import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @Path("/api/v1/auth")
@@ -126,12 +128,21 @@ public class OAuthLoginResource {
                 .build();
     }
 
+    /**
+     * OIDC RP-Initiated Logout endpoint (GET).
+     * Standard for OIDC logout - simple navigation, no CSRF token needed.
+     * SameSite=Lax cookie provides CSRF protection for GET requests.
+     */
     @GET
     @Path("/logout")
     public Response logoutGet(@jakarta.ws.rs.CookieParam(SessionService.COOKIE_NAME) String sessionCookie) {
         return performLogout(sessionCookie);
     }
 
+    /**
+     * OIDC RP-Initiated Logout endpoint (POST).
+     * Kept for backwards compatibility.
+     */
     @POST
     @Path("/logout")
     public Response logoutPost(@jakarta.ws.rs.CookieParam(SessionService.COOKIE_NAME) String sessionCookie) {
@@ -142,16 +153,9 @@ public class OAuthLoginResource {
         NewCookie clearCookie = buildClearCookie(isSecure());
 
         // Determine which OAuth provider the user logged in with
-        String provider = "unknown";
-        if (sessionCookie != null && !sessionCookie.isBlank()) {
-            sessionService.decodeSession(sessionCookie)
-                    .ifPresent(session -> {
-                        // Provider is tracked in the session
-                    });
-            provider = sessionService.decodeSession(sessionCookie)
-                    .map(SessionService.PmSession::provider)
-                    .orElse("unknown");
-        }
+        String provider = sessionService.decodeSession(sessionCookie)
+                .map(SessionService.PmSession::provider)
+                .orElse("unknown");
 
         String postLogoutRedirectUri = resolveOrigin();
 
@@ -164,8 +168,8 @@ public class OAuthLoginResource {
                     // Keycloak logout requires either id_token_hint or client_id
                     // Since we don't store the id_token, we use client_id
                     yield issuer + "/protocol/openid-connect/logout"
-                            + "?client_id=" + java.net.URLEncoder.encode(clientId, java.nio.charset.StandardCharsets.UTF_8)
-                            + "&post_logout_redirect_uri=" + java.net.URLEncoder.encode(postLogoutRedirectUri, java.nio.charset.StandardCharsets.UTF_8);
+                            + "?client_id=" + URLEncoder.encode(clientId, StandardCharsets.UTF_8)
+                            + "&post_logout_redirect_uri=" + URLEncoder.encode(postLogoutRedirectUri, StandardCharsets.UTF_8);
                 }
                 yield null;
             }
@@ -173,7 +177,7 @@ public class OAuthLoginResource {
                 // Microsoft Azure AD logout endpoint
                 // https://learn.microsoft.com/en-us/entra/identity-platform/v2-protocols-oidc#send-a-sign-out-request
                 yield "https://login.microsoftonline.com/common/oauth2/v2.0/logout"
-                        + "?post_logout_redirect_uri=" + java.net.URLEncoder.encode(postLogoutRedirectUri, java.nio.charset.StandardCharsets.UTF_8);
+                        + "?post_logout_redirect_uri=" + URLEncoder.encode(postLogoutRedirectUri, StandardCharsets.UTF_8);
             }
             case "google" -> {
                 // Google doesn't support single-app logout via OIDC

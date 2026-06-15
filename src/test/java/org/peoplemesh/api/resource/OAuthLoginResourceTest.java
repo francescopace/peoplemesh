@@ -209,7 +209,7 @@ class OAuthLoginResourceTest {
         when(appConfig.frontend()).thenReturn(frontendConfig);
         when(frontendConfig.origin()).thenReturn(Optional.empty());
 
-        Response response = resource.logoutPost(null);
+        Response response = resource.logoutGet(null);
 
         assertEquals(204, response.getStatus());
         NewCookie cookie = response.getCookies().get(SessionService.COOKIE_NAME);
