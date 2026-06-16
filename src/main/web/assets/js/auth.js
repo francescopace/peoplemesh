@@ -90,17 +90,17 @@ class AuthManager {
   async logout() {
     if (this._isLoggingOut) return;
     this._isLoggingOut = true;
-    try {
-      try {
-        await logoutSession();
-      } catch {
-        // Ignore errors on logout
-      }
-      this.setUser(null);
-      window.location.hash = "#/";
-    } finally {
-      this._isLoggingOut = false;
-    }
+
+    // Clear user state immediately
+    this.setUser(null);
+
+    // Navigate to logout endpoint (GET)
+    // Backend will redirect to OIDC provider logout (Keycloak/Microsoft)
+    // Provider will then redirect back to app root (/)
+    window.location.href = "/api/v1/auth/logout";
+
+    // Note: _isLoggingOut flag will be reset when page navigates away
+    // No finally block needed since we're leaving the page
   }
 }
 

@@ -38,6 +38,8 @@ class OAuthLoginServiceTest {
 
     @Test
     void providers_returnsLoginAndProfileImportLists() {
+        when(tokenExchangeService.isProviderEnabled("keycloak")).thenReturn(false);
+        when(tokenExchangeService.isLoginEnabled("keycloak")).thenReturn(false);
         when(tokenExchangeService.isProviderEnabled("microsoft")).thenReturn(false);
         when(tokenExchangeService.isLoginEnabled("google")).thenReturn(true);
         when(tokenExchangeService.isLoginEnabled("microsoft")).thenReturn(false);

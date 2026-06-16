@@ -41,6 +41,7 @@ public class OAuthTokenExchangeService {
                 case "google" -> exchangeGoogle(code, redirectUri);
                 case "microsoft" -> exchangeMicrosoft(code, redirectUri);
                 case "github" -> exchangeGitHub(code, redirectUri);
+                case "keycloak" -> exchangeKeycloak(code, redirectUri);
                 default -> null;
             };
         } catch (RuntimeException e) {
@@ -51,6 +52,9 @@ public class OAuthTokenExchangeService {
     }
 
     public URI buildAuthorizeUri(String provider, String redirectUri, String state) {
+        if ("keycloak".equals(provider)) {
+            return buildKeycloakAuthorizeUri(redirectUri, state);
+        }
         AppConfig.OidcProviderCreds c = creds(provider);
         if (c == null || !isConfigured(c)) return null;
         return switch (provider) {
@@ -67,11 +71,14 @@ public class OAuthTokenExchangeService {
     }
 
     public boolean isProviderEnabled(String provider) {
+        if ("keycloak".equals(provider)) {
+            return isKeycloakConfigured();
+        }
         AppConfig.OidcProviderCreds c = creds(provider);
         return c != null && isConfigured(c);
     }
 
-    private static final List<String> LOGIN_PROVIDERS = List.of("google", "microsoft");
+    private static final List<String> LOGIN_PROVIDERS = List.of("google", "microsoft", "keycloak");
 
     public boolean isLoginEnabled(String provider) {
         return LOGIN_PROVIDERS.contains(provider) && isProviderEnabled(provider);
@@ -82,6 +89,7 @@ public class OAuthTokenExchangeService {
             case "google" -> appConfig.oidc().google();
             case "microsoft" -> appConfig.oidc().microsoft();
             case "github" -> appConfig.oidc().github();
+            case "keycloak" -> null; // Keycloak uses KeycloakProviderCreds instead
             default -> null;
         };
     }
@@ -164,6 +172,38 @@ public class OAuthTokenExchangeService {
                 text(u, "bio"),
                 null, null,
                 text(u, "avatar_url"), null);
+    }
+
+    private OidcSubject exchangeKeycloak(String code, String redirectUri) throws Exception {
+        AppConfig.KeycloakProviderCreds c = appConfig.oidc().keycloak();
+        if (c == null || !isKeycloakConfigured(c)) return null;
+
+        OidcDiscoveryMetadata metadata = discoverKeycloakEndpoints(c.issuerUrl());
+        if (metadata == null) {
+            LOG.warnf("Failed to discover Keycloak OIDC endpoints for issuer: %s", c.issuerUrl());
+            return null;
+        }
+
+        String body = tokenBody(code, c.clientId(), c.clientSecret(), redirectUri, true);
+        byte[] resp = httpPostForm(metadata.tokenEndpoint(), body);
+        JsonNode json = objectMapper.readTree(resp);
+        String access = text(json, "access_token");
+        if (access == null) return null;
+
+        byte[] userinfo = httpGetBearer(metadata.userinfoEndpoint(), access);
+        JsonNode u = objectMapper.readTree(userinfo);
+        String sub = text(u, "sub");
+        if (sub == null) return null;
+
+        return new OidcSubject(sub,
+                text(u, "name"),
+                text(u, "given_name"),
+                text(u, "family_name"),
+                text(u, "email"),
+                null, null,
+                text(u, "locale"),
+                text(u, "picture"),
+                null);
     }
 
     public GitHubEnrichedResult exchangeGitHubEnriched(String code, String redirectUri) {
@@ -344,4 +384,75 @@ public class OAuthTokenExchangeService {
     private static boolean isRealValue(String value) {
         return value != null && !value.isBlank() && !"none".equals(value);
     }
+
+    private boolean isKeycloakConfigured() {
+        AppConfig.KeycloakProviderCreds c = appConfig.oidc().keycloak();
+        return isKeycloakConfigured(c);
+    }
+
+    private static boolean isKeycloakConfigured(AppConfig.KeycloakProviderCreds creds) {
+        return isRealValue(creds.clientId())
+            && isRealValue(creds.clientSecret())
+            && isRealValue(creds.issuerUrl());
+    }
+
+    private URI buildKeycloakAuthorizeUri(String redirectUri, String state) {
+        AppConfig.KeycloakProviderCreds c = appConfig.oidc().keycloak();
+        if (!isKeycloakConfigured(c)) return null;
+
+        OidcDiscoveryMetadata metadata = discoverKeycloakEndpoints(c.issuerUrl());
+        if (metadata == null) return null;
+
+        String q = "client_id=" + enc(c.clientId())
+                + "&response_type=code"
+                + "&redirect_uri=" + enc(redirectUri)
+                + "&scope=" + enc("openid email profile")
+                + "&state=" + enc(state);
+        return URI.create(metadata.authorizationEndpoint() + "?" + q);
+    }
+
+    private OidcDiscoveryMetadata discoverKeycloakEndpoints(String issuerUrl) {
+        if (issuerUrl == null || issuerUrl.isBlank() || "none".equals(issuerUrl)) {
+            return null;
+        }
+        try {
+            String discoveryUrl = issuerUrl.endsWith("/")
+                ? issuerUrl + ".well-known/openid-configuration"
+                : issuerUrl + "/.well-known/openid-configuration";
+
+            java.net.http.HttpRequest req = java.net.http.HttpRequest.newBuilder()
+                    .uri(URI.create(discoveryUrl))
+                    .header("Accept", "application/json")
+                    .GET()
+                    .build();
+            java.net.http.HttpResponse<byte[]> res = httpClient.send(req,
+                    java.net.http.HttpResponse.BodyHandlers.ofByteArray());
+
+            if (res.statusCode() / 100 != 2) {
+                LOG.warnf("OIDC discovery failed for %s: HTTP %d", discoveryUrl, res.statusCode());
+                return null;
+            }
+
+            JsonNode discovery = objectMapper.readTree(res.body());
+            String authEndpoint = text(discovery, "authorization_endpoint");
+            String tokenEndpoint = text(discovery, "token_endpoint");
+            String userinfoEndpoint = text(discovery, "userinfo_endpoint");
+
+            if (authEndpoint == null || tokenEndpoint == null || userinfoEndpoint == null) {
+                LOG.warn("OIDC discovery response missing required endpoints");
+                return null;
+            }
+
+            return new OidcDiscoveryMetadata(authEndpoint, tokenEndpoint, userinfoEndpoint);
+        } catch (Exception e) {
+            LOG.warnf("Failed to discover OIDC endpoints for %s: %s", issuerUrl, e.getMessage());
+            return null;
+        }
+    }
+
+    private record OidcDiscoveryMetadata(
+            String authorizationEndpoint,
+            String tokenEndpoint,
+            String userinfoEndpoint
+    ) {}
 }
