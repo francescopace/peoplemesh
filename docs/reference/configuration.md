@@ -46,6 +46,9 @@ Import-only provider: `GITHUB`.
 
 | Key | Default | Description |
 |-----|---------|-------------|
+| `peoplemesh.oidc.keycloak.client-id` | `none` | Keycloak OIDC client ID |
+| `peoplemesh.oidc.keycloak.client-secret` | `none` | Keycloak OIDC client secret |
+| `peoplemesh.oidc.keycloak.issuer-url` | `none` | Keycloak OIDC issuer URL (e.g., https://keycloak.example.com/realms/myrealm) |
 | `peoplemesh.oidc.google.client-id` | `none` | Google OIDC client ID |
 | `peoplemesh.oidc.google.client-secret` | `none` | Google OIDC client secret |
 | `peoplemesh.oidc.microsoft.client-id` | `none` | Microsoft OIDC client ID |

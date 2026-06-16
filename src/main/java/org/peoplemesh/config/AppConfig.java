@@ -63,6 +63,7 @@ public interface AppConfig {
         OidcProviderCreds google();
         OidcProviderCreds microsoft();
         OidcProviderCreds github();
+        KeycloakProviderCreds keycloak();
     }
 
     interface OidcProviderCreds {
@@ -71,6 +72,17 @@ public interface AppConfig {
 
         @WithDefault("none")
         String clientSecret();
+    }
+
+    interface KeycloakProviderCreds {
+        @WithDefault("none")
+        String clientId();
+
+        @WithDefault("none")
+        String clientSecret();
+
+        @WithDefault("none")
+        String issuerUrl();
     }
 
     interface MatchingConfig {

@@ -147,6 +147,10 @@ config:
     ORGANIZATION_DPO_EMAIL: ""
     ORGANIZATION_DATA_LOCATION: ""
     ORGANIZATION_GOVERNING_LAW: ""
+    # Flyway locations - set to include seed data for demo/test environments
+    # Production: "classpath:db/migration" (schema only)
+    # With seeds: "classpath:db/migration,classpath:db/granite" (or openai)
+    QUARKUS_FLYWAY_LOCATIONS: "classpath:db/migration"
 
 secret:
   create: true
@@ -165,3 +169,6 @@ secret:
     OIDC_MICROSOFT_CLIENT_SECRET: "none"
     OIDC_GITHUB_CLIENT_ID: "none"
     OIDC_GITHUB_CLIENT_SECRET: "none"
+    OIDC_KEYCLOAK_CLIENT_ID: "none"
+    OIDC_KEYCLOAK_CLIENT_SECRET: "none"
+    OIDC_KEYCLOAK_ISSUER_URL: "none"

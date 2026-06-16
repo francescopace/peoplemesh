@@ -203,8 +203,13 @@ class OAuthLoginResourceTest {
     @Test
     void logout_clearsCookieAndKeepsSecureFlagFromRequest() {
         when(uriInfo.getRequestUri()).thenReturn(URI.create("http://localhost:8080/api/v1/auth/logout"));
+        when(uriInfo.getBaseUri()).thenReturn(URI.create("http://localhost:8080/"));
 
-        Response response = resource.logout();
+        AppConfig.FrontendConfig frontendConfig = mock(AppConfig.FrontendConfig.class);
+        when(appConfig.frontend()).thenReturn(frontendConfig);
+        when(frontendConfig.origin()).thenReturn(Optional.empty());
+
+        Response response = resource.logoutGet(null);
 
         assertEquals(204, response.getStatus());
         NewCookie cookie = response.getCookies().get(SessionService.COOKIE_NAME);
@@ -213,6 +218,45 @@ class OAuthLoginResourceTest {
         assertEquals(0, cookie.getMaxAge());
         assertEquals("/", cookie.getPath());
         assertEquals(false, cookie.isSecure());
+    }
+
+    @Test
+    void logout_withKeycloakSession_redirectsToKeycloakLogout() {
+        // Mock Keycloak configuration
+        AppConfig.OidcProviders oidcProviders = mock(AppConfig.OidcProviders.class);
+        AppConfig.KeycloakProviderCreds keycloakCreds = mock(AppConfig.KeycloakProviderCreds.class);
+        when(appConfig.oidc()).thenReturn(oidcProviders);
+        when(oidcProviders.keycloak()).thenReturn(keycloakCreds);
+        when(keycloakCreds.issuerUrl()).thenReturn("https://keycloak.example.com/realms/test");
+        when(keycloakCreds.clientId()).thenReturn("peoplemesh");
+
+        // Mock frontend config
+        AppConfig.FrontendConfig frontendConfig = mock(AppConfig.FrontendConfig.class);
+        when(appConfig.frontend()).thenReturn(frontendConfig);
+        when(frontendConfig.origin()).thenReturn(Optional.empty());
+
+        // Mock session with Keycloak provider
+        UUID userId = UUID.randomUUID();
+        SessionService.PmSession session = new SessionService.PmSession(userId, "keycloak", "Test User");
+        when(sessionService.decodeSession(anyString())).thenReturn(Optional.of(session));
+
+        // Mock URI info for origin
+        when(uriInfo.getBaseUri()).thenReturn(URI.create("http://localhost:8080/"));
+        when(uriInfo.getRequestUri()).thenReturn(URI.create("http://localhost:8080/api/v1/auth/logout"));
+
+        Response response = resource.logoutGet("valid-session-cookie");
+
+        assertEquals(303, response.getStatus());
+        URI location = response.getLocation();
+        assertNotNull(location);
+        assertTrue(location.toString().startsWith("https://keycloak.example.com/realms/test/protocol/openid-connect/logout"));
+        assertTrue(location.toString().contains("client_id=peoplemesh"));
+        assertTrue(location.toString().contains("post_logout_redirect_uri="));
+
+        NewCookie cookie = response.getCookies().get(SessionService.COOKIE_NAME);
+        assertNotNull(cookie);
+        assertEquals("", cookie.getValue());
+        assertEquals(0, cookie.getMaxAge());
     }
 
     @Test

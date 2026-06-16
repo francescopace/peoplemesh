@@ -19,7 +19,7 @@ public class OAuthLoginService {
     public static final String INTENT_PROFILE_IMPORT = "profile_import";
     public static final String INTENT_MCP_AUTH = "mcp_auth";
     public static final String INTENT_MCP_OAUTH = "mcp_oauth";
-    private static final List<String> PROVIDER_ORDER = List.of("google", "microsoft", "github");
+    private static final List<String> PROVIDER_ORDER = List.of("keycloak", "google", "microsoft", "github");
 
     @Inject
     SessionService sessionService;
