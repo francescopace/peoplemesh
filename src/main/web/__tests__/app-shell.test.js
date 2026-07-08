@@ -157,4 +157,14 @@ describe("app-shell", () => {
     expect(myMeshLinks.every((link) => link.classList.contains("active"))).toBe(true);
     expect(searchLinks.every((link) => !link.classList.contains("active"))).toBe(true);
   });
+
+  it("includes AI disclaimer in app shell", async () => {
+    const root = document.getElementById("root");
+
+    await renderAppShell(root);
+
+    const disclaimer = root.querySelector(".app-ai-disclaimer");
+    expect(disclaimer).not.toBeNull();
+    expect(disclaimer.textContent.trim()).toBe("This application uses AI to make recommendations and process uploaded resumes.");
+  });
 });

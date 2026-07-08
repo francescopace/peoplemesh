@@ -25,6 +25,9 @@ export async function renderAppShell(container) {
         centerHtml: topBarCenterHtml,
         rightHtml: topBarUserMenuHtml,
       })}
+      <div class="app-ai-disclaimer">
+        This application uses AI to make recommendations and process uploaded resumes.
+      </div>
       <main class="app-main"></main>
       <nav class="mobile-bottom-nav" aria-label="Main navigation">
         ${renderBottomNavLinks(navItems)}
