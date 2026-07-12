@@ -2,6 +2,7 @@
 [![codecov](https://codecov.io/gh/francescopace/peoplemesh/graph/badge.svg?token=YXGLL6C7LH)](https://codecov.io/gh/francescopace/peoplemesh)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-4F46E5.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 [![Docker Hub](https://img.shields.io/badge/Docker%20Hub-frapax%2Fpeoplemesh-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/frapax/peoplemesh)
+[![Red Hat AI Quickstart](https://img.shields.io/badge/Red%20Hat-AI%20Quickstart-EE0000?logo=redhat&logoColor=white)](https://docs.redhat.com/en/learn/ai-quickstarts/rh-peoplemesh)
 
 # PeopleMesh
 
@@ -14,6 +15,10 @@ By combining embeddings with metadata-based ranking, PeopleMesh surfaces high-si
 Built privacy-first, PeopleMesh includes granular consent controls, configurable retention, and GDPR-aligned data rights workflows. Available via web app, API, and MCP integrations for AI assistants.
 
 Open-source at the core. Enterprise-ready in practice. Never built on personal data monetization.
+
+**Red Hat AI Quickstart**
+> PeopleMesh is now included in the [Red Hat AI Quickstarts catalog](https://docs.redhat.com/en/learn/ai-quickstarts/rh-peoplemesh) as **Deploy AI-powered talent discovery with semantic search**.  
+> The official quickstart packaging, deployment assets, and installation guides are available in [`rh-ai-quickstart/peoplemesh`](https://github.com/rh-ai-quickstart/peoplemesh).
 
 ## Why PeopleMesh
 
